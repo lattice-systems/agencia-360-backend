@@ -46,6 +46,7 @@ Si los tres comandos pasan en tu máquina, el workflow de CI y el de Lint van a 
 - **CodeQL** (`codeql.yml`): análisis estático de GitHub para encontrar vulnerabilidades (inyección, deserialización insegura, etc.). Corre en cada push/PR a `main` y también una vez por semana (lunes) para atrapar vulnerabilidades reportadas después de que el código ya estaba en el repo. Los hallazgos aparecen en la pestaña **Security → Code scanning** del repositorio, no en el PR directamente.
 - **Dependency Review** (`dependency-review.yml`): en cada PR, compara las dependencias que se agregan o cambian contra la base de datos de vulnerabilidades de GitHub. Si se introduce una dependencia con severidad **alta o crítica**, bloquea el PR y deja un comentario explicando cuál es.
 - **Dependabot** (`.github/dependabot.yml`): no es un workflow, es una revisión semanal (lunes) que abre PRs solo para actualizar versiones de dependencias de Maven (`pom.xml`) y de las Actions usadas en los workflows. Esos PRs pasan por CI y Lint como cualquier otro.
+  - Para Maven, **ignora los saltos de versión "major"** (p. ej. Spring Boot 3 → 4, Spring Modulith 1 → 2): esos casi siempre traen cambios incompatibles y no queremos un PR automático proponiéndolos cada semana. Solo abre PR para actualizaciones minor/patch, que casi siempre son seguras de mergear. Una migración de versión major se decide en equipo y se hace a mano.
 
 ## 4. Publicación del paquete Maven (`publish.yml`)
 
