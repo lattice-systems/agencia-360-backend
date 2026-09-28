@@ -8,23 +8,12 @@ import io.swagger.v3.oas.annotations.security.SecurityScheme;
 import org.springframework.context.annotation.Configuration;
 
 /**
- * Documentación de la API vía springdoc-openapi. De esta única API documentada se
- * generan los clientes de React (TypeScript) y Flutter (Dart) con openapi-generator.
+ * Documentación de la API vía springdoc-openapi. De esta única API documentada
+ * se generan los clientes de React (TypeScript) y Flutter (Dart) con
+ * openapi-generator.
  */
 @Configuration
-@OpenAPIDefinition(
-		info = @Info(
-				title = "Agencia360 API",
-				version = "v1",
-				description = "API REST del ERP Agencia360 y del backend de CareCar (CRM y app postventa)."
-		),
-		security = @SecurityRequirement(name = "bearerAuth")
-)
-@SecurityScheme(
-		name = "bearerAuth",
-		type = SecuritySchemeType.HTTP,
-		scheme = "bearer",
-		bearerFormat = "JWT"
-)
+@OpenAPIDefinition(info = @Info(title = "Agencia360 API", version = "v1"), security = @SecurityRequirement(name = "bearerAuth"))
+@SecurityScheme(name = "bearerAuth", type = SecuritySchemeType.HTTP, scheme = "bearer", bearerFormat = "JWT")
 public class OpenApiConfig {
 }

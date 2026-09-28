@@ -12,8 +12,8 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 /**
- * Lee el bearer token, valida la firma/expiración y puebla el SecurityContext con las
- * autoridades (roles) contenidas en el propio JWT.
+ * Lee el bearer token, valida la firma/expiración y puebla el SecurityContext
+ * con las autoridades (roles) contenidas en el propio JWT.
  */
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
@@ -26,9 +26,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 	}
 
 	@Override
-	protected void doFilterInternal(
-			@NonNull HttpServletRequest request,
-			@NonNull HttpServletResponse response,
+	protected void doFilterInternal(@NonNull HttpServletRequest request, @NonNull HttpServletResponse response,
 			@NonNull FilterChain filterChain) throws ServletException, IOException {
 
 		String header = request.getHeader("Authorization");

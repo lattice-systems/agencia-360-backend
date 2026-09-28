@@ -7,8 +7,9 @@ import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
 /**
- * Base para pruebas de integración contra una base de datos real vía Testcontainers,
- * en lugar de mocks, según la estrategia de pruebas del documento de arquitectura.
+ * Base para pruebas de integración contra una base de datos real vía
+ * Testcontainers, en lugar de mocks, según la estrategia de pruebas del
+ * documento de arquitectura.
  */
 @SpringBootTest
 @Testcontainers

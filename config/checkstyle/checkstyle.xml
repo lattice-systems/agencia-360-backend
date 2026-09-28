@@ -1,0 +1,50 @@
+<?xml version="1.0"?>
+<!DOCTYPE module PUBLIC
+    "-//Checkstyle//DTD Checkstyle Configuration 1.3//EN"
+    "https://checkstyle.org/dtds/configuration_1_3.dtd">
+
+<!--
+    Reglas de linting para backend-agencia360.
+
+    Es un subconjunto deliberadamente reducido de las reglas de Google/Sun: se enfoca
+    en detectar errores reales (imports sin usar, equals/hashCode inconsistentes,
+    bloques vacíos, etc.) y no en imponer un estilo de formato — de eso ya se encarga
+    Spotless (ver spotless-maven-plugin en pom.xml). No exige Javadoc en todo, no
+    prohíbe tabs y no valida el nombre del paquete: el proyecto ya usa tabs y
+    "erp_agente360" con guion bajo de forma consistente, y forzar ese cambio aquí
+    solo generaría ruido sin encontrar bugs reales.
+-->
+<module name="Checker">
+    <property name="charset" value="UTF-8"/>
+    <property name="severity" value="error"/>
+
+    <module name="LineLength">
+        <property name="max" value="140"/>
+        <property name="ignorePattern" value="^import .*$"/>
+    </module>
+
+    <module name="TreeWalker">
+        <!-- Imports -->
+        <module name="UnusedImports"/>
+        <module name="RedundantImport"/>
+        <module name="AvoidStarImport"/>
+
+        <!-- Errores comunes -->
+        <module name="EqualsHashCode"/>
+        <module name="EmptyBlock">
+            <property name="option" value="text"/>
+        </module>
+        <module name="EmptyStatement"/>
+        <module name="MissingSwitchDefault"/>
+        <module name="SimplifyBooleanExpression"/>
+        <module name="SimplifyBooleanReturn"/>
+        <module name="OneStatementPerLine"/>
+        <module name="StringLiteralEquality"/>
+        <module name="EqualsAvoidNull"/>
+
+        <!-- Consistencia mínima -->
+        <module name="NeedBraces"/>
+        <module name="ModifierOrder"/>
+        <module name="RedundantModifier"/>
+    </module>
+</module>
