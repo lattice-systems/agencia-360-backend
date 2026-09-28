@@ -1,0 +1,45 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+# Si llegan varios push/commits seguidos a la misma rama o PR, cancela la corrida
+# anterior: no tiene sentido esperar un build viejo si ya hay uno más nuevo.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-and-test:
+    name: Build y pruebas (JDK 25)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Descargar el código
+        uses: actions/checkout@v4
+
+      - name: Configurar JDK 25 (Temurin)
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "25"
+          cache: maven
+
+      - name: Compilar y correr pruebas (unitarias + Spring Modulith + Testcontainers)
+        run: ./mvnw --no-transfer-progress -B verify
+
+      - name: Publicar reportes de pruebas si algo falla
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: reportes-pruebas
+          path: |
+            target/surefire-reports/
+            target/failsafe-reports/
+          retention-days: 7

@@ -13,8 +13,9 @@ import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.stereotype.Service;
 
 /**
- * Emisión y validación de JWT autocontenidos: los roles viajan como claim dentro del
- * token, sin necesidad de una consulta a base de datos en cada request.
+ * Emisión y validación de JWT autocontenidos: los roles viajan como claim
+ * dentro del token, sin necesidad de una consulta a base de datos en cada
+ * request.
  */
 @Service
 public class JwtService {
@@ -22,8 +23,7 @@ public class JwtService {
 	private final Key signingKey;
 	private final long expirationMillis;
 
-	public JwtService(
-			@Value("${app.security.jwt.secret}") String secret,
+	public JwtService(@Value("${app.security.jwt.secret}") String secret,
 			@Value("${app.security.jwt.expiration-minutes}") long expirationMinutes) {
 		this.signingKey = Keys.hmacShaKeyFor(secret.getBytes());
 		this.expirationMillis = expirationMinutes * 60_000;
@@ -32,20 +32,13 @@ public class JwtService {
 	public String generateToken(String subject, List<Role> roles) {
 		Date now = new Date();
 		Date expiry = new Date(now.getTime() + expirationMillis);
-		return Jwts.builder()
-				.subject(subject)
-				.claim("roles", roles.stream().map(Enum::name).collect(Collectors.toList()))
-				.issuedAt(now)
-				.expiration(expiry)
-				.signWith(signingKey)
-				.compact();
+		return Jwts.builder().subject(subject)
+				.claim("roles", roles.stream().map(Enum::name).collect(Collectors.toList())).issuedAt(now)
+				.expiration(expiry).signWith(signingKey).compact();
 	}
 
 	public Claims parseClaims(String token) {
-		return Jwts.parser()
-				.verifyWith((javax.crypto.SecretKey) signingKey)
-				.build()
-				.parseSignedClaims(token)
+		return Jwts.parser().verifyWith((javax.crypto.SecretKey) signingKey).build().parseSignedClaims(token)
 				.getPayload();
 	}
 
@@ -55,8 +48,7 @@ public class JwtService {
 		if (roles == null) {
 			return List.of();
 		}
-		return roles.stream()
-				.map(role -> (GrantedAuthority) new SimpleGrantedAuthority("ROLE_" + role))
+		return roles.stream().map(role -> (GrantedAuthority) new SimpleGrantedAuthority("ROLE_" + role))
 				.collect(Collectors.toList());
 	}
 }

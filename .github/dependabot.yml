@@ -1,0 +1,28 @@
+version: 2
+updates:
+  # Dependencias de Maven (pom.xml): Spring Boot, Spring Modulith, springdoc, jjwt, etc.
+  - package-ecosystem: "maven"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 10
+    labels:
+      - "dependencies"
+      - "maven"
+    commit-message:
+      prefix: "build"
+      include: "scope"
+
+  # Versiones de las Actions usadas en .github/workflows/*.yml
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    labels:
+      - "dependencies"
+      - "ci"
+    commit-message:
+      prefix: "ci"
+      include: "scope"

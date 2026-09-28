@@ -1,0 +1,37 @@
+name: Publicar paquete Maven
+
+# Se publica solo al crear un Release en GitHub (no en cada push), para no llenar
+# GitHub Packages con snapshots de cada commit. Antes de crear el release hay que
+# quitar el sufijo "-SNAPSHOT" de <version> en el pom.xml (ver docs/workflows-ci-cd.md).
+on:
+  release:
+    types: [published]
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  publish:
+    name: Build, pruebas y deploy a GitHub Packages
+    runs-on: ubuntu-latest
+    steps:
+      - name: Descargar el código
+        uses: actions/checkout@v4
+
+      - name: Configurar JDK 25 (Temurin) y credenciales de GitHub Packages
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "25"
+          cache: maven
+          server-id: github
+          server-username: GITHUB_ACTOR
+          server-password: GITHUB_TOKEN
+
+      - name: Compilar, correr pruebas y publicar
+        run: ./mvnw --no-transfer-progress -B deploy
+        env:
+          GITHUB_ACTOR: ${{ github.actor }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -9,9 +9,10 @@ import org.springframework.data.annotation.LastModifiedDate;
 import org.springframework.data.jpa.domain.support.AuditingEntityListener;
 
 /**
- * Superclase para entidades que requieren trazabilidad de creación y modificación,
- * consistente con el lineamiento de no borrar movimientos y conservar historial
- * (ver lineamientos técnicos del documento de arquitectura).
+ * Superclase para entidades que requieren trazabilidad de creación y
+ * modificación, consistente con el lineamiento de no borrar movimientos y
+ * conservar historial (ver lineamientos técnicos del documento de
+ * arquitectura).
  */
 @MappedSuperclass
 @EntityListeners(AuditingEntityListener.class)
