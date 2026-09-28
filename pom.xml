@@ -20,7 +20,7 @@
 		<spring-modulith.version>1.4.13</spring-modulith.version>
 		<springdoc-openapi.version>2.9.1</springdoc-openapi.version>
 		<jjwt.version>0.13.0</jjwt.version>
-		<spotless-maven-plugin.version>2.44.5</spotless-maven-plugin.version>
+		<spotless-maven-plugin.version>2.46.1</spotless-maven-plugin.version>
 	</properties>
 
 	<!--
