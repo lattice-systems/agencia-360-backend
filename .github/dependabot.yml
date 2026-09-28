@@ -13,6 +13,14 @@ updates:
     commit-message:
       prefix: "build"
       include: "scope"
+    # Los saltos de versión "major" (p. ej. Spring Boot 3 -> 4) casi siempre traen
+    # cambios incompatibles; no queremos un PR automático proponiéndolos cada semana.
+    # Dependabot solo abre PR para actualizaciones minor/patch; los major se revisan
+    # y se suben a mano cuando el equipo decide migrar.
+    ignore:
+      - dependency-name: "*"
+        update-types:
+          - "version-update:semver-major"
 
   # Versiones de las Actions usadas en .github/workflows/*.yml
   - package-ecosystem: "github-actions"
