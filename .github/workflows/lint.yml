@@ -1,8 +1,9 @@
 name: Lint
 
+# Igual que CI: corre en cada push a cualquier rama y en cada PR hacia main.
 on:
   push:
-    branches: [main]
+    branches: ["**"]
   pull_request:
     branches: [main]
   workflow_dispatch: {}
