@@ -12,6 +12,8 @@ import dev.latticesystems.erp_agente360.backend_agencia360.acceso.domain.Usuario
 import dev.latticesystems.erp_agente360.backend_agencia360.acceso.infrastructure.RolRepository;
 import dev.latticesystems.erp_agente360.backend_agencia360.acceso.infrastructure.UsuarioRepository;
 import dev.latticesystems.erp_agente360.backend_agencia360.shared.AbstractIntegrationTest;
+import dev.latticesystems.erp_agente360.backend_agencia360.shared.security.JwtService;
+import dev.latticesystems.erp_agente360.backend_agencia360.shared.security.Role;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
@@ -44,6 +46,9 @@ class AccesoIntegrationTest extends AbstractIntegrationTest {
 	@Autowired
 	private PasswordEncoder passwordEncoder;
 
+	@Autowired
+	private JwtService jwtService;
+
 	@Test
 	void laMigracionCargaLosNueveRolesDeLaMatriz() {
 		assertThat(rolRepository.findAll()).extracting(Rol::getNombre).containsExactlyInAnyOrder("ADMINISTRADOR",
@@ -58,6 +63,16 @@ class AccesoIntegrationTest extends AbstractIntegrationTest {
 		mockMvc.perform(login("caja1", CONTRASENA, "ERP")).andExpect(status().isOk())
 				.andExpect(jsonPath("$.accessToken").isNotEmpty()).andExpect(jsonPath("$.tipo").value("Bearer"))
 				.andExpect(jsonPath("$.rol").value("CAJA")).andExpect(jsonPath("$.aplicacion").value("ERP"));
+	}
+
+	@Test
+	void elTokenLlevaElIdDelUsuarioEnLaBase() throws Exception {
+		Usuario vendedor = registrar("vendedor1", "VENTAS");
+
+		var actor = jwtService.extraerUsuario(jwtService.parseClaims(token("vendedor1", "CRM")));
+
+		assertThat(actor.id()).isEqualTo(vendedor.getId());
+		assertThat(actor.tieneRol(Role.VENTAS)).isTrue();
 	}
 
 	@Test
@@ -148,9 +163,9 @@ class AccesoIntegrationTest extends AbstractIntegrationTest {
 						""")).andExpect(status().isConflict());
 	}
 
-	private void registrar(String usuario, String rol) {
+	private Usuario registrar(String usuario, String rol) {
 		Rol encontrado = rolRepository.findByNombre(rol).orElseThrow();
-		usuarioRepository
+		return usuarioRepository
 				.save(new Usuario(usuario, passwordEncoder.encode(CONTRASENA), "Persona " + usuario, encontrado));
 	}
 

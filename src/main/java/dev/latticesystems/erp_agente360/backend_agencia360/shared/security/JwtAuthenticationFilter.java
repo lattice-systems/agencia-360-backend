@@ -13,7 +13,8 @@ import org.springframework.web.filter.OncePerRequestFilter;
 
 /**
  * Lee el bearer token, valida la firma/expiración y puebla el SecurityContext
- * con las autoridades (roles) contenidas en el propio JWT.
+ * con un {@link UsuarioAutenticado} como principal y las autoridades (roles)
+ * contenidas en el propio JWT.
  */
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
@@ -34,8 +35,9 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 			String token = header.substring(BEARER_PREFIX.length());
 			try {
 				var claims = jwtService.parseClaims(token);
+				var usuario = jwtService.extraerUsuario(claims);
 				var authorities = jwtService.extractAuthorities(claims);
-				var authentication = new UsernamePasswordAuthenticationToken(claims.getSubject(), null, authorities);
+				var authentication = new UsernamePasswordAuthenticationToken(usuario, null, authorities);
 				SecurityContextHolder.getContext().setAuthentication(authentication);
 			} catch (JwtException | IllegalArgumentException ex) {
 				SecurityContextHolder.clearContext();
