@@ -104,6 +104,7 @@ src/main/java/dev/latticesystems/erp_agente360/backend_agencia360/
 │   ├── security/    # Spring Security, JWT, roles
 │   ├── exception/   # manejo global de errores
 │   └── domain/      # clases base (auditoría)
+├── acceso/          # Usuarios, roles y login del personal — ERP-0.1 · CRM-0.1
 ├── ventascrm/       # Ventas y CRM de prospectos       — ERP HU 1.1 · CareCar HU 1.1, 1.2
 ├── facturacion/     # Facturación y Administración      — ERP HU 1.2
 ├── inventario/      # Inventario de vehículos/refacciones — ERP HU 2.1
@@ -133,7 +134,7 @@ Por ahora las carpetas de capas están vacías (solo `.gitkeep`): el modelo de d
 - **Dinero: no se borra, se revierte**: una cancelación de pago se registra como movimiento inverso, nunca como borrado, para conservar trazabilidad. Requiere autorización.
 - **Inventario por movimientos**: cada entrada/salida es un registro; se usa bloqueo de fila para no vender la misma pieza dos veces.
 - **Citas sin empalmes**: restricción a nivel de base de datos para que dos clientes no reserven el mismo horario.
-- **Acceso por roles**: para personal de la agencia y para clientes de la app (ver `shared/security/Role.java`, propuesta inicial derivada de los departamentos del documento).
+- **Acceso por roles**: cada usuario del personal tiene un solo rol, y el rol define si entra al ERP, al CRM o a ambos (tabla `rol`, migración V2). Roles: Administrador, Gerente de marketing, Ventas, Facturación, Inventario, Servicio, Refacciones, Caja y Contabilidad. El enum `shared/security/Role.java` debe coincidir con esa tabla.
 - **Una sola API con OpenAPI**: de ella se generan los clientes React y Flutter — evitar romper el contrato sin versionarlo.
 - **App CareCar sin registro público**: el acceso es con usuario/contraseña emitidos por la agencia tras validar la compra.
 
@@ -228,8 +229,16 @@ La API lee su configuración de variables de entorno. Si no defines ninguna, usa
 | `CORS_ALLOWED_ORIGINS` | `http://localhost:5173` | Origen del frontend que puede llamar a la API |
 | `JWT_SECRET` | Valor de solo-desarrollo | Llave para firmar los JWT |
 | `JWT_EXPIRATION_MINUTES` | `60` | Duración del token |
+| `ADMIN_INICIAL_USUARIO` / `ADMIN_INICIAL_CONTRASENA` | Vacío | Si tienen valor, al arrancar se crea el primer Administrador (ERP) cuando todavía no existe |
+| `GERENTE_INICIAL_USUARIO` / `GERENTE_INICIAL_CONTRASENA` | Vacío | Igual, para el primer Gerente de marketing (administrador del CRM) |
 
 **`JWT_SECRET` trae un valor de solo-desarrollo por defecto: hay que sobrescribirlo en cualquier ambiente real** (en Azure, vía Key Vault según la sección 5 del PDF).
+
+Para entrar por primera vez en local, levanta la API con un administrador inicial y después inicia sesión en `POST /api/v1/auth/login` (cuerpo: `usuario`, `contrasena` y `aplicacion`, que es `ERP` o `CRM`):
+
+```bash
+ADMIN_INICIAL_USUARIO=admin ADMIN_INICIAL_CONTRASENA=CambiaEsto123 ./mvnw spring-boot:run -Dspring-boot.run.profiles=dev
+```
 
 Ejemplo, para apuntar a otro PostgreSQL sin tocar código:
 
