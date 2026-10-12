@@ -6,16 +6,15 @@ Todo vive en `.github/workflows/` y corre automáticamente en GitHub. Este docum
 
 | Workflow | Archivo | Cuándo corre | Qué revisa |
 |---|---|---|---|
-| CI | `ci.yml` | Push/PR a `main` | Que el proyecto compile y todas las pruebas pasen |
-| Lint | `lint.yml` | Push/PR a `main` | Formato de código (Spotless) y reglas de estilo (Checkstyle) |
+| CI | `ci.yml` | Push a cualquier rama + PR a `main` | Que el proyecto compile y todas las pruebas pasen (incluidas las de Testcontainers) |
+| Lint | `lint.yml` | Push a cualquier rama + PR a `main` | Formato de código (Spotless) y reglas de estilo (Checkstyle) |
 | CodeQL | `codeql.yml` | Push/PR a `main` + todos los lunes | Vulnerabilidades y patrones de código inseguro |
 | Dependency Review | `dependency-review.yml` | Solo en PR | Que no se agregue una dependencia con una vulnerabilidad conocida |
-| Dependabot | `dependabot.yml` (config, no es un workflow) | Semanal | Abre PRs para actualizar dependencias de Maven y de las Actions |
 | Publicar paquete | `publish.yml` | Al publicar un Release en GitHub | Compila, prueba y sube el `.jar` a GitHub Packages |
 
 ## 1. CI: build y pruebas (`ci.yml`)
 
-Corre `./mvnw verify`: compila el proyecto y ejecuta todas las pruebas (unitarias, de Spring Modulith y de integración con Testcontainers). Si algo falla, el PR queda marcado en rojo y se suben los reportes de `surefire`/`failsafe` como artefacto para poder revisarlos sin tener que reproducir el fallo en local.
+Corre `./mvnw verify` en **cada push a cualquier rama** y en cada PR hacia `main`: compila el proyecto y ejecuta todas las pruebas (unitarias, de Spring Modulith y de integración con Testcontainers). Los runners `ubuntu-latest` de GitHub ya traen Docker, así que Testcontainers levanta PostgreSQL sin configuración extra. Si llegan varios push seguidos a la misma rama, se cancela la corrida anterior. Si algo falla, el PR queda marcado en rojo y se suben los reportes de `surefire`/`failsafe` como artefacto para poder revisarlos sin tener que reproducir el fallo en local.
 
 ## 2. Lint: formato y estilo (`lint.yml`)
 
@@ -45,8 +44,7 @@ Si los tres comandos pasan en tu máquina, el workflow de CI y el de Lint van a 
 
 - **CodeQL** (`codeql.yml`): análisis estático de GitHub para encontrar vulnerabilidades (inyección, deserialización insegura, etc.). Corre en cada push/PR a `main` y también una vez por semana (lunes) para atrapar vulnerabilidades reportadas después de que el código ya estaba en el repo. Los hallazgos aparecen en la pestaña **Security → Code scanning** del repositorio, no en el PR directamente.
 - **Dependency Review** (`dependency-review.yml`): en cada PR, compara las dependencias que se agregan o cambian contra la base de datos de vulnerabilidades de GitHub. Si se introduce una dependencia con severidad **alta o crítica**, bloquea el PR y deja un comentario explicando cuál es.
-- **Dependabot** (`.github/dependabot.yml`): no es un workflow, es una revisión semanal (lunes) que abre PRs solo para actualizar versiones de dependencias de Maven (`pom.xml`) y de las Actions usadas en los workflows. Esos PRs pasan por CI y Lint como cualquier otro.
-  - Para Maven, **ignora los saltos de versión "major"** (p. ej. Spring Boot 3 → 4, Spring Modulith 1 → 2): esos casi siempre traen cambios incompatibles y no queremos un PR automático proponiéndolos cada semana. Solo abre PR para actualizaciones minor/patch, que casi siempre son seguras de mergear. Una migración de versión major se decide en equipo y se hace a mano.
+- **Actualización de dependencias**: no se usa Dependabot. Las versiones de Maven (`pom.xml`) y de las Actions se actualizan a mano, en un PR propio (`build(deps): ...` o `ci(deps): ...`), cuando el equipo lo decide.
 
 ## 4. Publicación del paquete Maven (`publish.yml`)
 
@@ -67,7 +65,6 @@ El paquete publicado queda visible en `https://github.com/lattice-systems/agenci
 - **Pestaña "Actions"** del repo: corridas de CI y Lint, con logs completos.
 - **Pestaña "Security" → "Code scanning"**: alertas de CodeQL.
 - **Comentario automático en el PR**: resumen de Dependency Review.
-- **Pestaña "Pull requests"**: PRs automáticos de Dependabot.
 - **Pestaña "Packages"** (barra lateral del repo): versiones publicadas del `.jar`.
 
 ## Pendiente / recomendación para el equipo

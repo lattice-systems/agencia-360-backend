@@ -1,114 +1,113 @@
-# Convenciones de commits
+# Contribuir a Agencia360
 
-Reglas para escribir los mensajes de commit en este repositorio. El objetivo es simple: que cualquiera del equipo entienda, con solo leer el historial, **qué cambió y en qué parte del proyecto**, sin tener que abrir el código.
+Estas reglas aplican al backend, al ERP frontend y al CRM. Si el CRM vive en otro repositorio, conserva el mismo flujo y configura los checks de ese proyecto.
 
-## Formato del mensaje
+## Regla principal
 
-```
-tipo(módulo): descripción corta
-```
+`main` debe permanecer estable. Integramos cambios únicamente mediante pull request (PR), con al menos una aprobación de otra persona y todos los checks requeridos en verde. No hagas push directo a `main`.
 
-Ejemplo:
+## Flujo de trabajo
 
-```
-fix(inventario): corrige el descuento de stock al vender una refacción
-```
+1. Actualiza tu copia local de `main`.
+2. Crea una rama corta para una sola tarea.
+3. Haz commits con mensajes claros y publica la rama.
+4. Abre un PR hacia `main`, completa la descripción y espera a que termine CI.
+5. Atiende los comentarios y consigue al menos una aprobación.
+6. Cuando todos los checks estén verdes y no queden conversaciones pendientes, integra el PR con **Squash and merge** y borra la rama.
 
-- **tipo**: qué clase de cambio es (ver tabla abajo).
-- **módulo**: en qué parte del proyecto fue el cambio (ver tabla abajo). Si el cambio no es de un módulo específico, se puede omitir.
-- **descripción corta**: en pocas palabras, qué hace el cambio. Se escribe como una instrucción: "agrega", "corrige", "elimina" (no "agregado", ni "agregando").
+## Nombres de ramas
 
-## Tipos de commit
+Usa este formato:
 
-| Tipo | Se usa para |
-|---|---|
-| `feat` | Una funcionalidad nueva |
-| `fix` | Corregir un error |
-| `docs` | Cambios solo en documentación (README, `docs/`) |
-| `refactor` | Reordenar u organizar código sin cambiar lo que hace |
-| `test` | Agregar o arreglar pruebas |
-| `build` | Cambios en `pom.xml`, dependencias o configuración de compilación |
-| `chore` | Tareas varias que no encajan en lo anterior (`.gitignore`, configuración del IDE, etc.) |
-
-## Módulo (scope)
-
-Usa el mismo nombre de la carpeta del módulo que estás tocando:
-
-| Módulo | Qué es |
-|---|---|
-| `ventascrm` | Ventas y CRM de prospectos |
-| `facturacion` | Facturación y Administración |
-| `inventario` | Inventario de vehículos y refacciones |
-| `servicio` | Taller y Servicio |
-| `refacciones` | Ventas directas de refacciones |
-| `caja` | Caja (pagos y cobros) |
-| `contabilidad` | Balance de ingresos y egresos |
-| `carecarapp` | API para la app móvil de clientes |
-| `shared` | Código compartido (seguridad, configuración, errores) |
-
-## Reglas simples
-
-1. **Un commit, un cambio.** No mezcles dos cosas distintas en el mismo commit (por ejemplo, un `fix` y un `feat` juntos).
-2. **Mensaje corto y claro.** Si necesitas explicar más, agrega un párrafo debajo explicando el *por qué* del cambio, no el *qué* (el código ya muestra el qué).
-3. **En español**, para que todo el equipo lo entienda igual.
-
-## Ejemplos
-
-Bien:
-
-```
-feat(caja): agrega registro de movimiento inverso al cancelar un pago
+```text
+<tipo>/<issue>-<descripcion-corta>
 ```
 
-```
-fix(inventario): bloquea la fila al vender una refacción para evitar venta duplicada
-```
+Ejemplos:
 
-```
-docs: agrega convenciones de commits del repositorio
-```
-
-Evitar:
-
-```
-fix: arreglos
-cambios varios
-WIP
-update Caja.java
+```text
+feat/tec-2-git-workflow
+fix/api-validar-vin
+docs/tec-2-guia-git
 ```
 
-## Nombres de rama
+Tipos comunes: `feat` para una función nueva, `fix` para una corrección, `docs` para documentación, `test` para pruebas, `build` para `pom.xml` y dependencias, y `ci` o `chore` para automatización o mantenimiento.
 
-Mismo esquema que los commits:
+## Mensajes de commit
 
-```
-tipo/modulo-descripcion-corta
-```
+Usa este formato:
 
-Ejemplos: `feat/caja-registro-pagos`, `fix/inventario-bloqueo-fila`.
-
-`main` está protegida: los cambios entran siempre por Pull Request, nunca por push directo.
-
-## Antes de subir cambios
-
-Siempre hay que traer los últimos cambios de `main` **antes de subir tu rama**, para evitar conflictos y que tu PR se quede desactualizado:
-
-```
-git pull origin main
-git push origin tu-rama
+```text
+<tipo>(<alcance>): <verbo + cambio>
 ```
 
-Si estás dentro de tu rama y `main` tiene cambios nuevos, tráelos así:
+Ejemplos:
 
+```text
+feat(inventario): agregar recepción de refacciones
+fix(api): validar formato del VIN
+docs(tec-2): documentar flujo de PR
+test(erp): cubrir validación del formulario
+ci(backend): ejecutar pruebas en cada push
 ```
-git checkout main
-git pull origin main
-git checkout tu-rama
-git merge main
+
+Escribe mensajes breves y concretos. Evita mensajes como `cambios`, `update` o `fix` sin contexto. El alcance entre paréntesis puede ser un módulo o área; se puede omitir si no aporta claridad.
+
+## Pull requests
+
+El título del PR debe resumir el cambio. Puedes usar el mismo formato que un commit:
+
+```text
+docs(TEC-2): documentar flujo de ramas y PR
 ```
 
-## Pull Requests
+Incluye en la descripción:
 
-- El título del PR sigue el mismo formato que un commit: `tipo(módulo): descripción`.
-- En la descripción, explica brevemente qué cambia y por qué.
-- Evita mezclar cambios de módulos distintos en el mismo PR, salvo que realmente estén relacionados.
+- **Qué cambió:** resumen breve y issue relacionada.
+- **Cómo se probó:** pruebas ejecutadas o checks de CI que cubren el cambio.
+- **Capturas:** cuando el cambio afecta una pantalla.
+
+Antes de pedir revisión, comprueba que el PR tiene un alcance claro, que CI terminó y que no hay conflictos. Resuelve los comentarios antes de integrar.
+
+## Revisión y checks requeridos
+
+- Cada PR necesita al menos **una aprobación de otra persona**.
+- Todos los checks requeridos deben terminar correctamente.
+- Los workflows deben ejecutarse en cada push y en los PRs dirigidos a `main`.
+- Backend: build y pruebas, incluidas las pruebas con Testcontainers.
+- ERP frontend: lint, build y pruebas con Vitest y React Testing Library.
+- CRM: ejecutar los checks definidos para su repositorio.
+
+Los nombres exactos de los checks requeridos se configuran en GitHub después de que los workflows hayan corrido al menos una vez.
+
+### Backend: CI en cada push
+
+El workflow `.github/workflows/ci.yml` (check **`CI / Build y pruebas (JDK 25)`**) corre `./mvnw verify` en cada push a cualquier rama y en cada PR hacia `main`. Compila el proyecto y ejecuta las pruebas unitarias, las de Spring Modulith y las de integración con Testcontainers (PostgreSQL real en Docker). Si falla, los reportes de pruebas quedan como artefacto de la corrida en la pestaña **Actions**.
+
+El workflow `.github/workflows/lint.yml` (checks **`Lint / Formato (Spotless)`** y **`Lint / Linting (Checkstyle)`**) también corre en cada push a cualquier rama y en cada PR hacia `main`.
+
+Antes de hacer push, corre lo mismo en local (necesitas Docker o Podman activo para Testcontainers):
+
+```bash
+./mvnw spotless:apply      # corrige el formato
+./mvnw checkstyle:check    # reglas de estilo
+./mvnw verify              # build + todas las pruebas
+```
+
+Las dependencias no se actualizan con bots: los cambios de versión en `pom.xml` o en las Actions se hacen a mano en un PR propio (`build(deps): ...` o `ci(deps): ...`). Más detalle de cada workflow en `docs/workflows-ci-cd.md`.
+
+## Protección de `main` en GitHub
+
+Configura una regla de protección para `main` que:
+
+- Exija un PR antes de integrar.
+- Exija al menos una aprobación y checks requeridos en verde.
+- Exija resolver las conversaciones de revisión.
+- Bloquee push directo, force-push y borrado de la rama.
+- Evite excepciones de bypass para el trabajo normal.
+
+## Resumen
+
+```text
+actualizar main -> crear rama -> commit y push -> abrir PR -> aprobación + CI verde -> squash and merge
+```

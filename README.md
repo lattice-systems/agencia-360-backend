@@ -63,7 +63,7 @@ La agencia automotriz no tiene sus sistemas centralizados. El proyecto los centr
 | Contrato de API | springdoc-openapi (Swagger UI en `/swagger-ui.html`) — de aquí se generan los clientes TypeScript (React) y Dart (Flutter) con openapi-generator |
 | Notificaciones push | Firebase Cloud Messaging (consumido desde el módulo que corresponda, pendiente de definir) |
 | Nube objetivo | Microsoft Azure (Container Apps, Database for PostgreSQL, Managed Redis, Blob Storage, Key Vault — ver sección 5 del PDF; servicios aún no confirmados) |
-| Repositorio y CI/CD | GitHub + GitHub Actions: build/pruebas, lint (Spotless + Checkstyle), CodeQL + Dependency Review, Dependabot y publicación a GitHub Packages (ver `docs/workflows-ci-cd.md`) |
+| Repositorio y CI/CD | GitHub + GitHub Actions: build/pruebas, lint (Spotless + Checkstyle), CodeQL + Dependency Review y publicación a GitHub Packages (ver `docs/workflows-ci-cd.md`) |
 | Pruebas | JUnit 5, Mockito, Testcontainers, Spring Modulith tests |
 
 Todas las versiones de dependencias del `pom.xml` se verificaron contra Maven Central al generar este scaffold (2026-09-27); antes de una entrega revisa si hay parches más nuevos de Spring Boot 3.5.x.
