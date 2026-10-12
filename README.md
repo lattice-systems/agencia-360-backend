@@ -137,27 +137,125 @@ Por ahora las carpetas de capas están vacías (solo `.gitkeep`): el modelo de d
 - **Una sola API con OpenAPI**: de ella se generan los clientes React y Flutter — evitar romper el contrato sin versionarlo.
 - **App CareCar sin registro público**: el acceso es con usuario/contraseña emitidos por la agencia tras validar la compra.
 
-## 5. Cómo correr el proyecto en local
+## 5. Entorno local (PostgreSQL y Redis)
 
-Requisitos: JDK 25, Docker (para Postgres/Redis y para Testcontainers en las pruebas de integración).
+Para correr la API en tu máquina necesitas una base de datos PostgreSQL y un Redis. No hace falta instalarlos: el `docker-compose.yml` de la raíz los levanta en contenedores con la configuración que la API espera por defecto.
+
+> Las **pruebas** no usan este entorno: Testcontainers levanta su propio PostgreSQL temporal (ver sección 6). Puedes correr `./mvnw verify` sin haber hecho `docker compose up`, solo necesitas Docker activo.
+
+### 5.1 Requisitos
+
+| Herramienta | Versión | Para qué |
+|---|---|---|
+| JDK | 25 | Compilar y correr la API (Maven viene incluido con `./mvnw`, no hay que instalarlo) |
+| Docker con Docker Compose | Docker Engine o Docker Desktop reciente (Compose v2: comando `docker compose`, sin guion) | Levantar PostgreSQL y Redis, y correr Testcontainers en las pruebas |
+
+Con **Podman** también funciona (`podman compose up -d`), siempre que tenga activo el socket compatible con Docker para Testcontainers.
+
+### 5.2 Servicios del `docker-compose.yml`
+
+| Servicio | Imagen | Puerto local | Datos de conexión | ¿Los datos se conservan? |
+|---|---|---|---|---|
+| `postgres` | `postgres:16-alpine` | `5432` | BD `agencia360`, usuario `agencia360`, contraseña `agencia360` | Sí, en el volumen `postgres-data` (sobreviven a `docker compose down`) |
+| `redis` | `redis:7-alpine` | `6379` | Sin contraseña | No hay que confiar en ellos: es caché y se puede vaciar en cualquier momento |
+
+Estas credenciales son **solo para desarrollo local** y coinciden con los valores por defecto de `src/main/resources/application.properties`, así que no hay que configurar nada para que la API se conecte.
+
+### 5.3 Paso a paso
 
 ```bash
-# Levantar Postgres y Redis locales
+# 1. Levantar PostgreSQL y Redis en segundo plano
 docker compose up -d
 
-# Compilar
-./mvnw clean compile
+# 2. Revisar que los dos contenedores estén "Up"
+docker compose ps
 
-# Correr pruebas (unitarias + Spring Modulith + Testcontainers)
-./mvnw test
-
-# Levantar la API (perfil dev)
+# 3. Levantar la API con el perfil dev
 ./mvnw spring-boot:run -Dspring-boot.run.profiles=dev
 ```
 
-La API queda en `http://localhost:8080`; Swagger UI en `http://localhost:8080/swagger-ui.html`.
+Al arrancar, **Flyway crea las tablas** aplicando las migraciones de `src/main/resources/db/migration/`. En el log debe aparecer:
 
-Variables de entorno relevantes (ver `src/main/resources/application.properties`): `DB_URL`, `DB_USERNAME`, `DB_PASSWORD`, `REDIS_HOST`, `REDIS_PORT`, `CORS_ALLOWED_ORIGINS`, `JWT_SECRET`, `JWT_EXPIRATION_MINUTES`. **`JWT_SECRET` trae un valor de solo-desarrollo por defecto: hay que sobrescribirlo en cualquier ambiente real** (en Azure, vía Key Vault según la sección 5 del PDF).
+```text
+Successfully applied 1 migration to schema "public", now at version v1
+Started BackendAgencia360Application in ... seconds
+```
+
+Hibernate está en modo `validate`: **nunca crea ni modifica tablas por su cuenta**. Cualquier cambio al esquema va en una nueva migración `V<n>__descripcion.sql`.
+
+Para comprobar que la API se conectó a PostgreSQL y a Redis:
+
+```bash
+curl http://localhost:8080/actuator/health
+# {"status":"UP"}
+```
+
+| URL | Qué es |
+|---|---|
+| `http://localhost:8080/actuator/health` | Estado de la API, la base de datos y Redis (`UP` / `DOWN`) |
+| `http://localhost:8080/swagger-ui.html` | Swagger UI para probar los endpoints |
+| `http://localhost:8080/v3/api-docs` | Contrato OpenAPI en JSON |
+
+**Perfil `dev`**: muestra el SQL que ejecuta Hibernate (`spring.jpa.show-sql=true`) y sube el nivel de log del proyecto a `DEBUG`. Ver `src/main/resources/application-dev.properties`.
+
+### 5.4 Conectarse a la base de datos y a Redis
+
+Desde la terminal, sin instalar clientes (se usan los que vienen dentro de los contenedores):
+
+```bash
+# Consola de PostgreSQL
+docker compose exec postgres psql -U agencia360 -d agencia360
+#   \dt   lista las tablas      \q   sale
+
+# Consola de Redis
+docker compose exec redis redis-cli
+#   PING  responde PONG       KEYS *   lista las llaves (solo en local)
+```
+
+Desde un cliente gráfico (IntelliJ Database, DBeaver, pgAdmin): host `localhost`, puerto `5432`, base `agencia360`, usuario `agencia360`, contraseña `agencia360`. URL JDBC: `jdbc:postgresql://localhost:5432/agencia360`.
+
+### 5.5 Variables de entorno
+
+La API lee su configuración de variables de entorno. Si no defines ninguna, usa los valores por defecto, que apuntan al `docker-compose.yml`:
+
+| Variable | Valor por defecto | Para qué |
+|---|---|---|
+| `DB_URL` | `jdbc:postgresql://localhost:5432/agencia360` | URL JDBC de PostgreSQL |
+| `DB_USERNAME` | `agencia360` | Usuario de la base de datos |
+| `DB_PASSWORD` | `agencia360` | Contraseña de la base de datos |
+| `REDIS_HOST` | `localhost` | Host de Redis |
+| `REDIS_PORT` | `6379` | Puerto de Redis |
+| `CORS_ALLOWED_ORIGINS` | `http://localhost:5173` | Origen del frontend que puede llamar a la API |
+| `JWT_SECRET` | Valor de solo-desarrollo | Llave para firmar los JWT |
+| `JWT_EXPIRATION_MINUTES` | `60` | Duración del token |
+
+**`JWT_SECRET` trae un valor de solo-desarrollo por defecto: hay que sobrescribirlo en cualquier ambiente real** (en Azure, vía Key Vault según la sección 5 del PDF).
+
+Ejemplo, para apuntar a otro PostgreSQL sin tocar código:
+
+```bash
+DB_URL=jdbc:postgresql://localhost:5433/agencia360 ./mvnw spring-boot:run -Dspring-boot.run.profiles=dev
+```
+
+### 5.6 Comandos útiles
+
+| Comando | Qué hace |
+|---|---|
+| `docker compose ps` | Muestra si los contenedores están corriendo |
+| `docker compose logs -f postgres` | Muestra el log de PostgreSQL en vivo (igual con `redis`) |
+| `docker compose stop` | Detiene los contenedores sin borrarlos |
+| `docker compose down` | Detiene y borra los contenedores; **los datos de PostgreSQL se conservan** |
+| `docker compose down -v` | Borra también el volumen: **base de datos vacía** la próxima vez que levantes (Flyway vuelve a crear las tablas) |
+
+### 5.7 Problemas comunes
+
+| Síntoma | Causa | Solución |
+|---|---|---|
+| La API no arranca y el log dice `Connection to localhost:5432 refused` | PostgreSQL no está corriendo | `docker compose up -d` y vuelve a levantar la API |
+| `docker compose up` falla con `port is already allocated` o `address already in use` | Ya tienes otro PostgreSQL o Redis usando el puerto `5432` o `6379` | Detén el servicio local (por ejemplo `sudo systemctl stop postgresql`) o cambia el puerto de la izquierda en `docker-compose.yml` (`"5433:5432"`) y usa `DB_URL` con ese puerto |
+| La API arranca pero `/actuator/health` responde `{"status":"DOWN"}` (HTTP 503) | Redis no está corriendo: la API no lo necesita para arrancar, pero el health check lo revisa | `docker compose up -d redis` |
+| La API no arranca por un error de Flyway (`Validate failed`, `checksum mismatch`) | Se editó una migración que ya se había aplicado en tu base local | No edites migraciones ya integradas a `main`: crea una nueva. Si solo fue en tu máquina, reinicia la base con `docker compose down -v && docker compose up -d` |
+| La API no arranca con `Schema-validation: missing table` | Una entidad JPA no tiene su migración | Agrega la migración `V<n>__...sql` que crea esa tabla |
 
 ## 6. Estrategia de pruebas (backend)
 
