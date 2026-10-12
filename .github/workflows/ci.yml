@@ -1,8 +1,10 @@
 name: CI
 
+# Corre en cada push a cualquier rama (main está protegida, así que el trabajo
+# diario vive en ramas de feature) y en cada PR hacia main.
 on:
   push:
-    branches: [main]
+    branches: ["**"]
   pull_request:
     branches: [main]
   workflow_dispatch: {}
