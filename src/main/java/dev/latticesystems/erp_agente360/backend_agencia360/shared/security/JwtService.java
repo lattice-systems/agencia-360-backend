@@ -60,8 +60,7 @@ public class JwtService {
 			throw new MalformedJwtException("El token no identifica al usuario");
 		}
 		Set<Role> roles = extractAuthorities(claims).stream().map(GrantedAuthority::getAuthority)
-				.map(autoridad -> Role.valueOf(autoridad.substring(PREFIJO_ROL.length())))
-				.collect(Collectors.toSet());
+				.map(autoridad -> Role.valueOf(autoridad.substring(PREFIJO_ROL.length()))).collect(Collectors.toSet());
 		return new UsuarioAutenticado(usuarioId.longValue(), claims.getSubject(), roles);
 	}
 
