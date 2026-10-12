@@ -13,7 +13,7 @@ Estas reglas aplican al backend, al ERP frontend y al CRM. Si el CRM vive en otr
 3. Haz commits con mensajes claros y publica la rama.
 4. Abre un PR hacia `main`, completa la descripción y espera a que termine CI.
 5. Atiende los comentarios y consigue al menos una aprobación.
-6. Cuando todos los checks estén verdes y no queden conversaciones pendientes, integra el PR con **Squash and merge** y borra la rama.
+6. Cuando todos los checks estén verdes y no queden conversaciones pendientes, integra el PR con **Create a merge commit** (es el único método que permite la regla de `main`) y borra la rama.
 
 ## Nombres de ramas
 
@@ -109,5 +109,5 @@ Configura una regla de protección para `main` que:
 ## Resumen
 
 ```text
-actualizar main -> crear rama -> commit y push -> abrir PR -> aprobación + CI verde -> squash and merge
+actualizar main -> crear rama -> commit y push -> abrir PR -> aprobación + CI verde -> merge
 ```
