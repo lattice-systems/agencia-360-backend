@@ -143,13 +143,13 @@ class RecepcionesIntegrationTest extends AbstractIntegrationTest {
 	}
 
 	private long refaccionCon(Usuario usuario, int existencia) throws Exception {
+		String cuerpo = """
+				{"codigo":"FIL-ACE-01","descripcion":"Filtro de aceite","costo":180.50,"precio":320.00,
+				"existencia":%d,"minimo":5}
+				""".formatted(existencia);
 		String respuesta = mockMvc
-				.perform(
-						conToken(post(URL_REFACCIONES), token(usuario)).contentType(MediaType.APPLICATION_JSON).content(
-								"""
-										{"codigo":"FIL-ACE-01","descripcion":"Filtro de aceite","costo":180.50,"precio":320.00,"existencia":%d,"minimo":5}
-										"""
-										.formatted(existencia)))
+				.perform(conToken(post(URL_REFACCIONES), token(usuario)).contentType(MediaType.APPLICATION_JSON)
+						.content(cuerpo))
 				.andExpect(status().isCreated()).andReturn().getResponse().getContentAsString();
 		return ((Number) JsonPath.read(respuesta, "$.id")).longValue();
 	}
@@ -158,7 +158,8 @@ class RecepcionesIntegrationTest extends AbstractIntegrationTest {
 	private List<Map<String, Object>> movimientosDe(long refaccionId) {
 		entityManager.flush();
 		return jdbcTemplate.queryForList(
-				"select tipo, cantidad, responsable_id, fecha from movimiento_inventario where refaccion_id = ? order by id",
+				"select tipo, cantidad, responsable_id, fecha from movimiento_inventario where refaccion_id = ? "
+						+ "order by id",
 				refaccionId);
 	}
 
