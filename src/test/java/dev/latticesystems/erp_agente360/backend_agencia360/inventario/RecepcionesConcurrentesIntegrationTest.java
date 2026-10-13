@@ -7,6 +7,7 @@ import dev.latticesystems.erp_agente360.backend_agencia360.acceso.domain.Usuario
 import dev.latticesystems.erp_agente360.backend_agencia360.acceso.infrastructure.RolRepository;
 import dev.latticesystems.erp_agente360.backend_agencia360.acceso.infrastructure.UsuarioRepository;
 import dev.latticesystems.erp_agente360.backend_agencia360.inventario.application.RecepcionRefaccionService;
+import dev.latticesystems.erp_agente360.backend_agencia360.inventario.domain.Recepcion;
 import dev.latticesystems.erp_agente360.backend_agencia360.inventario.domain.Refaccion;
 import dev.latticesystems.erp_agente360.backend_agencia360.inventario.infrastructure.RefaccionRepository;
 import dev.latticesystems.erp_agente360.backend_agencia360.shared.AbstractIntegrationTest;
@@ -81,7 +82,7 @@ class RecepcionesConcurrentesIntegrationTest extends AbstractIntegrationTest {
 		for (int i = 0; i < RECEPCIONES; i++) {
 			tareas.add(() -> {
 				salida.await();
-				recepcionService.recibir(refaccion.getId(), 1, actor);
+				recepcionService.recibir(refaccion.getId(), new Recepcion(1, "Proveedor de prueba", null, null), actor);
 				return null;
 			});
 		}

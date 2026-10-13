@@ -3,11 +3,8 @@ package dev.latticesystems.erp_agente360.backend_agencia360.inventario.applicati
 import java.math.BigDecimal;
 
 /**
- * Datos capturados para dar de alta una refacción (ERP-2.0).
- *
- * @param existencia
- *            piezas con las que llega; entran como la primera recepción
+ * Datos capturados para dar de alta una refacción (ERP-2.0). No trae
+ * existencia: empieza en cero y crece con las recepciones.
  */
-public record NuevaRefaccion(String codigo, String descripcion, BigDecimal costo, BigDecimal precio, int existencia,
-		int minimo) {
+public record NuevaRefaccion(String codigo, String descripcion, BigDecimal costo, BigDecimal precio, int minimo) {
 }

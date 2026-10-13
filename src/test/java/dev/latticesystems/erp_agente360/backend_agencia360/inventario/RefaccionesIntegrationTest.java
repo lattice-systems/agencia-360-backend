@@ -17,7 +17,6 @@ import dev.latticesystems.erp_agente360.backend_agencia360.shared.security.JwtSe
 import dev.latticesystems.erp_agente360.backend_agencia360.shared.security.Role;
 import jakarta.persistence.EntityManager;
 import java.util.List;
-import java.util.Map;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
@@ -58,48 +57,39 @@ class RefaccionesIntegrationTest extends AbstractIntegrationTest {
 	private EntityManager entityManager;
 
 	@Test
-	void inventarioDaDeAltaUnaRefaccion() throws Exception {
+	void inventarioDaDeAltaUnaRefaccionConExistenciaEnCero() throws Exception {
 		Usuario almacen = registrar("almacen1", Role.INVENTARIO);
 
-		mockMvc.perform(alta(token(almacen), cuerpo(" fil-ace-01 ", "12"))).andExpect(status().isCreated())
+		mockMvc.perform(alta(token(almacen), cuerpo(" fil-ace-01 "))).andExpect(status().isCreated())
 				.andExpect(header().exists(HttpHeaders.LOCATION)).andExpect(jsonPath("$.id").isNumber())
 				.andExpect(jsonPath("$.codigo").value("FIL-ACE-01"))
 				.andExpect(jsonPath("$.descripcion").value("Filtro de aceite"))
 				.andExpect(jsonPath("$.costo").value(180.50)).andExpect(jsonPath("$.precio").value(320.00))
-				.andExpect(jsonPath("$.existencia").value(12)).andExpect(jsonPath("$.minimo").value(5))
+				.andExpect(jsonPath("$.existencia").value(0)).andExpect(jsonPath("$.minimo").value(5))
 				.andExpect(jsonPath("$.creadoEn").isNotEmpty());
 	}
 
 	@Test
-	void laExistenciaInicialQuedaComoEntradaConSuResponsable() throws Exception {
+	void elAltaIgnoraUnaExistenciaYNoCreaMovimientos() throws Exception {
 		Usuario almacen = registrar("almacen1", Role.INVENTARIO);
 
-		long id = altaDe(almacen, "FIL-ACE-01", "12");
+		long id = idDe(mockMvc.perform(alta(token(almacen), """
+				{"codigo":"FIL-ACE-01","descripcion":"Filtro de aceite","costo":180.50,"precio":320.00,
+				"existencia":12,"minimo":5}
+				""")).andExpect(status().isCreated()).andExpect(jsonPath("$.existencia").value(0)).andReturn()
+				.getResponse().getContentAsString());
 
-		assertThat(movimientosDe(id)).singleElement().satisfies(movimiento -> {
-			assertThat(movimiento.get("tipo")).isEqualTo("ENTRADA");
-			assertThat(((Number) movimiento.get("cantidad")).intValue()).isEqualTo(12);
-			assertThat(((Number) movimiento.get("responsable_id")).longValue()).isEqualTo(almacen.getId());
-		});
-	}
-
-	@Test
-	void sinExistenciaInicialEmpiezaEnCeroSinMovimientos() throws Exception {
-		Usuario almacen = registrar("almacen1", Role.INVENTARIO);
-
-		mockMvc.perform(alta(token(almacen), """
-				{"codigo":"FIL-ACE-01","descripcion":"Filtro de aceite","costo":180.50,"precio":320.00,"minimo":5}
-				""")).andExpect(status().isCreated()).andExpect(jsonPath("$.existencia").value(0));
-		long id = jdbcTemplate.queryForObject("select id from refaccion where codigo = 'FIL-ACE-01'", Long.class);
-		assertThat(movimientosDe(id)).isEmpty();
+		entityManager.flush();
+		assertThat(jdbcTemplate.queryForObject("select count(*) from movimiento_inventario where refaccion_id = ?",
+				Integer.class, id)).isZero();
 	}
 
 	@Test
 	void rechazaUnCodigoRepetidoCon409() throws Exception {
 		Usuario almacen = registrar("almacen1", Role.INVENTARIO);
-		altaDe(almacen, "FIL-ACE-01", "0");
+		altaDe(almacen, "FIL-ACE-01");
 
-		mockMvc.perform(alta(token(almacen), cuerpo("fil-ace-01", "0"))).andExpect(status().isConflict())
+		mockMvc.perform(alta(token(almacen), cuerpo("fil-ace-01"))).andExpect(status().isConflict())
 				.andExpect(jsonPath("$.message").value("Ya existe una refacción con el código FIL-ACE-01"));
 	}
 
@@ -107,8 +97,6 @@ class RefaccionesIntegrationTest extends AbstractIntegrationTest {
 	void rechazaDatosInvalidosCon400() throws Exception {
 		Usuario almacen = registrar("almacen1", Role.INVENTARIO);
 
-		mockMvc.perform(alta(token(almacen), cuerpo("FIL-ACE-01", "-1"))).andExpect(status().isBadRequest())
-				.andExpect(jsonPath("$.message").value("La existencia no puede ser negativa"));
 		mockMvc.perform(alta(token(almacen), """
 				{"codigo":"FIL-ACE-01","descripcion":"Filtro de aceite","costo":-1,"precio":320.00,"minimo":5}
 				""")).andExpect(status().isBadRequest())
@@ -128,28 +116,28 @@ class RefaccionesIntegrationTest extends AbstractIntegrationTest {
 		Usuario refacciones = registrar("refacciones1", Role.REFACCIONES);
 		Usuario cajero = registrar("caja1", Role.CAJA);
 
-		mockMvc.perform(alta(token(refacciones), cuerpo("FIL-ACE-01", "0"))).andExpect(status().isForbidden());
+		mockMvc.perform(alta(token(refacciones), cuerpo("FIL-ACE-01"))).andExpect(status().isForbidden());
 		mockMvc.perform(conToken(get(URL), token(cajero))).andExpect(status().isForbidden());
 	}
 
 	@Test
 	void listaLasRefaccionesOrdenadasPorCodigo() throws Exception {
 		Usuario almacen = registrar("almacen1", Role.INVENTARIO);
-		altaDe(almacen, "FIL-ACE-01", "3");
-		altaDe(almacen, "BAL-DEL-01", "0");
+		altaDe(almacen, "FIL-ACE-01");
+		altaDe(almacen, "BAL-DEL-01");
 
 		mockMvc.perform(conToken(get(URL), token(almacen))).andExpect(status().isOk())
 				.andExpect(jsonPath("$.length()").value(2)).andExpect(jsonPath("$[0].codigo").value("BAL-DEL-01"))
-				.andExpect(jsonPath("$[1].codigo").value("FIL-ACE-01")).andExpect(jsonPath("$[1].existencia").value(3));
+				.andExpect(jsonPath("$[1].codigo").value("FIL-ACE-01"));
 	}
 
 	@Test
 	void consultaUnaRefaccionPorId() throws Exception {
 		Usuario almacen = registrar("almacen1", Role.INVENTARIO);
-		long id = altaDe(almacen, "FIL-ACE-01", "4");
+		long id = altaDe(almacen, "FIL-ACE-01");
 
 		mockMvc.perform(conToken(get(URL + "/{id}", id), token(almacen))).andExpect(status().isOk())
-				.andExpect(jsonPath("$.id").value(id)).andExpect(jsonPath("$.existencia").value(4));
+				.andExpect(jsonPath("$.id").value(id)).andExpect(jsonPath("$.codigo").value("FIL-ACE-01"));
 	}
 
 	@Test
@@ -168,25 +156,19 @@ class RefaccionesIntegrationTest extends AbstractIntegrationTest {
 		return jwtService.generateToken(usuario.getId(), usuario.getUsuario(), List.of(usuario.getRol().comoRole()));
 	}
 
-	private long altaDe(Usuario usuario, String codigo, String existencia) throws Exception {
-		String respuesta = mockMvc.perform(alta(token(usuario), cuerpo(codigo, existencia)))
-				.andExpect(status().isCreated()).andReturn().getResponse().getContentAsString();
+	private long altaDe(Usuario usuario, String codigo) throws Exception {
+		return idDe(mockMvc.perform(alta(token(usuario), cuerpo(codigo))).andExpect(status().isCreated()).andReturn()
+				.getResponse().getContentAsString());
+	}
+
+	private static long idDe(String respuesta) {
 		return ((Number) JsonPath.read(respuesta, "$.id")).longValue();
 	}
 
-	/** Escribe en la base lo pendiente de JPA para poder leerlo con SQL. */
-	private List<Map<String, Object>> movimientosDe(long refaccionId) {
-		entityManager.flush();
-		return jdbcTemplate.queryForList(
-				"select tipo, cantidad, responsable_id, fecha from movimiento_inventario where refaccion_id = ?",
-				refaccionId);
-	}
-
-	private static String cuerpo(String codigo, String existencia) {
+	private static String cuerpo(String codigo) {
 		return """
-				{"codigo":"%s","descripcion":"Filtro de aceite","costo":180.50,"precio":320.00,"existencia":%s,"minimo":5}
-				"""
-				.formatted(codigo, existencia);
+				{"codigo":"%s","descripcion":"Filtro de aceite","costo":180.50,"precio":320.00,"minimo":5}
+				""".formatted(codigo);
 	}
 
 	private static MockHttpServletRequestBuilder alta(String token, String cuerpo) {

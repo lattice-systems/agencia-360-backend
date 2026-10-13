@@ -9,6 +9,7 @@ import dev.latticesystems.erp_agente360.backend_agencia360.acceso.infrastructure
 import dev.latticesystems.erp_agente360.backend_agencia360.acceso.infrastructure.UsuarioRepository;
 import dev.latticesystems.erp_agente360.backend_agencia360.inventario.domain.EstatusVehiculo;
 import dev.latticesystems.erp_agente360.backend_agencia360.inventario.domain.MovimientoInventario;
+import dev.latticesystems.erp_agente360.backend_agencia360.inventario.domain.Recepcion;
 import dev.latticesystems.erp_agente360.backend_agencia360.inventario.domain.Refaccion;
 import dev.latticesystems.erp_agente360.backend_agencia360.inventario.domain.TipoMovimiento;
 import dev.latticesystems.erp_agente360.backend_agencia360.inventario.domain.Vehiculo;
@@ -34,6 +35,7 @@ import org.springframework.transaction.annotation.Transactional;
 class InventarioPersistenciaIntegrationTest extends AbstractIntegrationTest {
 
 	private static final Instant AHORA = Instant.parse("2026-10-13T16:00:00Z");
+	private static final Instant AYER = Instant.parse("2026-10-12T15:30:00Z");
 
 	@Autowired
 	private VehiculoRepository vehiculoRepository;
@@ -73,7 +75,8 @@ class InventarioPersistenciaIntegrationTest extends AbstractIntegrationTest {
 			assertThat(movimiento.getVehiculo().getId()).isEqualTo(vehiculo.getId());
 			assertThat(movimiento.getCantidad()).isEqualTo(1);
 			assertThat(movimiento.getResponsableId()).isEqualTo(responsable.getId());
-			assertThat(movimiento.getFecha()).isEqualTo(AHORA);
+			assertThat(movimiento.getFechaRegistro()).isEqualTo(AHORA);
+			assertThat(movimiento.getFechaLlegada()).isEqualTo(AHORA);
 		});
 	}
 
@@ -81,14 +84,19 @@ class InventarioPersistenciaIntegrationTest extends AbstractIntegrationTest {
 	void guardaLaExistenciaDeUnaRefaccionYSuMovimiento() {
 		Usuario responsable = responsable();
 		Refaccion refaccion = refaccionRepository.save(refaccion("FIL-ACE-01"));
-		movimientoRepository.save(refaccion.recibir(12, responsable.getId(), AHORA));
+		movimientoRepository.save(
+				refaccion.recibir(new Recepcion(12, "Refacciones del Bajío", null, AYER), responsable.getId(), AHORA));
 		limpiarContexto();
 
 		Refaccion guardada = refaccionRepository.findById(refaccion.getId()).orElseThrow();
 		assertThat(guardada.getExistencia()).isEqualTo(12);
 		assertThat(guardada.getCosto()).isEqualByComparingTo("180.50");
-		assertThat(movimientoRepository.findAll()).singleElement()
-				.satisfies(movimiento -> assertThat(movimiento.getRefaccion().getId()).isEqualTo(refaccion.getId()));
+		assertThat(movimientoRepository.findAll()).singleElement().satisfies(movimiento -> {
+			assertThat(movimiento.getRefaccion().getId()).isEqualTo(refaccion.getId());
+			assertThat(movimiento.getProveedor()).isEqualTo("Refacciones del Bajío");
+			assertThat(movimiento.getFechaLlegada()).isEqualTo(AYER);
+			assertThat(movimiento.getFechaRegistro()).isEqualTo(AHORA);
+		});
 	}
 
 	@Test
@@ -121,7 +129,8 @@ class InventarioPersistenciaIntegrationTest extends AbstractIntegrationTest {
 		Usuario responsable = responsable();
 
 		assertThatThrownBy(() -> jdbcTemplate.update(
-				"insert into movimiento_inventario (tipo, cantidad, responsable_id, fecha) values ('ENTRADA', 1, ?, now())",
+				"insert into movimiento_inventario (tipo, cantidad, responsable_id, fecha_llegada, fecha_registro) "
+						+ "values ('ENTRADA', 1, ?, now(), now())",
 				responsable.getId())).isInstanceOf(DataIntegrityViolationException.class);
 	}
 
@@ -130,10 +139,33 @@ class InventarioPersistenciaIntegrationTest extends AbstractIntegrationTest {
 		Usuario responsable = responsable();
 		Vehiculo vehiculo = vehiculoRepository.saveAndFlush(vehiculo("3VWFE21C04M000001"));
 
-		assertThatThrownBy(() -> jdbcTemplate
-				.update("insert into movimiento_inventario (tipo, vehiculo_id, cantidad, responsable_id, fecha) "
-						+ "values ('ENTRADA', ?, 2, ?, now())", vehiculo.getId(), responsable.getId()))
-				.isInstanceOf(DataIntegrityViolationException.class);
+		assertThatThrownBy(() -> jdbcTemplate.update(
+				"insert into movimiento_inventario (tipo, vehiculo_id, cantidad, responsable_id, fecha_llegada, "
+						+ "fecha_registro) values ('ENTRADA', ?, 2, ?, now(), now())",
+				vehiculo.getId(), responsable.getId())).isInstanceOf(DataIntegrityViolationException.class);
+	}
+
+	@Test
+	void laBaseNoPermiteUnaLlegadaPosteriorAlRegistro() {
+		Usuario responsable = responsable();
+		Refaccion refaccion = refaccionRepository.saveAndFlush(refaccion("FIL-ACE-01"));
+
+		assertThatThrownBy(() -> jdbcTemplate.update(
+				"insert into movimiento_inventario (tipo, refaccion_id, cantidad, responsable_id, proveedor, "
+						+ "fecha_llegada, fecha_registro) "
+						+ "values ('ENTRADA', ?, 1, ?, 'Bajío', now() + interval '1 day', now())",
+				refaccion.getId(), responsable.getId())).isInstanceOf(DataIntegrityViolationException.class);
+	}
+
+	@Test
+	void laBaseExigeProveedorEnLasEntradasDeRefacciones() {
+		Usuario responsable = responsable();
+		Refaccion refaccion = refaccionRepository.saveAndFlush(refaccion("FIL-ACE-01"));
+
+		assertThatThrownBy(() -> jdbcTemplate.update(
+				"insert into movimiento_inventario (tipo, refaccion_id, cantidad, responsable_id, fecha_llegada, "
+						+ "fecha_registro) values ('ENTRADA', ?, 1, ?, now(), now())",
+				refaccion.getId(), responsable.getId())).isInstanceOf(DataIntegrityViolationException.class);
 	}
 
 	private void limpiarContexto() {

@@ -74,7 +74,7 @@ class RegistroVehiculoServiceTest {
 		assertThat(movimiento.getValue().getVehiculo().getVin()).isEqualTo("3VWFE21C04M000001");
 		assertThat(movimiento.getValue().getCantidad()).isEqualTo(1);
 		assertThat(movimiento.getValue().getResponsableId()).isEqualTo(4L);
-		assertThat(movimiento.getValue().getFecha()).isEqualTo(AHORA);
+		assertThat(movimiento.getValue().getFechaRegistro()).isEqualTo(AHORA);
 	}
 
 	@Test
