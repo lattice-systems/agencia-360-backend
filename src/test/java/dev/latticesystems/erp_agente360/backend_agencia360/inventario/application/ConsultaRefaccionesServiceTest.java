@@ -34,7 +34,18 @@ class ConsultaRefaccionesServiceTest {
 		when(refaccionRepository.findAllByOrderByCodigoAsc())
 				.thenReturn(List.of(refaccion("BAL-DEL-01"), refaccion("FIL-ACE-01")));
 
-		assertThat(service.listar()).extracting(RefaccionVista::codigo).containsExactly("BAL-DEL-01", "FIL-ACE-01");
+		assertThat(service.listar(false)).extracting(RefaccionVista::codigo).containsExactly("BAL-DEL-01",
+				"FIL-ACE-01");
+	}
+
+	@Test
+	void puedeTraerSoloLasQueEstanBajoMinimo() {
+		when(refaccionRepository.buscarBajoMinimo()).thenReturn(List.of(refaccion("BAL-DEL-01")));
+
+		assertThat(service.listar(true)).singleElement().satisfies(vista -> {
+			assertThat(vista.codigo()).isEqualTo("BAL-DEL-01");
+			assertThat(vista.bajoMinimo()).isTrue();
+		});
 	}
 
 	@Test

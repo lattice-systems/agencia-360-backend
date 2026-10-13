@@ -135,6 +135,14 @@ public class Refaccion extends Auditable {
 		return movimiento;
 	}
 
+	/**
+	 * Indica si la existencia llegó al mínimo o quedó por debajo; en ese caso se
+	 * avisa a Refacciones y al Administrador (decisión del PO del 13 de octubre).
+	 */
+	public boolean estaBajoMinimo() {
+		return existencia <= minimo;
+	}
+
 	public Long getId() {
 		return id;
 	}

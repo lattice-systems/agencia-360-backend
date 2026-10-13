@@ -18,6 +18,10 @@ public interface RefaccionRepository extends JpaRepository<Refaccion, Long> {
 
 	List<Refaccion> findAllByOrderByCodigoAsc();
 
+	/** Refacciones cuya existencia llegó al mínimo o quedó por debajo. */
+	@Query("select r from Refaccion r where r.existencia <= r.minimo order by r.codigo")
+	List<Refaccion> buscarBajoMinimo();
+
 	/**
 	 * Lee la refacción y bloquea su fila ({@code select ... for update}) hasta que
 	 * termine la transacción, para cambiar la existencia sin que otra transacción

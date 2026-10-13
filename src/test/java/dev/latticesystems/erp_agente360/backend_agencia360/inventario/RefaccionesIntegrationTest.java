@@ -214,6 +214,25 @@ class RefaccionesIntegrationTest extends AbstractIntegrationTest {
 		mockMvc.perform(edicion(token(almacen), 999_999, cuerpo("FIL-ACE-01"))).andExpect(status().isNotFound());
 	}
 
+	@Test
+	void marcaYFiltraLasRefaccionesBajoMinimo() throws Exception {
+		Usuario almacen = registrar("almacen1", Role.INVENTARIO);
+		Usuario refacciones = registrar("refacciones1", Role.REFACCIONES);
+		long surtida = altaDe(almacen, "FIL-ACE-01");
+		altaDe(almacen, "BAL-DEL-01");
+		mockMvc.perform(conToken(post(URL + "/{id}/recepciones", surtida), token(almacen))
+				.contentType(MediaType.APPLICATION_JSON).content("{\"cantidad\":6,\"proveedor\":\"Bajío\"}"))
+				.andExpect(status().isCreated());
+
+		mockMvc.perform(conToken(get(URL), token(refacciones))).andExpect(status().isOk())
+				.andExpect(jsonPath("$[0].codigo").value("BAL-DEL-01"))
+				.andExpect(jsonPath("$[0].bajoMinimo").value(true))
+				.andExpect(jsonPath("$[1].codigo").value("FIL-ACE-01"))
+				.andExpect(jsonPath("$[1].bajoMinimo").value(false));
+		mockMvc.perform(conToken(get(URL).param("bajoMinimo", "true"), token(refacciones))).andExpect(status().isOk())
+				.andExpect(jsonPath("$.length()").value(1)).andExpect(jsonPath("$[0].codigo").value("BAL-DEL-01"));
+	}
+
 	private Usuario registrar(String usuario, Role rol) {
 		Rol encontrado = rolRepository.findByNombre(rol.name()).orElseThrow();
 		return usuarioRepository.save(new Usuario(usuario, "hash-de-prueba", "Persona " + usuario, encontrado));
