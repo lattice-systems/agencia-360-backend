@@ -48,7 +48,7 @@ public class AutenticacionService {
 		}
 
 		Role rol = encontrado.getRol().comoRole();
-		String token = jwtService.generateToken(encontrado.getUsuario(), List.of(rol));
+		String token = jwtService.generateToken(encontrado.getId(), encontrado.getUsuario(), List.of(rol));
 		return new SesionIniciada(token, encontrado.getUsuario(), encontrado.getNombre(), rol, aplicacion);
 	}
 }

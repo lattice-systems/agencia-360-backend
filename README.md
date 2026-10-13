@@ -59,7 +59,7 @@ La agencia automotriz no tiene sus sistemas centralizados. El proyecto los centr
 | Migraciones de BD | Flyway |
 | Base de datos | PostgreSQL |
 | Caché y colas | Redis (Spring Data Redis) |
-| Seguridad | Spring Security + JWT (`io.jsonwebtoken`/jjwt), roles vía `ROLE_*` |
+| Seguridad | Spring Security + JWT (`io.jsonwebtoken`/jjwt), roles vía `ROLE_*`; el principal de cada petición es `UsuarioAutenticado(id, usuario, roles)` |
 | Contrato de API | springdoc-openapi (Swagger UI en `/swagger-ui.html`) — de aquí se generan los clientes TypeScript (React) y Dart (Flutter) con openapi-generator |
 | Notificaciones push | Firebase Cloud Messaging (consumido desde el módulo que corresponda, pendiente de definir) |
 | Nube objetivo | Microsoft Azure (Container Apps, Database for PostgreSQL, Managed Redis, Blob Storage, Key Vault — ver sección 5 del PDF; servicios aún no confirmados) |
