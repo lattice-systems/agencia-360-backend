@@ -76,4 +76,14 @@ class RefaccionTest {
 				.hasMessage("La cantidad debe ser mayor a cero");
 		assertThat(refaccion.getExistencia()).isZero();
 	}
+
+	@Test
+	void rechazaUnaRecepcionQueRebasaLaExistenciaMaxima() {
+		Refaccion refaccion = Refaccion.registrar("FIL-ACE-01", "Filtro de aceite", COSTO, PRECIO, 5);
+		refaccion.recibir(Integer.MAX_VALUE, RESPONSABLE, AHORA);
+
+		assertThatThrownBy(() -> refaccion.recibir(1, RESPONSABLE, AHORA)).isInstanceOf(IllegalArgumentException.class)
+				.hasMessage("La existencia rebasaría el máximo permitido");
+		assertThat(refaccion.getExistencia()).isEqualTo(Integer.MAX_VALUE);
+	}
 }

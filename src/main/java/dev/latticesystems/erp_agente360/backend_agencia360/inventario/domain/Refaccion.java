@@ -84,12 +84,22 @@ public class Refaccion extends Auditable {
 	 * el movimiento de entrada que la respalda, que se debe guardar en la misma
 	 * transacción.
 	 *
+	 * <p>
+	 * Quien llama debe tener la fila bloqueada (ver
+	 * {@code RefaccionRepository.buscarParaActualizar}) para que dos recepciones
+	 * simultáneas no se pisen.
+	 *
 	 * @throws IllegalArgumentException
-	 *             si la cantidad no es mayor a cero
+	 *             si la cantidad no es mayor a cero o la existencia rebasaría el
+	 *             máximo que cabe en la columna
 	 */
 	public MovimientoInventario recibir(int cantidad, Long responsableId, Instant fecha) {
 		MovimientoInventario movimiento = MovimientoInventario.entradaDeRefaccion(this, cantidad, responsableId, fecha);
-		existencia += cantidad;
+		try {
+			existencia = Math.addExact(existencia, cantidad);
+		} catch (ArithmeticException e) {
+			throw new IllegalArgumentException("La existencia rebasaría el máximo permitido", e);
+		}
 		return movimiento;
 	}
 
