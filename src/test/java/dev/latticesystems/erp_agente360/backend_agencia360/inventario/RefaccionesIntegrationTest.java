@@ -112,14 +112,36 @@ class RefaccionesIntegrationTest extends AbstractIntegrationTest {
 	}
 
 	@Test
-	void otrosRolesNoDanDeAltaNiConsultanRefacciones() throws Exception {
+	void soloInventarioDaDeAltaRefacciones() throws Exception {
 		Usuario refacciones = registrar("refacciones1", Role.REFACCIONES);
-		Usuario cajero = registrar("caja1", Role.CAJA);
+		Usuario administrador = registrar("admin1", Role.ADMINISTRADOR);
 
 		mockMvc.perform(alta(token(refacciones), cuerpo("FIL-ACE-01"))).andExpect(status().isForbidden());
-		mockMvc.perform(conToken(get(URL), token(cajero))).andExpect(status().isForbidden());
+		mockMvc.perform(alta(token(administrador), cuerpo("FIL-ACE-01"))).andExpect(status().isForbidden());
 	}
 
+	@Test
+	void refaccionesYAdministradorConsultanLasRefacciones() throws Exception {
+		Usuario almacen = registrar("almacen1", Role.INVENTARIO);
+		Usuario refacciones = registrar("refacciones1", Role.REFACCIONES);
+		Usuario administrador = registrar("admin1", Role.ADMINISTRADOR);
+		long id = altaDe(almacen, "FIL-ACE-01");
+
+		for (Usuario usuario : List.of(refacciones, administrador)) {
+			mockMvc.perform(conToken(get(URL), token(usuario))).andExpect(status().isOk())
+					.andExpect(jsonPath("$.length()").value(1));
+			mockMvc.perform(conToken(get(URL + "/{id}", id), token(usuario))).andExpect(status().isOk());
+		}
+	}
+
+	@Test
+	void otrosRolesNoConsultanRefacciones() throws Exception {
+		Usuario cajero = registrar("caja1", Role.CAJA);
+		Usuario vendedor = registrar("vendedor1", Role.VENTAS);
+
+		mockMvc.perform(conToken(get(URL), token(cajero))).andExpect(status().isForbidden());
+		mockMvc.perform(conToken(get(URL), token(vendedor))).andExpect(status().isForbidden());
+	}
 	@Test
 	void listaLasRefaccionesOrdenadasPorCodigo() throws Exception {
 		Usuario almacen = registrar("almacen1", Role.INVENTARIO);

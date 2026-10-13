@@ -174,17 +174,36 @@ class RecepcionesIntegrationTest extends AbstractIntegrationTest {
 	}
 
 	@Test
-	void otrosRolesNoRegistranRecepciones() throws Exception {
+	void soloInventarioRegistraRecepciones() throws Exception {
 		Usuario almacen = registrar("almacen1", Role.INVENTARIO);
 		Usuario refacciones = registrar("refacciones1", Role.REFACCIONES);
+		Usuario administrador = registrar("admin1", Role.ADMINISTRADOR);
 		long id = refaccion(almacen);
 
-		mockMvc.perform(recepcion(token(refacciones), id, """
-				{"cantidad":1,"proveedor":"Bajío"}
-				""")).andExpect(status().isForbidden());
+		for (Usuario usuario : List.of(refacciones, administrador)) {
+			mockMvc.perform(recepcion(token(usuario), id, """
+					{"cantidad":1,"proveedor":"Bajío"}
+					""")).andExpect(status().isForbidden());
+		}
 		assertThat(movimientosDe(id)).isEmpty();
 	}
 
+	@Test
+	void refaccionesYAdministradorConsultanElHistorial() throws Exception {
+		Usuario almacen = registrar("almacen1", Role.INVENTARIO);
+		Usuario refacciones = registrar("refacciones1", Role.REFACCIONES);
+		Usuario administrador = registrar("admin1", Role.ADMINISTRADOR);
+		Usuario vendedor = registrar("vendedor1", Role.VENTAS);
+		long id = refaccion(almacen);
+		recibir(almacen, id, 4);
+
+		for (Usuario usuario : List.of(refacciones, administrador)) {
+			mockMvc.perform(conToken(get(URL_REFACCIONES + "/{id}/recepciones", id), token(usuario)))
+					.andExpect(status().isOk()).andExpect(jsonPath("$.length()").value(1));
+		}
+		mockMvc.perform(conToken(get(URL_REFACCIONES + "/{id}/recepciones", id), token(vendedor)))
+				.andExpect(status().isForbidden());
+	}
 	private Usuario registrar(String usuario, Role rol) {
 		Rol encontrado = rolRepository.findByNombre(rol.name()).orElseThrow();
 		return usuarioRepository.save(new Usuario(usuario, "hash-de-prueba", "Persona " + usuario, encontrado));

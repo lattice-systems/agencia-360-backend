@@ -20,7 +20,10 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
-/** Recepción de refacciones (ERP-2.0). */
+/**
+ * Recepción de refacciones (ERP-2.0). Solo Inventario registra; Refacciones y
+ * Administrador consultan el historial.
+ */
 @RestController
 @RequestMapping("/api/v1/refacciones/{id}/recepciones")
 @Tag(name = "Refacciones", description = "Alta y consulta de las refacciones del inventario")
@@ -48,7 +51,7 @@ public class RecepcionRefaccionController {
 	}
 
 	@GetMapping
-	@PreAuthorize("hasRole('INVENTARIO')")
+	@PreAuthorize("hasAnyRole('INVENTARIO', 'REFACCIONES', 'ADMINISTRADOR')")
 	@Operation(summary = "Historial de recepciones de una refacción", description = "De la más reciente a la más "
 			+ "antigua, con la fecha de llegada y la de registro. Responde 404 si la refacción no existe.")
 	public List<RecepcionVista> listar(@PathVariable Long id) {

@@ -21,10 +21,12 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
-/** Alta y consulta de unidades del inventario (ERP-2.0). Solo Inventario. */
+/**
+ * Alta y consulta de unidades del inventario (ERP-2.0). Solo Inventario da de
+ * alta; Administrador consulta todas y Ventas solo las disponibles.
+ */
 @RestController
 @RequestMapping("/api/v1/vehiculos")
-@PreAuthorize("hasRole('INVENTARIO')")
 @Tag(name = "Vehículos", description = "Alta y consulta de las unidades del inventario")
 public class VehiculoController {
 
@@ -38,6 +40,7 @@ public class VehiculoController {
 	}
 
 	@PostMapping
+	@PreAuthorize("hasRole('INVENTARIO')")
 	@Operation(summary = "Dar de alta una unidad", description = "Entra como Disponible, o como No disponible si "
 			+ "se indica (daños u otros motivos), y deja su entrada al inventario a cargo del usuario en sesión. Responde "
 			+ "400 si faltan datos, el VIN no tiene 17 caracteres (sin I, O ni Q), el año es menor a 1900 o el estatus no "
@@ -49,15 +52,20 @@ public class VehiculoController {
 	}
 
 	@GetMapping
+	@PreAuthorize("hasAnyRole('INVENTARIO', 'ADMINISTRADOR', 'VENTAS')")
 	@Operation(summary = "Listar unidades, filtrable por estatus", description = "De la más reciente a la más "
-			+ "antigua. Estatus: DISPONIBLE, APARTADA, VENDIDO, ENTREGADO o NO_DISPONIBLE.")
-	public List<VehiculoVista> listar(@RequestParam(required = false) String estatus) {
-		return consultaVehiculosService.listar(estatus == null ? null : EstatusVehiculo.desde(estatus));
+			+ "antigua. Estatus: DISPONIBLE, APARTADA, VENDIDO, ENTREGADO o NO_DISPONIBLE. Ventas solo recibe las "
+			+ "disponibles.")
+	public List<VehiculoVista> listar(@RequestParam(required = false) String estatus,
+			@AuthenticationPrincipal UsuarioAutenticado actor) {
+		return consultaVehiculosService.listar(estatus == null ? null : EstatusVehiculo.desde(estatus), actor);
 	}
 
 	@GetMapping("/{id}")
-	@Operation(summary = "Consultar una unidad", description = "Responde 404 si no existe.")
-	public VehiculoVista obtener(@PathVariable Long id) {
-		return consultaVehiculosService.obtener(id);
+	@PreAuthorize("hasAnyRole('INVENTARIO', 'ADMINISTRADOR', 'VENTAS')")
+	@Operation(summary = "Consultar una unidad", description = "Responde 404 si no existe o, para Ventas, si "
+			+ "no está disponible.")
+	public VehiculoVista obtener(@PathVariable Long id, @AuthenticationPrincipal UsuarioAutenticado actor) {
+		return consultaVehiculosService.obtener(id, actor);
 	}
 }
