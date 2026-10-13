@@ -1,6 +1,7 @@
 package dev.latticesystems.erp_agente360.backend_agencia360.inventario.web;
 
 import dev.latticesystems.erp_agente360.backend_agencia360.inventario.application.ConsultaVehiculosService;
+import dev.latticesystems.erp_agente360.backend_agencia360.inventario.application.EdicionVehiculoService;
 import dev.latticesystems.erp_agente360.backend_agencia360.inventario.application.RegistroVehiculoService;
 import dev.latticesystems.erp_agente360.backend_agencia360.inventario.application.VehiculoVista;
 import dev.latticesystems.erp_agente360.backend_agencia360.inventario.domain.EstatusVehiculo;
@@ -16,6 +17,7 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -32,11 +34,13 @@ public class VehiculoController {
 
 	private final RegistroVehiculoService registroVehiculoService;
 	private final ConsultaVehiculosService consultaVehiculosService;
+	private final EdicionVehiculoService edicionVehiculoService;
 
 	public VehiculoController(RegistroVehiculoService registroVehiculoService,
-			ConsultaVehiculosService consultaVehiculosService) {
+			ConsultaVehiculosService consultaVehiculosService, EdicionVehiculoService edicionVehiculoService) {
 		this.registroVehiculoService = registroVehiculoService;
 		this.consultaVehiculosService = consultaVehiculosService;
+		this.edicionVehiculoService = edicionVehiculoService;
 	}
 
 	@PostMapping
@@ -67,5 +71,14 @@ public class VehiculoController {
 			+ "no está disponible.")
 	public VehiculoVista obtener(@PathVariable Long id, @AuthenticationPrincipal UsuarioAutenticado actor) {
 		return consultaVehiculosService.obtener(id, actor);
+	}
+
+	@PutMapping("/{id}")
+	@PreAuthorize("hasRole('INVENTARIO')")
+	@Operation(summary = "Corregir los datos de una unidad", description = "Las unidades se editan, no se eliminan. "
+			+ "Inventario solo cambia el estatus entre DISPONIBLE y NO_DISPONIBLE; sin estatus se conserva. Responde "
+			+ "400 si un dato no es válido, 404 si no existe y 409 si otra unidad ya tiene ese VIN.")
+	public VehiculoVista editar(@PathVariable Long id, @Valid @RequestBody EditarVehiculoRequest request) {
+		return edicionVehiculoService.editar(id, request.comoVehiculoEditado());
 	}
 }

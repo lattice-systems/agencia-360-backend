@@ -47,15 +47,6 @@ public class Refaccion extends Auditable {
 		// Requerido por JPA
 	}
 
-	private Refaccion(String codigo, String descripcion, BigDecimal costo, BigDecimal precio, int minimo) {
-		this.codigo = codigo;
-		this.descripcion = descripcion;
-		this.costo = costo;
-		this.precio = precio;
-		this.minimo = minimo;
-		this.existencia = 0;
-	}
-
 	/**
 	 * Da de alta una refacción sin existencia; la existencia llega con las
 	 * recepciones (decisión del PO del 13 de octubre). Quita espacios sobrantes y
@@ -67,7 +58,41 @@ public class Refaccion extends Auditable {
 	 */
 	public static Refaccion registrar(String codigo, String descripcion, BigDecimal costo, BigDecimal precio,
 			int minimo) {
-		String codigoLimpio = Texto.obligatorio(codigo, "El código es obligatorio").toUpperCase(Locale.ROOT);
+		Refaccion refaccion = new Refaccion();
+		refaccion.asignarDatos(codigo, descripcion, costo, precio, minimo);
+		refaccion.existencia = 0;
+		return refaccion;
+	}
+
+	/**
+	 * Corrige los datos de la refacción (decisión del PO del 13 de octubre: se
+	 * edita, no se elimina). Aplica las mismas reglas que el alta. La existencia no
+	 * se edita: solo cambia con movimientos.
+	 *
+	 * <p>
+	 * Quien llama debe tener la fila bloqueada para no pisar la existencia que sume
+	 * una recepción al mismo tiempo.
+	 *
+	 * @throws IllegalArgumentException
+	 *             si un dato no es válido
+	 */
+	public void editar(String codigo, String descripcion, BigDecimal costo, BigDecimal precio, int minimo) {
+		asignarDatos(codigo, descripcion, costo, precio, minimo);
+	}
+
+	/**
+	 * Quita espacios y pasa el código a mayúsculas, como se guarda.
+	 *
+	 * @throws IllegalArgumentException
+	 *             si falta el código
+	 */
+	public static String normalizarCodigo(String codigo) {
+		return Texto.obligatorio(codigo, "El código es obligatorio").toUpperCase(Locale.ROOT);
+	}
+
+	/** Valida todo antes de cambiar algo, para no dejar la refacción a medias. */
+	private void asignarDatos(String codigo, String descripcion, BigDecimal costo, BigDecimal precio, int minimo) {
+		String codigoLimpio = normalizarCodigo(codigo);
 		String descripcionLimpia = Texto.obligatorio(descripcion, "La descripción es obligatoria");
 		if (costo == null || costo.signum() < 0) {
 			throw new IllegalArgumentException("El costo no puede ser negativo");
@@ -76,7 +101,11 @@ public class Refaccion extends Auditable {
 		if (minimo < 0) {
 			throw new IllegalArgumentException("El mínimo no puede ser negativo");
 		}
-		return new Refaccion(codigoLimpio, descripcionLimpia, costo, precioValido, minimo);
+		this.codigo = codigoLimpio;
+		this.descripcion = descripcionLimpia;
+		this.costo = costo;
+		this.precio = precioValido;
+		this.minimo = minimo;
 	}
 
 	/**

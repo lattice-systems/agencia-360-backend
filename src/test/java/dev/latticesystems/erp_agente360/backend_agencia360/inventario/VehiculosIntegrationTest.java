@@ -1,8 +1,10 @@
 package dev.latticesystems.erp_agente360.backend_agencia360.inventario;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -230,6 +232,67 @@ class VehiculosIntegrationTest extends AbstractIntegrationTest {
 		mockMvc.perform(conToken(get(URL + "/{id}", 999_999), token(almacen))).andExpect(status().isNotFound());
 	}
 
+	@Test
+	void inventarioCorrigeLosDatosDeUnaUnidad() throws Exception {
+		Usuario almacen = registrar("almacen1", Role.INVENTARIO);
+		long id = altaDe(almacen, "3VWFE21C04M000001");
+
+		mockMvc.perform(edicion(token(almacen), id, """
+				{"vin":"3vwfe21c04m000009","modelo":"Jetta","version":"GLI","anio":2025,"color":"Rojo",
+				"estatus":"NO_DISPONIBLE"}
+				""")).andExpect(status().isOk()).andExpect(jsonPath("$.vin").value("3VWFE21C04M000009"))
+				.andExpect(jsonPath("$.version").value("GLI")).andExpect(jsonPath("$.anio").value(2025))
+				.andExpect(jsonPath("$.estatus").value("NO_DISPONIBLE"));
+
+		mockMvc.perform(conToken(get(URL + "/{id}", id), token(almacen))).andExpect(jsonPath("$.color").value("Rojo"));
+	}
+
+	@Test
+	void editarConElVinDeOtraUnidadResponde409() throws Exception {
+		Usuario almacen = registrar("almacen1", Role.INVENTARIO);
+		altaDe(almacen, "3VWFE21C04M000001");
+		long id = altaDe(almacen, "3VWFE21C04M000002");
+
+		mockMvc.perform(edicion(token(almacen), id, cuerpo("3VWFE21C04M000001"))).andExpect(status().isConflict())
+				.andExpect(jsonPath("$.message").value("Ya existe un vehículo con el VIN 3VWFE21C04M000001"));
+	}
+
+	@Test
+	void editarConservaElVinPropioSinConflicto() throws Exception {
+		Usuario almacen = registrar("almacen1", Role.INVENTARIO);
+		long id = altaDe(almacen, "3VWFE21C04M000001");
+
+		mockMvc.perform(edicion(token(almacen), id, cuerpo("3VWFE21C04M000001"))).andExpect(status().isOk());
+	}
+
+	@Test
+	void inventarioNoPoneEstatusDeVentaAlEditar() throws Exception {
+		Usuario almacen = registrar("almacen1", Role.INVENTARIO);
+		long id = altaDe(almacen, "3VWFE21C04M000001");
+
+		mockMvc.perform(edicion(token(almacen), id, cuerpoConEstatus("3VWFE21C04M000001", "VENDIDO")))
+				.andExpect(status().isBadRequest()).andExpect(jsonPath("$.message")
+						.value("Inventario solo cambia el estatus entre Disponible y No disponible"));
+	}
+
+	@Test
+	void soloInventarioEditaYNadaSeElimina() throws Exception {
+		Usuario almacen = registrar("almacen1", Role.INVENTARIO);
+		Usuario administrador = registrar("admin1", Role.ADMINISTRADOR);
+		long id = altaDe(almacen, "3VWFE21C04M000001");
+
+		mockMvc.perform(edicion(token(administrador), id, cuerpo("3VWFE21C04M000001")))
+				.andExpect(status().isForbidden());
+		mockMvc.perform(conToken(delete(URL + "/{id}", id), token(almacen))).andExpect(status().isMethodNotAllowed());
+	}
+
+	@Test
+	void editarUnaUnidadQueNoExisteResponde404() throws Exception {
+		Usuario almacen = registrar("almacen1", Role.INVENTARIO);
+
+		mockMvc.perform(edicion(token(almacen), 999_999, cuerpo("3VWFE21C04M000001"))).andExpect(status().isNotFound());
+	}
+
 	private Usuario registrar(String usuario, Role rol) {
 		Rol encontrado = rolRepository.findByNombre(rol.name()).orElseThrow();
 		return usuarioRepository.save(new Usuario(usuario, "hash-de-prueba", "Persona " + usuario, encontrado));
@@ -272,6 +335,10 @@ class VehiculosIntegrationTest extends AbstractIntegrationTest {
 
 	private static MockHttpServletRequestBuilder alta(String token, String cuerpo) {
 		return conToken(post(URL), token).contentType(MediaType.APPLICATION_JSON).content(cuerpo);
+	}
+
+	private static MockHttpServletRequestBuilder edicion(String token, long id, String cuerpo) {
+		return conToken(put(URL + "/{id}", id), token).contentType(MediaType.APPLICATION_JSON).content(cuerpo);
 	}
 
 	private static MockHttpServletRequestBuilder conToken(MockHttpServletRequestBuilder peticion, String token) {

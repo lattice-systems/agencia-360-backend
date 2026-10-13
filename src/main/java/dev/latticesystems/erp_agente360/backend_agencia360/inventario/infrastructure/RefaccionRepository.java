@@ -14,6 +14,8 @@ public interface RefaccionRepository extends JpaRepository<Refaccion, Long> {
 	/** El código se guarda en mayúsculas; se debe buscar igual. */
 	boolean existsByCodigo(String codigo);
 
+	boolean existsByCodigoAndIdNot(String codigo, Long id);
+
 	List<Refaccion> findAllByOrderByCodigoAsc();
 
 	/**

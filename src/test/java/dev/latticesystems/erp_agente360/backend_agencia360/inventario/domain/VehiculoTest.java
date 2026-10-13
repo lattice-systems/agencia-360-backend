@@ -79,4 +79,48 @@ class VehiculoTest {
 		assertThatThrownBy(() -> Vehiculo.registrar(VIN, "Jetta", "Comfortline", 1899, "Blanco", null))
 				.isInstanceOf(IllegalArgumentException.class).hasMessage("El año no es válido");
 	}
+
+	@Test
+	void seEditanSusDatosConLasMismasReglasDelAlta() {
+		Vehiculo vehiculo = Vehiculo.registrar(VIN, "Jetta", "Comfortline", 2026, "Blanco", null);
+
+		vehiculo.editar(" 3vwfe21c04m000009 ", "Jetta GLI", "GLI", 2025, " Rojo ", EstatusVehiculo.NO_DISPONIBLE);
+
+		assertThat(vehiculo.getVin()).isEqualTo("3VWFE21C04M000009");
+		assertThat(vehiculo.getModelo()).isEqualTo("Jetta GLI");
+		assertThat(vehiculo.getVersion()).isEqualTo("GLI");
+		assertThat(vehiculo.getAnio()).isEqualTo(2025);
+		assertThat(vehiculo.getColor()).isEqualTo("Rojo");
+		assertThat(vehiculo.getEstatus()).isEqualTo(EstatusVehiculo.NO_DISPONIBLE);
+	}
+
+	@Test
+	void sinEstatusAlEditarConservaElActual() {
+		Vehiculo vehiculo = Vehiculo.registrar(VIN, "Jetta", "Comfortline", 2026, "Blanco",
+				EstatusVehiculo.NO_DISPONIBLE);
+
+		vehiculo.editar(VIN, "Jetta", "Comfortline", 2026, "Gris", null);
+
+		assertThat(vehiculo.getEstatus()).isEqualTo(EstatusVehiculo.NO_DISPONIBLE);
+	}
+
+	@Test
+	void inventarioNoPoneEstatusDeVentaAlEditar() {
+		Vehiculo vehiculo = Vehiculo.registrar(VIN, "Jetta", "Comfortline", 2026, "Blanco", null);
+
+		assertThatThrownBy(() -> vehiculo.editar(VIN, "Jetta", "Comfortline", 2026, "Blanco", EstatusVehiculo.VENDIDO))
+				.isInstanceOf(IllegalArgumentException.class)
+				.hasMessage("Inventario solo cambia el estatus entre Disponible y No disponible");
+		assertThat(vehiculo.getEstatus()).isEqualTo(EstatusVehiculo.DISPONIBLE);
+	}
+
+	@Test
+	void unaEdicionInvalidaNoCambiaNada() {
+		Vehiculo vehiculo = Vehiculo.registrar(VIN, "Jetta", "Comfortline", 2026, "Blanco", null);
+
+		assertThatThrownBy(() -> vehiculo.editar(VIN, "Otro", "Otra", 2026, " ", null))
+				.isInstanceOf(IllegalArgumentException.class).hasMessage("El color es obligatorio");
+		assertThat(vehiculo.getModelo()).isEqualTo("Jetta");
+		assertThat(vehiculo.getColor()).isEqualTo("Blanco");
+	}
 }

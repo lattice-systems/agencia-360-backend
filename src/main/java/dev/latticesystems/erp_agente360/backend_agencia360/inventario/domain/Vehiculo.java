@@ -85,14 +85,8 @@ public class Vehiculo extends Auditable {
 	 */
 	public static Vehiculo registrar(String vin, String modelo, String version, int anio, String color,
 			EstatusVehiculo estatus) {
-		String vinLimpio = Texto.limpiar(vin);
-		vinLimpio = vinLimpio == null ? null : vinLimpio.toUpperCase(Locale.ROOT);
-		if (vinLimpio == null || !VIN_VALIDO.matcher(vinLimpio).matches()) {
-			throw new IllegalArgumentException("El VIN debe tener 17 caracteres, sin las letras I, O ni Q");
-		}
-		if (anio < ANIO_MINIMO) {
-			throw new IllegalArgumentException("El año no es válido");
-		}
+		String vinLimpio = normalizarVin(vin);
+		validarAnio(anio);
 		EstatusVehiculo estatusDeEntrada = estatus == null ? EstatusVehiculo.DISPONIBLE : estatus;
 		if (!ESTATUS_DE_ENTRADA.contains(estatusDeEntrada)) {
 			throw new IllegalArgumentException("Una unidad solo puede entrar como Disponible o No disponible");
@@ -100,6 +94,60 @@ public class Vehiculo extends Auditable {
 		return new Vehiculo(vinLimpio, Texto.obligatorio(modelo, "El modelo es obligatorio"),
 				Texto.obligatorio(version, "La versión es obligatoria"), anio,
 				Texto.obligatorio(color, "El color es obligatorio"), estatusDeEntrada);
+	}
+
+	/**
+	 * Corrige los datos de la unidad (decisión del PO del 13 de octubre: se edita,
+	 * no se elimina). Aplica las mismas reglas que el alta.
+	 *
+	 * <p>
+	 * Inventario solo cambia el estatus entre Disponible y No disponible; Apartada,
+	 * Vendido y Entregado los pone la venta.
+	 *
+	 * @param estatus
+	 *            nuevo estatus; {@code null} para conservar el actual
+	 * @throws IllegalArgumentException
+	 *             si un dato no es válido o el cambio de estatus no le toca a
+	 *             Inventario
+	 */
+	public void editar(String vin, String modelo, String version, int anio, String color, EstatusVehiculo estatus) {
+		String vinLimpio = normalizarVin(vin);
+		validarAnio(anio);
+		String modeloLimpio = Texto.obligatorio(modelo, "El modelo es obligatorio");
+		String versionLimpia = Texto.obligatorio(version, "La versión es obligatoria");
+		String colorLimpio = Texto.obligatorio(color, "El color es obligatorio");
+		EstatusVehiculo nuevoEstatus = estatus == null ? this.estatus : estatus;
+		if (nuevoEstatus != this.estatus
+				&& !(ESTATUS_DE_ENTRADA.contains(this.estatus) && ESTATUS_DE_ENTRADA.contains(nuevoEstatus))) {
+			throw new IllegalArgumentException("Inventario solo cambia el estatus entre Disponible y No disponible");
+		}
+		this.vin = vinLimpio;
+		this.modelo = modeloLimpio;
+		this.version = versionLimpia;
+		this.anio = anio;
+		this.color = colorLimpio;
+		this.estatus = nuevoEstatus;
+	}
+
+	/**
+	 * Quita espacios y pasa el VIN a mayúsculas, como se guarda.
+	 *
+	 * @throws IllegalArgumentException
+	 *             si no tiene el formato del estándar
+	 */
+	public static String normalizarVin(String vin) {
+		String vinLimpio = Texto.limpiar(vin);
+		vinLimpio = vinLimpio == null ? null : vinLimpio.toUpperCase(Locale.ROOT);
+		if (vinLimpio == null || !VIN_VALIDO.matcher(vinLimpio).matches()) {
+			throw new IllegalArgumentException("El VIN debe tener 17 caracteres, sin las letras I, O ni Q");
+		}
+		return vinLimpio;
+	}
+
+	private static void validarAnio(int anio) {
+		if (anio < ANIO_MINIMO) {
+			throw new IllegalArgumentException("El año no es válido");
+		}
 	}
 
 	public Long getId() {
