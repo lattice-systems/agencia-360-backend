@@ -6,6 +6,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.security.access.AccessDeniedException;
+import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
@@ -66,6 +67,18 @@ public class GlobalExceptionHandler {
 	public ResponseEntity<ApiError> handleIllegalArgument(IllegalArgumentException ex, HttpServletRequest request) {
 		return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(
 				ApiError.of(HttpStatus.BAD_REQUEST.value(), "Bad Request", ex.getMessage(), request.getRequestURI()));
+	}
+
+	/**
+	 * Un método HTTP que la ruta no tiene (por ejemplo DELETE donde no se elimina)
+	 * es 405, no un error del servidor.
+	 */
+	@ExceptionHandler(HttpRequestMethodNotSupportedException.class)
+	public ResponseEntity<ApiError> handleMetodoNoPermitido(HttpRequestMethodNotSupportedException ex,
+			HttpServletRequest request) {
+		String mensaje = "El método " + ex.getMethod() + " no está permitido en esta ruta";
+		return ResponseEntity.status(HttpStatus.METHOD_NOT_ALLOWED).body(ApiError
+				.of(HttpStatus.METHOD_NOT_ALLOWED.value(), "Method Not Allowed", mensaje, request.getRequestURI()));
 	}
 
 	@ExceptionHandler(Exception.class)
