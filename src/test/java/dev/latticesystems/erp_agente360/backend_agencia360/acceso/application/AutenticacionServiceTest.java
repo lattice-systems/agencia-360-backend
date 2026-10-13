@@ -26,6 +26,7 @@ import org.springframework.test.util.ReflectionTestUtils;
 class AutenticacionServiceTest {
 
 	private static final String CONTRASENA = "Secreta123";
+	private static final Long ID_USUARIO = 7L;
 
 	private static final Rol CAJA = new Rol("CAJA", "Registro de cobros", true, false);
 	private static final Rol VENTAS = new Rol("VENTAS", "Vendedor", false, true);
@@ -55,6 +56,18 @@ class AutenticacionServiceTest {
 		var claims = jwtService.parseClaims(sesion.accessToken());
 		assertThat(claims.getSubject()).isEqualTo("caja1");
 		assertThat(jwtService.extractAuthorities(claims)).extracting("authority").containsExactly("ROLE_CAJA");
+	}
+
+	@Test
+	void elTokenIdentificaAlUsuarioPorSuId() {
+		registrar("caja1", CAJA);
+
+		SesionIniciada sesion = service.iniciarSesion("caja1", CONTRASENA, Aplicacion.ERP);
+
+		var actor = jwtService.extraerUsuario(jwtService.parseClaims(sesion.accessToken()));
+		assertThat(actor.id()).isEqualTo(ID_USUARIO);
+		assertThat(actor.usuario()).isEqualTo("caja1");
+		assertThat(actor.roles()).containsExactly(Role.CAJA);
 	}
 
 	@Test
@@ -100,6 +113,7 @@ class AutenticacionServiceTest {
 
 	private Usuario registrar(String nombreUsuario, Rol rol) {
 		Usuario usuario = new Usuario(nombreUsuario, passwordEncoder.encode(CONTRASENA), "Persona de prueba", rol);
+		ReflectionTestUtils.setField(usuario, "id", ID_USUARIO);
 		when(usuarioRepository.buscarPorUsuarioConRol(nombreUsuario)).thenReturn(Optional.of(usuario));
 		return usuario;
 	}
