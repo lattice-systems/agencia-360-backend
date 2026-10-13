@@ -109,8 +109,8 @@ class ReasignacionProspectosIntegrationTest extends AbstractIntegrationTest {
 		Usuario gerente = registrar("gerente1", Role.GERENTE_MARKETING);
 		long id = crearProspecto(vendedor, "Ana López", "4771234567");
 
-		mockMvc.perform(conToken(put(URL + "/{id}/vendedor", id), token(gerente)).contentType(MediaType.APPLICATION_JSON)
-				.content("{}")).andExpect(status().isBadRequest());
+		mockMvc.perform(conToken(put(URL + "/{id}/vendedor", id), token(gerente))
+				.contentType(MediaType.APPLICATION_JSON).content("{}")).andExpect(status().isBadRequest());
 	}
 
 	private Usuario registrar(String usuario, Role rol) {
