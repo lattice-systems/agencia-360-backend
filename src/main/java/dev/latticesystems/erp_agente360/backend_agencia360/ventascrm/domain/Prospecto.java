@@ -123,6 +123,21 @@ public class Prospecto extends Auditable {
 		return true;
 	}
 
+	/**
+	 * Pasa el prospecto a otro vendedor (CRM-0.1). Conserva la etapa y el
+	 * historial; solo cambia quién lo atiende.
+	 *
+	 * @return {@code false} si el prospecto ya era de ese vendedor
+	 */
+	public boolean reasignarA(Long nuevoVendedorId) {
+		Objects.requireNonNull(nuevoVendedorId, "nuevoVendedorId");
+		if (nuevoVendedorId.equals(vendedorId)) {
+			return false;
+		}
+		vendedorId = nuevoVendedorId;
+		return true;
+	}
+
 	private void moverA(Etapa nueva, OrigenCambio origen, Instant ahora) {
 		Objects.requireNonNull(origen, "origen");
 		Objects.requireNonNull(ahora, "ahora");

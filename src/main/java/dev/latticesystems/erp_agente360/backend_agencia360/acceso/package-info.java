@@ -9,6 +9,11 @@
  * es el administrador del CRM, da de alta usuarios del CRM.
  *
  * <p>
+ * Otros módulos solo usan las interfaces de este paquete, por ejemplo
+ * {@link dev.latticesystems.erp_agente360.backend_agencia360.acceso.ConsultaVendedores}
+ * para validar a quién se asigna un prospecto.
+ *
+ * <p>
  * Los clientes de la app CareCar no son usuarios de este módulo: entran con su
  * propia cuenta desde el módulo de la app.
  */
