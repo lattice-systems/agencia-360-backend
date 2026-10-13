@@ -80,7 +80,8 @@ class VehiculosIntegrationTest extends AbstractIntegrationTest {
 			assertThat(movimiento.get("tipo")).isEqualTo("ENTRADA");
 			assertThat(((Number) movimiento.get("cantidad")).intValue()).isEqualTo(1);
 			assertThat(((Number) movimiento.get("responsable_id")).longValue()).isEqualTo(almacen.getId());
-			assertThat(movimiento.get("fecha")).isNotNull();
+			assertThat(movimiento.get("fecha_registro")).isNotNull();
+			assertThat(movimiento.get("fecha_llegada")).isEqualTo(movimiento.get("fecha_registro"));
 		});
 	}
 
@@ -206,7 +207,8 @@ class VehiculosIntegrationTest extends AbstractIntegrationTest {
 	private List<Map<String, Object>> movimientosDe(long vehiculoId) {
 		entityManager.flush();
 		return jdbcTemplate.queryForList(
-				"select tipo, cantidad, responsable_id, fecha from movimiento_inventario where vehiculo_id = ?",
+				"select tipo, cantidad, responsable_id, fecha_llegada, fecha_registro from movimiento_inventario "
+						+ "where vehiculo_id = ?",
 				vehiculoId);
 	}
 

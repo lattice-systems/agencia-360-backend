@@ -58,8 +58,8 @@ public class Refaccion extends Auditable {
 
 	/**
 	 * Da de alta una refacción sin existencia; la existencia llega con las
-	 * recepciones. Quita espacios sobrantes y guarda el código en mayúsculas para
-	 * poder comparar repetidos.
+	 * recepciones (decisión del PO del 13 de octubre). Quita espacios sobrantes y
+	 * guarda el código en mayúsculas para poder comparar repetidos.
 	 *
 	 * @throws IllegalArgumentException
 	 *             si falta el código o la descripción, el costo es negativo, el
@@ -80,7 +80,7 @@ public class Refaccion extends Auditable {
 	}
 
 	/**
-	 * Registra la recepción de piezas: suma la cantidad a la existencia y devuelve
+	 * Registra una entrega de piezas: suma la cantidad a la existencia y devuelve
 	 * el movimiento de entrada que la respalda, que se debe guardar en la misma
 	 * transacción.
 	 *
@@ -89,14 +89,17 @@ public class Refaccion extends Auditable {
 	 * {@code RefaccionRepository.buscarParaActualizar}) para que dos recepciones
 	 * simultáneas no se pisen.
 	 *
+	 * @param fechaRegistro
+	 *            momento en que se registra; la llegada no puede ser posterior
 	 * @throws IllegalArgumentException
-	 *             si la cantidad no es mayor a cero o la existencia rebasaría el
-	 *             máximo que cabe en la columna
+	 *             si la recepción no es válida o la existencia rebasaría el máximo
+	 *             que cabe en la columna
 	 */
-	public MovimientoInventario recibir(int cantidad, Long responsableId, Instant fecha) {
-		MovimientoInventario movimiento = MovimientoInventario.entradaDeRefaccion(this, cantidad, responsableId, fecha);
+	public MovimientoInventario recibir(Recepcion recepcion, Long responsableId, Instant fechaRegistro) {
+		MovimientoInventario movimiento = MovimientoInventario.entradaDeRefaccion(this, recepcion, responsableId,
+				fechaRegistro);
 		try {
-			existencia = Math.addExact(existencia, cantidad);
+			existencia = Math.addExact(existencia, movimiento.getCantidad());
 		} catch (ArithmeticException e) {
 			throw new IllegalArgumentException("La existencia rebasaría el máximo permitido", e);
 		}

@@ -9,6 +9,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import dev.latticesystems.erp_agente360.backend_agencia360.inventario.domain.MovimientoInventario;
+import dev.latticesystems.erp_agente360.backend_agencia360.inventario.domain.Recepcion;
 import dev.latticesystems.erp_agente360.backend_agencia360.inventario.domain.Refaccion;
 import dev.latticesystems.erp_agente360.backend_agencia360.inventario.domain.TipoMovimiento;
 import dev.latticesystems.erp_agente360.backend_agencia360.inventario.infrastructure.MovimientoInventarioRepository;
@@ -33,6 +34,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 class RecepcionRefaccionServiceTest {
 
 	private static final Instant AHORA = Instant.parse("2026-10-13T16:00:00Z");
+	private static final Instant AYER = Instant.parse("2026-10-12T15:30:00Z");
 	private static final UsuarioAutenticado ALMACEN = new UsuarioAutenticado(4L, "almacen1", Set.of(Role.INVENTARIO));
 
 	@Mock
@@ -55,29 +57,32 @@ class RecepcionRefaccionServiceTest {
 		when(refaccionRepository.buscarParaActualizar(1L)).thenReturn(Optional.of(refaccion));
 		guardarMovimientoSinCambios();
 
-		RecepcionRegistrada recepcion = service.recibir(1L, 10, ALMACEN);
+		RecepcionRegistrada recepcion = service.recibir(1L, recepcion(10, null), ALMACEN);
 
 		assertThat(refaccion.getExistencia()).isEqualTo(13);
 		assertThat(recepcion.existencia()).isEqualTo(13);
-		assertThat(recepcion.cantidad()).isEqualTo(10);
+		assertThat(recepcion.recepcion().cantidad()).isEqualTo(10);
 		assertThat(recepcion.codigo()).isEqualTo("FIL-ACE-01");
 	}
 
 	@Test
-	void guardaLaFechaLaCantidadYElResponsable() {
+	void guardaLasDosFechasElProveedorLasNotasYElResponsable() {
 		when(refaccionRepository.buscarParaActualizar(1L)).thenReturn(Optional.of(refaccionConExistencia(0)));
 		guardarMovimientoSinCambios();
 
-		RecepcionRegistrada recepcion = service.recibir(1L, 10, ALMACEN);
+		RecepcionRegistrada recepcion = service.recibir(1L, recepcion(10, AYER), ALMACEN);
 
 		ArgumentCaptor<MovimientoInventario> movimiento = ArgumentCaptor.forClass(MovimientoInventario.class);
 		verify(movimientoRepository).save(movimiento.capture());
 		assertThat(movimiento.getValue().getTipo()).isEqualTo(TipoMovimiento.ENTRADA);
 		assertThat(movimiento.getValue().getCantidad()).isEqualTo(10);
+		assertThat(movimiento.getValue().getProveedor()).isEqualTo("Refacciones del Bajío");
+		assertThat(movimiento.getValue().getNotas()).isEqualTo("Una caja golpeada");
 		assertThat(movimiento.getValue().getResponsableId()).isEqualTo(4L);
-		assertThat(movimiento.getValue().getFecha()).isEqualTo(AHORA);
-		assertThat(recepcion.responsableId()).isEqualTo(4L);
-		assertThat(recepcion.fecha()).isEqualTo(AHORA);
+		assertThat(movimiento.getValue().getFechaLlegada()).isEqualTo(AYER);
+		assertThat(movimiento.getValue().getFechaRegistro()).isEqualTo(AHORA);
+		assertThat(recepcion.recepcion().fechaLlegada()).isEqualTo(AYER);
+		assertThat(recepcion.recepcion().fechaRegistro()).isEqualTo(AHORA);
 	}
 
 	@Test
@@ -85,7 +90,7 @@ class RecepcionRefaccionServiceTest {
 		when(refaccionRepository.buscarParaActualizar(1L)).thenReturn(Optional.of(refaccionConExistencia(0)));
 		guardarMovimientoSinCambios();
 
-		service.recibir(1L, 1, ALMACEN);
+		service.recibir(1L, recepcion(1, null), ALMACEN);
 
 		verify(refaccionRepository).buscarParaActualizar(1L);
 		verify(refaccionRepository, never()).findById(anyLong());
@@ -95,18 +100,19 @@ class RecepcionRefaccionServiceTest {
 	void unaRefaccionQueNoExisteResponde404() {
 		when(refaccionRepository.buscarParaActualizar(99L)).thenReturn(Optional.empty());
 
-		assertThatThrownBy(() -> service.recibir(99L, 5, ALMACEN)).isInstanceOf(RecursoNoEncontradoException.class)
-				.hasMessage("No existe la refacción 99");
+		assertThatThrownBy(() -> service.recibir(99L, recepcion(5, null), ALMACEN))
+				.isInstanceOf(RecursoNoEncontradoException.class).hasMessage("No existe la refacción 99");
 		verify(movimientoRepository, never()).save(any());
 	}
 
 	@Test
-	void noGuardaNadaSiLaCantidadNoEsMayorACero() {
+	void noGuardaNadaSiLaRecepcionNoEsValida() {
 		Refaccion refaccion = refaccionConExistencia(3);
 		when(refaccionRepository.buscarParaActualizar(1L)).thenReturn(Optional.of(refaccion));
 
-		assertThatThrownBy(() -> service.recibir(1L, 0, ALMACEN)).isInstanceOf(IllegalArgumentException.class)
-				.hasMessage("La cantidad debe ser mayor a cero");
+		assertThatThrownBy(() -> service.recibir(1L, recepcion(2, AHORA.plusSeconds(3600)), ALMACEN))
+				.isInstanceOf(IllegalArgumentException.class)
+				.hasMessage("La fecha de llegada no puede ser posterior al registro");
 		assertThat(refaccion.getExistencia()).isEqualTo(3);
 		verify(movimientoRepository, never()).save(any());
 	}
@@ -116,11 +122,15 @@ class RecepcionRefaccionServiceTest {
 				.thenAnswer(invocacion -> invocacion.getArgument(0));
 	}
 
+	private static Recepcion recepcion(int cantidad, Instant llegada) {
+		return new Recepcion(cantidad, "Refacciones del Bajío", "Una caja golpeada", llegada);
+	}
+
 	private static Refaccion refaccionConExistencia(int existencia) {
 		Refaccion refaccion = Refaccion.registrar("FIL-ACE-01", "Filtro de aceite", new BigDecimal("180.50"),
 				new BigDecimal("320.00"), 5);
 		if (existencia > 0) {
-			refaccion.recibir(existencia, 1L, AHORA);
+			refaccion.recibir(recepcion(existencia, null), 1L, AHORA);
 		}
 		return refaccion;
 	}

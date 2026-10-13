@@ -13,6 +13,7 @@ class RefaccionTest {
 	private static final BigDecimal PRECIO = new BigDecimal("320.00");
 	private static final Long RESPONSABLE = 4L;
 	private static final Instant AHORA = Instant.parse("2026-10-13T16:00:00Z");
+	private static final Instant AYER = Instant.parse("2026-10-12T15:30:00Z");
 
 	@Test
 	void seRegistraSinExistencia() {
@@ -56,34 +57,79 @@ class RefaccionTest {
 	void recibirSumaALaExistenciaYDevuelveElMovimientoDeEntrada() {
 		Refaccion refaccion = Refaccion.registrar("FIL-ACE-01", "Filtro de aceite", COSTO, PRECIO, 5);
 
-		MovimientoInventario primera = refaccion.recibir(10, RESPONSABLE, AHORA);
-		refaccion.recibir(3, RESPONSABLE, AHORA);
+		MovimientoInventario primera = refaccion
+				.recibir(new Recepcion(10, "Refacciones del Bajío", "Caja golpeada", AYER), RESPONSABLE, AHORA);
+		refaccion.recibir(recepcion(3), RESPONSABLE, AHORA);
 
 		assertThat(refaccion.getExistencia()).isEqualTo(13);
 		assertThat(primera.getTipo()).isEqualTo(TipoMovimiento.ENTRADA);
 		assertThat(primera.getRefaccion()).isSameAs(refaccion);
 		assertThat(primera.getVehiculo()).isNull();
 		assertThat(primera.getCantidad()).isEqualTo(10);
+		assertThat(primera.getProveedor()).isEqualTo("Refacciones del Bajío");
+		assertThat(primera.getNotas()).isEqualTo("Caja golpeada");
 		assertThat(primera.getResponsableId()).isEqualTo(RESPONSABLE);
-		assertThat(primera.getFecha()).isEqualTo(AHORA);
+		assertThat(primera.getFechaLlegada()).isEqualTo(AYER);
+		assertThat(primera.getFechaRegistro()).isEqualTo(AHORA);
+	}
+
+	@Test
+	void sinFechaDeLlegadaSeTomaLaDelRegistro() {
+		Refaccion refaccion = Refaccion.registrar("FIL-ACE-01", "Filtro de aceite", COSTO, PRECIO, 5);
+
+		MovimientoInventario movimiento = refaccion.recibir(new Recepcion(2, " Bajío ", "  ", null), RESPONSABLE,
+				AHORA);
+
+		assertThat(movimiento.getFechaLlegada()).isEqualTo(AHORA);
+		assertThat(movimiento.getProveedor()).isEqualTo("Bajío");
+		assertThat(movimiento.getNotas()).isNull();
+	}
+
+	@Test
+	void rechazaUnaLlegadaPosteriorAlRegistro() {
+		Refaccion refaccion = Refaccion.registrar("FIL-ACE-01", "Filtro de aceite", COSTO, PRECIO, 5);
+
+		assertThatThrownBy(
+				() -> refaccion.recibir(new Recepcion(2, "Bajío", null, AHORA.plusSeconds(60)), RESPONSABLE, AHORA))
+				.isInstanceOf(IllegalArgumentException.class)
+				.hasMessage("La fecha de llegada no puede ser posterior al registro");
+		assertThat(refaccion.getExistencia()).isZero();
+	}
+
+	@Test
+	void rechazaUnaRecepcionSinProveedorOConTextosDemasiadoLargos() {
+		Refaccion refaccion = Refaccion.registrar("FIL-ACE-01", "Filtro de aceite", COSTO, PRECIO, 5);
+
+		assertThatThrownBy(() -> refaccion.recibir(new Recepcion(2, " ", null, null), RESPONSABLE, AHORA))
+				.isInstanceOf(IllegalArgumentException.class).hasMessage("El proveedor es obligatorio");
+		assertThatThrownBy(() -> refaccion.recibir(new Recepcion(2, "x".repeat(121), null, null), RESPONSABLE, AHORA))
+				.isInstanceOf(IllegalArgumentException.class).hasMessage("El proveedor admite hasta 120 caracteres");
+		assertThatThrownBy(
+				() -> refaccion.recibir(new Recepcion(2, "Bajío", "x".repeat(501), null), RESPONSABLE, AHORA))
+				.isInstanceOf(IllegalArgumentException.class).hasMessage("Las notas admiten hasta 500 caracteres");
+		assertThat(refaccion.getExistencia()).isZero();
 	}
 
 	@Test
 	void rechazaRecibirUnaCantidadQueNoEsMayorACero() {
 		Refaccion refaccion = Refaccion.registrar("FIL-ACE-01", "Filtro de aceite", COSTO, PRECIO, 5);
 
-		assertThatThrownBy(() -> refaccion.recibir(0, RESPONSABLE, AHORA)).isInstanceOf(IllegalArgumentException.class)
-				.hasMessage("La cantidad debe ser mayor a cero");
+		assertThatThrownBy(() -> refaccion.recibir(recepcion(0), RESPONSABLE, AHORA))
+				.isInstanceOf(IllegalArgumentException.class).hasMessage("La cantidad debe ser mayor a cero");
 		assertThat(refaccion.getExistencia()).isZero();
 	}
 
 	@Test
 	void rechazaUnaRecepcionQueRebasaLaExistenciaMaxima() {
 		Refaccion refaccion = Refaccion.registrar("FIL-ACE-01", "Filtro de aceite", COSTO, PRECIO, 5);
-		refaccion.recibir(Integer.MAX_VALUE, RESPONSABLE, AHORA);
+		refaccion.recibir(recepcion(Integer.MAX_VALUE), RESPONSABLE, AHORA);
 
-		assertThatThrownBy(() -> refaccion.recibir(1, RESPONSABLE, AHORA)).isInstanceOf(IllegalArgumentException.class)
-				.hasMessage("La existencia rebasaría el máximo permitido");
+		assertThatThrownBy(() -> refaccion.recibir(recepcion(1), RESPONSABLE, AHORA))
+				.isInstanceOf(IllegalArgumentException.class).hasMessage("La existencia rebasaría el máximo permitido");
 		assertThat(refaccion.getExistencia()).isEqualTo(Integer.MAX_VALUE);
+	}
+
+	private static Recepcion recepcion(int cantidad) {
+		return new Recepcion(cantidad, "Refacciones del Bajío", null, null);
 	}
 }

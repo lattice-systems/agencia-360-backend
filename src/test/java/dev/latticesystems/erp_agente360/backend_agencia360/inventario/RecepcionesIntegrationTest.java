@@ -15,6 +15,8 @@ import dev.latticesystems.erp_agente360.backend_agencia360.shared.AbstractIntegr
 import dev.latticesystems.erp_agente360.backend_agencia360.shared.security.JwtService;
 import dev.latticesystems.erp_agente360.backend_agencia360.shared.security.Role;
 import jakarta.persistence.EntityManager;
+import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
@@ -29,7 +31,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 /**
  * Prueba la recepción de refacciones (ERP-2.0) de punta a punta: seguridad,
- * endpoint y base de datos real (Testcontainers). Cada prueba se revierte al
+ * endpoints y base de datos real (Testcontainers). Cada prueba se revierte al
  * terminar.
  */
 @AutoConfigureMockMvc
@@ -59,78 +61,128 @@ class RecepcionesIntegrationTest extends AbstractIntegrationTest {
 	@Test
 	void laRecepcionSumaALaExistenciaYResponde201() throws Exception {
 		Usuario almacen = registrar("almacen1", Role.INVENTARIO);
-		long id = refaccionCon(almacen, 3);
+		long id = refaccion(almacen);
+		recibir(almacen, id, 3);
 
-		mockMvc.perform(recepcion(token(almacen), id, "{\"cantidad\":10}")).andExpect(status().isCreated())
-				.andExpect(jsonPath("$.movimientoId").isNumber()).andExpect(jsonPath("$.refaccionId").value(id))
-				.andExpect(jsonPath("$.codigo").value("FIL-ACE-01")).andExpect(jsonPath("$.cantidad").value(10))
+		mockMvc.perform(recepcion(token(almacen), id, """
+				{"cantidad":10,"proveedor":"Refacciones del Bajío","notas":"Una caja golpeada"}
+				""")).andExpect(status().isCreated()).andExpect(jsonPath("$.movimientoId").isNumber())
+				.andExpect(jsonPath("$.refaccionId").value(id)).andExpect(jsonPath("$.codigo").value("FIL-ACE-01"))
+				.andExpect(jsonPath("$.cantidad").value(10))
+				.andExpect(jsonPath("$.proveedor").value("Refacciones del Bajío"))
+				.andExpect(jsonPath("$.notas").value("Una caja golpeada"))
 				.andExpect(jsonPath("$.responsableId").value(almacen.getId()))
-				.andExpect(jsonPath("$.fecha").isNotEmpty()).andExpect(jsonPath("$.existencia").value(13));
+				.andExpect(jsonPath("$.fechaLlegada").isNotEmpty()).andExpect(jsonPath("$.fechaRegistro").isNotEmpty())
+				.andExpect(jsonPath("$.existencia").value(13));
 
 		mockMvc.perform(conToken(get(URL_REFACCIONES + "/{id}", id), token(almacen)))
 				.andExpect(jsonPath("$.existencia").value(13));
 	}
 
 	@Test
-	void guardaLaFechaLaCantidadYElResponsable() throws Exception {
+	void sinFechaDeLlegadaLasDosFechasCoinciden() throws Exception {
 		Usuario almacen = registrar("almacen1", Role.INVENTARIO);
-		long id = refaccionCon(almacen, 0);
+		long id = refaccion(almacen);
 
-		mockMvc.perform(recepcion(token(almacen), id, "{\"cantidad\":7}")).andExpect(status().isCreated());
+		recibir(almacen, id, 7);
 
 		assertThat(movimientosDe(id)).singleElement().satisfies(movimiento -> {
 			assertThat(movimiento.get("tipo")).isEqualTo("ENTRADA");
 			assertThat(((Number) movimiento.get("cantidad")).intValue()).isEqualTo(7);
 			assertThat(((Number) movimiento.get("responsable_id")).longValue()).isEqualTo(almacen.getId());
-			assertThat(movimiento.get("fecha")).isNotNull();
+			assertThat(movimiento.get("proveedor")).isEqualTo("Refacciones del Bajío");
+			assertThat(movimiento.get("notas")).isNull();
+			assertThat(movimiento.get("fecha_llegada")).isEqualTo(movimiento.get("fecha_registro"));
 		});
 	}
 
 	@Test
-	void cadaRecepcionQuedaComoUnMovimientoAparte() throws Exception {
+	void guardaUnaLlegadaAnteriorAlRegistro() throws Exception {
 		Usuario almacen = registrar("almacen1", Role.INVENTARIO);
-		long id = refaccionCon(almacen, 2);
+		long id = refaccion(almacen);
+		Instant ayer = Instant.now().minus(1, ChronoUnit.DAYS).truncatedTo(ChronoUnit.SECONDS);
 
-		mockMvc.perform(recepcion(token(almacen), id, "{\"cantidad\":5}")).andExpect(status().isCreated());
-		mockMvc.perform(recepcion(token(almacen), id, "{\"cantidad\":1}")).andExpect(status().isCreated())
-				.andExpect(jsonPath("$.existencia").value(8));
+		mockMvc.perform(recepcion(token(almacen), id, """
+				{"cantidad":2,"proveedor":"Bajío","fechaLlegada":"%s"}
+				""".formatted(ayer))).andExpect(status().isCreated())
+				.andExpect(jsonPath("$.fechaLlegada").value(ayer.toString()));
 
-		assertThat(movimientosDe(id)).extracting(movimiento -> ((Number) movimiento.get("cantidad")).intValue())
-				.containsExactly(2, 5, 1);
+		mockMvc.perform(conToken(get(URL_REFACCIONES + "/{id}/recepciones", id), token(almacen)))
+				.andExpect(status().isOk()).andExpect(jsonPath("$.length()").value(1))
+				.andExpect(jsonPath("$[0].fechaLlegada").value(ayer.toString()))
+				.andExpect(jsonPath("$[0].fechaRegistro").isNotEmpty());
 	}
 
 	@Test
-	void rechazaUnaCantidadInvalidaCon400() throws Exception {
+	void rechazaUnaLlegadaFuturaCon400() throws Exception {
 		Usuario almacen = registrar("almacen1", Role.INVENTARIO);
-		long id = refaccionCon(almacen, 3);
+		long id = refaccion(almacen);
+		Instant manana = Instant.now().plus(1, ChronoUnit.DAYS);
 
-		mockMvc.perform(recepcion(token(almacen), id, "{\"cantidad\":0}")).andExpect(status().isBadRequest())
+		mockMvc.perform(recepcion(token(almacen), id, """
+				{"cantidad":2,"proveedor":"Bajío","fechaLlegada":"%s"}
+				""".formatted(manana))).andExpect(status().isBadRequest())
+				.andExpect(jsonPath("$.message").value("La fecha de llegada no puede ser posterior al registro"));
+		assertThat(movimientosDe(id)).isEmpty();
+	}
+
+	@Test
+	void cadaRecepcionQuedaEnElHistorialDeLaMasRecienteALaMasAntigua() throws Exception {
+		Usuario almacen = registrar("almacen1", Role.INVENTARIO);
+		long id = refaccion(almacen);
+		recibir(almacen, id, 5);
+		recibir(almacen, id, 1);
+
+		mockMvc.perform(conToken(get(URL_REFACCIONES + "/{id}/recepciones", id), token(almacen)))
+				.andExpect(status().isOk()).andExpect(jsonPath("$.length()").value(2))
+				.andExpect(jsonPath("$[0].cantidad").value(1)).andExpect(jsonPath("$[1].cantidad").value(5))
+				.andExpect(jsonPath("$[0].proveedor").value("Refacciones del Bajío"))
+				.andExpect(jsonPath("$[0].responsableId").value(almacen.getId()));
+	}
+
+	@Test
+	void rechazaDatosInvalidosCon400() throws Exception {
+		Usuario almacen = registrar("almacen1", Role.INVENTARIO);
+		long id = refaccion(almacen);
+
+		mockMvc.perform(recepcion(token(almacen), id, """
+				{"cantidad":0,"proveedor":"Bajío"}
+				""")).andExpect(status().isBadRequest())
 				.andExpect(jsonPath("$.message").value("La cantidad debe ser mayor a cero"));
+		mockMvc.perform(recepcion(token(almacen), id, """
+				{"cantidad":3}
+				""")).andExpect(status().isBadRequest());
 		mockMvc.perform(recepcion(token(almacen), id, "{}")).andExpect(status().isBadRequest());
-		assertThat(movimientosDe(id)).hasSize(1);
+		assertThat(movimientosDe(id)).isEmpty();
 	}
 
 	@Test
 	void unaRefaccionQueNoExisteResponde404() throws Exception {
 		Usuario almacen = registrar("almacen1", Role.INVENTARIO);
 
-		mockMvc.perform(recepcion(token(almacen), 999_999, "{\"cantidad\":1}")).andExpect(status().isNotFound());
+		mockMvc.perform(recepcion(token(almacen), 999_999, """
+				{"cantidad":1,"proveedor":"Bajío"}
+				""")).andExpect(status().isNotFound());
+		mockMvc.perform(conToken(get(URL_REFACCIONES + "/{id}/recepciones", 999_999), token(almacen)))
+				.andExpect(status().isNotFound());
 	}
 
 	@Test
 	void sinSesionResponde401() throws Exception {
 		mockMvc.perform(post(URL_REFACCIONES + "/{id}/recepciones", 1).contentType(MediaType.APPLICATION_JSON)
-				.content("{\"cantidad\":1}")).andExpect(status().isUnauthorized());
+				.content("{\"cantidad\":1,\"proveedor\":\"Bajío\"}")).andExpect(status().isUnauthorized());
 	}
 
 	@Test
 	void otrosRolesNoRegistranRecepciones() throws Exception {
 		Usuario almacen = registrar("almacen1", Role.INVENTARIO);
 		Usuario refacciones = registrar("refacciones1", Role.REFACCIONES);
-		long id = refaccionCon(almacen, 3);
+		long id = refaccion(almacen);
 
-		mockMvc.perform(recepcion(token(refacciones), id, "{\"cantidad\":1}")).andExpect(status().isForbidden());
-		assertThat(movimientosDe(id)).hasSize(1);
+		mockMvc.perform(recepcion(token(refacciones), id, """
+				{"cantidad":1,"proveedor":"Bajío"}
+				""")).andExpect(status().isForbidden());
+		assertThat(movimientosDe(id)).isEmpty();
 	}
 
 	private Usuario registrar(String usuario, Role rol) {
@@ -142,25 +194,26 @@ class RecepcionesIntegrationTest extends AbstractIntegrationTest {
 		return jwtService.generateToken(usuario.getId(), usuario.getUsuario(), List.of(usuario.getRol().comoRole()));
 	}
 
-	private long refaccionCon(Usuario usuario, int existencia) throws Exception {
-		String cuerpo = """
-				{"codigo":"FIL-ACE-01","descripcion":"Filtro de aceite","costo":180.50,"precio":320.00,
-				"existencia":%d,"minimo":5}
-				""".formatted(existencia);
-		String respuesta = mockMvc
-				.perform(conToken(post(URL_REFACCIONES), token(usuario)).contentType(MediaType.APPLICATION_JSON)
-						.content(cuerpo))
-				.andExpect(status().isCreated()).andReturn().getResponse().getContentAsString();
+	private long refaccion(Usuario usuario) throws Exception {
+		String respuesta = mockMvc.perform(
+				conToken(post(URL_REFACCIONES), token(usuario)).contentType(MediaType.APPLICATION_JSON).content("""
+						{"codigo":"FIL-ACE-01","descripcion":"Filtro de aceite","costo":180.50,
+						"precio":320.00,"minimo":5}
+						""")).andExpect(status().isCreated()).andReturn().getResponse().getContentAsString();
 		return ((Number) JsonPath.read(respuesta, "$.id")).longValue();
+	}
+
+	private void recibir(Usuario usuario, long refaccionId, int cantidad) throws Exception {
+		mockMvc.perform(recepcion(token(usuario), refaccionId, """
+				{"cantidad":%d,"proveedor":"Refacciones del Bajío"}
+				""".formatted(cantidad))).andExpect(status().isCreated());
 	}
 
 	/** Escribe en la base lo pendiente de JPA para poder leerlo con SQL. */
 	private List<Map<String, Object>> movimientosDe(long refaccionId) {
 		entityManager.flush();
-		return jdbcTemplate.queryForList(
-				"select tipo, cantidad, responsable_id, fecha from movimiento_inventario where refaccion_id = ? "
-						+ "order by id",
-				refaccionId);
+		return jdbcTemplate.queryForList("select tipo, cantidad, responsable_id, proveedor, notas, fecha_llegada, "
+				+ "fecha_registro from movimiento_inventario where refaccion_id = ? order by id", refaccionId);
 	}
 
 	private static MockHttpServletRequestBuilder recepcion(String token, long id, String cuerpo) {

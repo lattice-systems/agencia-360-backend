@@ -12,7 +12,7 @@ class MovimientoInventarioTest {
 	private static final Instant AHORA = Instant.parse("2026-10-13T16:00:00Z");
 
 	@Test
-	void laEntradaDeUnVehiculoEsDeUnaSolaUnidad() {
+	void laEntradaDeUnVehiculoEsDeUnaSolaUnidadYLlegaAlRegistrarse() {
 		Vehiculo vehiculo = Vehiculo.registrar("3VWFE21C04M000001", "Jetta", "Comfortline", 2026, "Blanco",
 				new BigDecimal("389900.00"));
 
@@ -23,6 +23,8 @@ class MovimientoInventarioTest {
 		assertThat(movimiento.getRefaccion()).isNull();
 		assertThat(movimiento.getCantidad()).isEqualTo(1);
 		assertThat(movimiento.getResponsableId()).isEqualTo(RESPONSABLE);
-		assertThat(movimiento.getFecha()).isEqualTo(AHORA);
+		assertThat(movimiento.getFechaRegistro()).isEqualTo(AHORA);
+		assertThat(movimiento.getFechaLlegada()).isEqualTo(AHORA);
+		assertThat(movimiento.getProveedor()).isNull();
 	}
 }
