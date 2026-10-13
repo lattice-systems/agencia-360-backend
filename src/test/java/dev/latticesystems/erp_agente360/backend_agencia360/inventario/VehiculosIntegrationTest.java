@@ -293,6 +293,21 @@ class VehiculosIntegrationTest extends AbstractIntegrationTest {
 	}
 
 	@Test
+	void unaUnidadApartadaSeCorrigePeroSuEstatusLoCambiaVentas() throws Exception {
+		Usuario almacen = registrar("almacen1", Role.INVENTARIO);
+		long id = altaDe(almacen, "3VWFE21C04M000001");
+		entityManager.flush();
+		jdbcTemplate.update("update vehiculo set estatus = 'APARTADA' where id = ?", id);
+		entityManager.clear();
+
+		mockMvc.perform(edicion(token(almacen), id, cuerpoConEstatus("3VWFE21C04M000001", "DISPONIBLE")))
+				.andExpect(status().isBadRequest()).andExpect(jsonPath("$.message")
+						.value("Inventario solo cambia el estatus entre Disponible y No disponible"));
+		mockMvc.perform(edicion(token(almacen), id, cuerpo("3VWFE21C04M000001"))).andExpect(status().isOk())
+				.andExpect(jsonPath("$.estatus").value("APARTADA"));
+	}
+
+	@Test
 	void soloInventarioEditaYNadaSeElimina() throws Exception {
 		Usuario almacen = registrar("almacen1", Role.INVENTARIO);
 		Usuario administrador = registrar("admin1", Role.ADMINISTRADOR);
