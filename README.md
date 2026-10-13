@@ -107,7 +107,7 @@ src/main/java/dev/latticesystems/erp_agente360/backend_agencia360/
 ├── acceso/          # Usuarios, roles y login del personal — ERP-0.1 · CRM-0.1
 ├── ventascrm/       # Ventas y CRM de prospectos       — ERP HU 1.1 · CareCar HU 1.1, 1.2
 ├── facturacion/     # Facturación y Administración      — ERP HU 1.2
-├── inventario/      # Inventario de vehículos/refacciones — ERP HU 2.1
+├── inventario/      # Vehículos, refacciones y recepciones — ERP HU 2.0 · 2.1
 ├── servicio/        # Taller y Servicio (órdenes, tickets) — ERP HU 3.1
 ├── refacciones/     # Ventas directas de refacciones     — ERP HU 3.2
 ├── caja/            # Caja (pagos, cobros, cancelaciones) — ERP HU 4.1
@@ -126,7 +126,28 @@ Cada módulo de negocio sigue la misma convención interna (capas, no sub-módul
 └── infrastructure/      # repositorios Spring Data, adaptadores externos (p. ej. cliente del PAC)
 ```
 
-Por ahora las carpetas de capas están vacías (solo `.gitkeep`): el modelo de datos y las entidades **no están definidos todavía** (sección 9 del PDF), así que no se generó ningún dominio inventado. `ModularityTests` (en `src/test/java/.../ModularityTests.java`) ya corre `ApplicationModules.verify()` para que, en cuanto empiece a llegar código, cualquier ciclo entre módulos o acceso a un paquete interno de otro módulo rompa el build.
+Ya tienen código `acceso`, `ventascrm` e `inventario`; los demás módulos siguen vacíos (solo `.gitkeep`) hasta que lleguen sus historias. El modelo de datos v1 está en `docs/TEC-1_modelo-datos_v1.md`. `ModularityTests` (en `src/test/java/.../ModularityTests.java`) corre `ApplicationModules.verify()`: cualquier ciclo entre módulos o acceso a un paquete interno de otro módulo rompe el build.
+
+### Endpoints implementados
+
+Todos van bajo `/api/v1` y, salvo el login, piden el token en `Authorization: Bearer <token>`. El detalle de cada uno (cuerpo, respuestas y errores) está en Swagger UI.
+
+| Módulo | Endpoints | Quién |
+|---|---|---|
+| `acceso` | `POST /auth/login` | Todos (`aplicacion`: `ERP` o `CRM`) |
+| `acceso` | `GET /roles`, `GET /usuarios`, `POST /usuarios`, `PUT /usuarios/{id}/rol` | Administrador (ERP) y Gerente de marketing (CRM) |
+| `ventascrm` | `POST /prospectos`, `GET /prospectos?etapa=`, `PATCH /prospectos/{id}/etapa` | Ventas (sus prospectos); el Gerente de marketing consulta todos |
+| `ventascrm` | `PUT /prospectos/{id}/vendedor` | Gerente de marketing |
+| `inventario` | `POST /vehiculos`, `PUT /vehiculos/{id}` | Inventario |
+| `inventario` | `GET /vehiculos?estatus=`, `GET /vehiculos/{id}` | Inventario y Administrador (todas); Ventas (solo Disponibles) |
+| `inventario` | `POST /refacciones`, `PUT /refacciones/{id}`, `POST /refacciones/{id}/recepciones` | Inventario |
+| `inventario` | `GET /refacciones?bajoMinimo=`, `GET /refacciones/{id}`, `GET /refacciones/{id}/recepciones` | Inventario, Refacciones y Administrador |
+
+Reglas del inventario (decisiones del PO del 13 de octubre):
+- Las unidades y refacciones se editan, pero no se eliminan.
+- Una refacción entra con existencia 0, y la existencia solo cambia con movimientos.
+- La recepción guarda fecha de llegada y de registro, proveedor, notas y responsable.
+- La recepción y la edición de una refacción bloquean su fila (`SELECT ... FOR UPDATE`) para que no se pisen.
 
 ## 4. Lineamientos técnicos ya acordados (impactan el diseño del código)
 
@@ -178,7 +199,7 @@ docker compose ps
 Al arrancar, **Flyway crea las tablas** aplicando las migraciones de `src/main/resources/db/migration/`. En el log debe aparecer:
 
 ```text
-Successfully applied 1 migration to schema "public", now at version v1
+Successfully applied 4 migrations to schema "public", now at version v4
 Started BackendAgencia360Application in ... seconds
 ```
 
@@ -234,19 +255,43 @@ La API lee su configuración de variables de entorno. Si no defines ninguna, usa
 
 **`JWT_SECRET` trae un valor de solo-desarrollo por defecto: hay que sobrescribirlo en cualquier ambiente real** (en Azure, vía Key Vault según la sección 5 del PDF).
 
-Para entrar por primera vez en local, levanta la API con un administrador inicial y después inicia sesión en `POST /api/v1/auth/login` (cuerpo: `usuario`, `contrasena` y `aplicacion`, que es `ERP` o `CRM`):
-
-```bash
-ADMIN_INICIAL_USUARIO=admin ADMIN_INICIAL_CONTRASENA=CambiaEsto123 ./mvnw spring-boot:run -Dspring-boot.run.profiles=dev
-```
-
 Ejemplo, para apuntar a otro PostgreSQL sin tocar código:
 
 ```bash
 DB_URL=jdbc:postgresql://localhost:5433/agencia360 ./mvnw spring-boot:run -Dspring-boot.run.profiles=dev
 ```
 
-### 5.6 Comandos útiles
+### 5.6 Usuarios de ejemplo
+
+La base empieza sin usuarios. Para probar el ERP y el CRM en local, crea uno por rol:
+
+```bash
+# 1. Levanta la API con el Administrador (ERP) y el Gerente de marketing (CRM) iniciales
+ADMIN_INICIAL_USUARIO=admin ADMIN_INICIAL_CONTRASENA=Admin12345 \
+GERENTE_INICIAL_USUARIO=gerente GERENTE_INICIAL_CONTRASENA=Gerente12345 \
+./mvnw spring-boot:run -Dspring-boot.run.profiles=dev
+
+# 2. En otra terminal, crea los demás usuarios (se puede correr varias veces)
+./scripts/usuarios-de-ejemplo.sh
+```
+
+> **Solo para desarrollo local.** Estas contraseñas son públicas: nunca las uses en un ambiente real.
+
+| Usuario | Contraseña | Rol | Entra a | Para probar |
+|---|---|---|---|---|
+| `admin` | `Admin12345` | Administrador | ERP | Usuarios del ERP; consulta de vehículos y refacciones |
+| `gerente` | `Gerente12345` | Gerente de marketing | CRM | Usuarios del CRM; todos los prospectos y su reasignación |
+| `inventario1` | `Inventario123` | Inventario | ERP | Alta, edición y consulta de vehículos y refacciones; recepciones |
+| `refacciones1` | `Refacciones123` | Refacciones | ERP | Consulta del stock y aviso de refacciones por resurtir |
+| `facturacion1` | `Facturacion123` | Facturación | ERP | Menú vacío por ahora (sus historias llegan después) |
+| `servicio1` | `Servicio123` | Servicio | ERP | Menú vacío por ahora |
+| `caja1` | `Caja12345` | Caja | ERP | Menú vacío por ahora |
+| `contabilidad1` | `Contabilidad123` | Contabilidad | ERP y CRM | Menú vacío por ahora |
+| `vendedor1`, `vendedor2` | `Vendedor123` | Ventas | CRM | Registro y seguimiento de sus prospectos; reasignación entre los dos |
+
+Sin el script también se pueden crear desde la pantalla **Usuarios** del ERP (sesión de `admin`) o del CRM (sesión de `gerente`). Para borrar todo y empezar de cero: `docker compose down -v`.
+
+### 5.7 Comandos útiles
 
 | Comando | Qué hace |
 |---|---|
@@ -256,7 +301,7 @@ DB_URL=jdbc:postgresql://localhost:5433/agencia360 ./mvnw spring-boot:run -Dspri
 | `docker compose down` | Detiene y borra los contenedores; **los datos de PostgreSQL se conservan** |
 | `docker compose down -v` | Borra también el volumen: **base de datos vacía** la próxima vez que levantes (Flyway vuelve a crear las tablas) |
 
-### 5.7 Problemas comunes
+### 5.8 Problemas comunes
 
 | Síntoma | Causa | Solución |
 |---|---|---|
@@ -265,6 +310,8 @@ DB_URL=jdbc:postgresql://localhost:5433/agencia360 ./mvnw spring-boot:run -Dspri
 | La API arranca pero `/actuator/health` responde `{"status":"DOWN"}` (HTTP 503) | Redis no está corriendo: la API no lo necesita para arrancar, pero el health check lo revisa | `docker compose up -d redis` |
 | La API no arranca por un error de Flyway (`Validate failed`, `checksum mismatch`) | Se editó una migración que ya se había aplicado en tu base local | No edites migraciones ya integradas a `main`: crea una nueva. Si solo fue en tu máquina, reinicia la base con `docker compose down -v && docker compose up -d` |
 | La API no arranca con `Schema-validation: missing table` | Una entidad JPA no tiene su migración | Agrega la migración `V<n>__...sql` que crea esa tabla |
+| El login funciona, pero el ERP dice "No se pudo conectar con el servidor" | El navegador bloquea por CORS las peticiones con token: el frontend corre en un origen que no está en `CORS_ALLOWED_ORIGINS` (por ejemplo `5174`, si el CRM ya ocupa el `5173`) | Agrega el origen: `CORS_ALLOWED_ORIGINS=http://localhost:5173,http://localhost:5174` |
+| `./scripts/usuarios-de-ejemplo.sh` dice "No se pudo iniciar sesión" | La API se levantó sin las variables `ADMIN_INICIAL_*` y `GERENTE_INICIAL_*`, o con otras contraseñas | Levántala como en la sección 5.6, o pásale las tuyas: `ADMIN_CONTRASENA=... GERENTE_CONTRASENA=... ./scripts/usuarios-de-ejemplo.sh` |
 
 ## 6. Estrategia de pruebas (backend)
 
@@ -276,9 +323,23 @@ DB_URL=jdbc:postgresql://localhost:5433/agencia360 ./mvnw spring-boot:run -Dspri
 
 El mayor esfuerzo de pruebas debe ir en pagos, facturación, inventario y contabilidad: ahí un error significa dinero mal registrado.
 
+Lo que hay hoy:
+- Cada módulo con código (`acceso`, `ventascrm` e `inventario`) tiene pruebas de dominio, de servicio con Mockito y de integración por HTTP contra PostgreSQL real (`*IntegrationTest`). Las de integración cubren seguridad por rol y restricciones de la base.
+- `RecepcionesConcurrentesIntegrationTest` lanza recepciones y ediciones simultáneas de una refacción para comprobar el bloqueo de fila. Sin el bloqueo, la existencia termina mal (5 de 20 recepciones, o 0 si hay ediciones).
+- `CorsIntegrationTest` comprueba que el preflight de CORS de un origen permitido se responde sin pedir sesión.
+
+Para ver la cobertura sin tocar el `pom.xml`:
+
+```bash
+./mvnw org.jacoco:jacoco-maven-plugin:0.8.13:prepare-agent verify org.jacoco:jacoco-maven-plugin:0.8.13:report
+# Reporte en target/site/jacoco/index.html
+```
+
 ## 7. Documentación y diagramas
 
-- `docs/diagramas/`: diagramas locales en draw.io del proyecto (carpeta creada, vacía).
+- `docs/TEC-1_modelo-datos_v1.md` y `docs/diagramas/agencia360-modelo-datos-v1.drawio`: modelo de datos v1.
+- `docs/api/`: contrato OpenAPI de la app CareCar (YAML y PDF).
+- `scripts/usuarios-de-ejemplo.sh`: crea los usuarios de ejemplo de la sección 5.6.
 - `docs/convenciones-commits.md`: formato de commits (Conventional Commits), scopes por módulo y nombres de rama.
 - `docs/workflows-ci-cd.md`: qué hace cada GitHub Action (CI, lint, seguridad, publicación) y cómo lintear el código en local antes de subirlo.
 - La documentación de referencia del equipo vive en **Azure DevOps Wiki** (fuera de este repo).
@@ -289,7 +350,7 @@ El mayor esfuerzo de pruebas debe ir en pagos, facturación, inventario y contab
 Estas decisiones **no** están tomadas todavía; no asumas nada más allá de lo que dice esta lista:
 
 - División técnica final de los módulos del backend y sus responsabilidades.
-- Modelo de datos: entidades, relaciones y convenciones de la base de datos.
+- Modelo de datos: la v1 cubre el Sprint 1 (`docs/TEC-1_modelo-datos_v1.md`); faltan las preguntas abiertas que ahí se listan.
 - Servicios de Azure a confirmar (región, ambientes).
 - Herramienta de infraestructura como código (Bicep o Terraform).
 - Proveedor del PAC para timbrado CFDI.
