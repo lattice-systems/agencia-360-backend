@@ -2,7 +2,6 @@ package dev.latticesystems.erp_agente360.backend_agencia360.inventario.domain;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import java.math.BigDecimal;
 import java.time.Instant;
 import org.junit.jupiter.api.Test;
 
@@ -13,8 +12,7 @@ class MovimientoInventarioTest {
 
 	@Test
 	void laEntradaDeUnVehiculoEsDeUnaSolaUnidadYLlegaAlRegistrarse() {
-		Vehiculo vehiculo = Vehiculo.registrar("3VWFE21C04M000001", "Jetta", "Comfortline", 2026, "Blanco",
-				new BigDecimal("389900.00"));
+		Vehiculo vehiculo = Vehiculo.registrar("3VWFE21C04M000001", "Jetta", "Comfortline", 2026, "Blanco", null);
 
 		MovimientoInventario movimiento = MovimientoInventario.entradaDeVehiculo(vehiculo, RESPONSABLE, AHORA);
 

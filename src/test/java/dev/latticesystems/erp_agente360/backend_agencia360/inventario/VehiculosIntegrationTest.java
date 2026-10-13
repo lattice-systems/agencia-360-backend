@@ -61,13 +61,31 @@ class VehiculosIntegrationTest extends AbstractIntegrationTest {
 	void inventarioDaDeAltaUnaUnidadDisponible() throws Exception {
 		Usuario almacen = registrar("almacen1", Role.INVENTARIO);
 
-		mockMvc.perform(alta(token(almacen), cuerpo(" 3vwfe21c04m000001 ", "389900.00")))
-				.andExpect(status().isCreated()).andExpect(header().exists(HttpHeaders.LOCATION))
-				.andExpect(jsonPath("$.id").isNumber()).andExpect(jsonPath("$.vin").value("3VWFE21C04M000001"))
-				.andExpect(jsonPath("$.modelo").value("Jetta")).andExpect(jsonPath("$.version").value("Comfortline"))
-				.andExpect(jsonPath("$.anio").value(2026)).andExpect(jsonPath("$.color").value("Blanco"))
-				.andExpect(jsonPath("$.precio").value(389900.00)).andExpect(jsonPath("$.estatus").value("DISPONIBLE"))
-				.andExpect(jsonPath("$.creadoEn").isNotEmpty());
+		mockMvc.perform(alta(token(almacen), cuerpo(" 3vwfe21c04m000001 "))).andExpect(status().isCreated())
+				.andExpect(header().exists(HttpHeaders.LOCATION)).andExpect(jsonPath("$.id").isNumber())
+				.andExpect(jsonPath("$.vin").value("3VWFE21C04M000001")).andExpect(jsonPath("$.modelo").value("Jetta"))
+				.andExpect(jsonPath("$.version").value("Comfortline")).andExpect(jsonPath("$.anio").value(2026))
+				.andExpect(jsonPath("$.color").value("Blanco")).andExpect(jsonPath("$.estatus").value("DISPONIBLE"))
+				.andExpect(jsonPath("$.precio").doesNotExist()).andExpect(jsonPath("$.creadoEn").isNotEmpty());
+	}
+
+	@Test
+	void unaUnidadPuedeEntrarComoNoDisponible() throws Exception {
+		Usuario almacen = registrar("almacen1", Role.INVENTARIO);
+
+		mockMvc.perform(alta(token(almacen), cuerpoConEstatus("3VWFE21C04M000001", "NO_DISPONIBLE")))
+				.andExpect(status().isCreated()).andExpect(jsonPath("$.estatus").value("NO_DISPONIBLE"));
+	}
+
+	@Test
+	void unaUnidadNoPuedeEntrarConUnEstatusDeVenta() throws Exception {
+		Usuario almacen = registrar("almacen1", Role.INVENTARIO);
+
+		mockMvc.perform(alta(token(almacen), cuerpoConEstatus("3VWFE21C04M000001", "VENDIDO")))
+				.andExpect(status().isBadRequest())
+				.andExpect(jsonPath("$.message").value("Una unidad solo puede entrar como Disponible o No disponible"));
+		mockMvc.perform(alta(token(almacen), cuerpoConEstatus("3VWFE21C04M000001", "EN_TRANSITO")))
+				.andExpect(status().isBadRequest());
 	}
 
 	@Test
@@ -90,7 +108,7 @@ class VehiculosIntegrationTest extends AbstractIntegrationTest {
 		Usuario almacen = registrar("almacen1", Role.INVENTARIO);
 		altaDe(almacen, "3VWFE21C04M000001");
 
-		mockMvc.perform(alta(token(almacen), cuerpo("3vwfe21c04m000001", "389900.00"))).andExpect(status().isConflict())
+		mockMvc.perform(alta(token(almacen), cuerpo("3vwfe21c04m000001"))).andExpect(status().isConflict())
 				.andExpect(jsonPath("$.message").value("Ya existe un vehículo con el VIN 3VWFE21C04M000001"));
 	}
 
@@ -98,19 +116,8 @@ class VehiculosIntegrationTest extends AbstractIntegrationTest {
 	void rechazaUnVinInvalidoCon400() throws Exception {
 		Usuario almacen = registrar("almacen1", Role.INVENTARIO);
 
-		mockMvc.perform(alta(token(almacen), cuerpo("3VWFE21C04M00000O", "389900.00")))
-				.andExpect(status().isBadRequest())
+		mockMvc.perform(alta(token(almacen), cuerpo("3VWFE21C04M00000O"))).andExpect(status().isBadRequest())
 				.andExpect(jsonPath("$.message").value("El VIN debe tener 17 caracteres, sin las letras I, O ni Q"));
-	}
-
-	@Test
-	void rechazaUnPrecioInvalidoCon400() throws Exception {
-		Usuario almacen = registrar("almacen1", Role.INVENTARIO);
-
-		mockMvc.perform(alta(token(almacen), cuerpo("3VWFE21C04M000001", "0"))).andExpect(status().isBadRequest())
-				.andExpect(jsonPath("$.message").value("El precio debe ser mayor a cero"));
-		mockMvc.perform(alta(token(almacen), cuerpo("3VWFE21C04M000001", "1000.555")))
-				.andExpect(status().isBadRequest());
 	}
 
 	@Test
@@ -132,8 +139,7 @@ class VehiculosIntegrationTest extends AbstractIntegrationTest {
 		Usuario vendedor = registrar("vendedor1", Role.VENTAS);
 		Usuario cajero = registrar("caja1", Role.CAJA);
 
-		mockMvc.perform(alta(token(vendedor), cuerpo("3VWFE21C04M000001", "389900.00")))
-				.andExpect(status().isForbidden());
+		mockMvc.perform(alta(token(vendedor), cuerpo("3VWFE21C04M000001"))).andExpect(status().isForbidden());
 		mockMvc.perform(conToken(get(URL), token(cajero))).andExpect(status().isForbidden());
 	}
 
@@ -198,24 +204,28 @@ class VehiculosIntegrationTest extends AbstractIntegrationTest {
 	}
 
 	private long altaDe(Usuario usuario, String vin) throws Exception {
-		String respuesta = mockMvc.perform(alta(token(usuario), cuerpo(vin, "389900.00")))
-				.andExpect(status().isCreated()).andReturn().getResponse().getContentAsString();
+		String respuesta = mockMvc.perform(alta(token(usuario), cuerpo(vin))).andExpect(status().isCreated())
+				.andReturn().getResponse().getContentAsString();
 		return ((Number) JsonPath.read(respuesta, "$.id")).longValue();
 	}
 
 	/** Escribe en la base lo pendiente de JPA para poder leerlo con SQL. */
 	private List<Map<String, Object>> movimientosDe(long vehiculoId) {
 		entityManager.flush();
-		return jdbcTemplate.queryForList(
-				"select tipo, cantidad, responsable_id, fecha_llegada, fecha_registro from movimiento_inventario "
-						+ "where vehiculo_id = ?",
-				vehiculoId);
+		return jdbcTemplate.queryForList("select tipo, cantidad, responsable_id, fecha_llegada, fecha_registro "
+				+ "from movimiento_inventario where vehiculo_id = ?", vehiculoId);
 	}
 
-	private static String cuerpo(String vin, String precio) {
+	private static String cuerpo(String vin) {
 		return """
-				{"vin":"%s","modelo":"Jetta","version":"Comfortline","anio":2026,"color":"Blanco","precio":%s}
-				""".formatted(vin, precio);
+				{"vin":"%s","modelo":"Jetta","version":"Comfortline","anio":2026,"color":"Blanco"}
+				""".formatted(vin);
+	}
+
+	private static String cuerpoConEstatus(String vin, String estatus) {
+		return """
+				{"vin":"%s","modelo":"Jetta","version":"Comfortline","anio":2026,"color":"Blanco","estatus":"%s"}
+				""".formatted(vin, estatus);
 	}
 
 	private static MockHttpServletRequestBuilder alta(String token, String cuerpo) {
