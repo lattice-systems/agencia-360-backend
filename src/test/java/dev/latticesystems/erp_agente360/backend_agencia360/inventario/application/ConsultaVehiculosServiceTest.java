@@ -8,7 +8,6 @@ import dev.latticesystems.erp_agente360.backend_agencia360.inventario.domain.Est
 import dev.latticesystems.erp_agente360.backend_agencia360.inventario.domain.Vehiculo;
 import dev.latticesystems.erp_agente360.backend_agencia360.inventario.infrastructure.VehiculoRepository;
 import dev.latticesystems.erp_agente360.backend_agencia360.shared.exception.RecursoNoEncontradoException;
-import java.math.BigDecimal;
 import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
@@ -64,6 +63,6 @@ class ConsultaVehiculosServiceTest {
 	}
 
 	private static Vehiculo vehiculo(String vin) {
-		return Vehiculo.registrar(vin, "Jetta", "Comfortline", 2026, "Blanco", new BigDecimal("389900.00"));
+		return Vehiculo.registrar(vin, "Jetta", "Comfortline", 2026, "Blanco", null);
 	}
 }

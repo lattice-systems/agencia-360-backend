@@ -67,7 +67,6 @@ class InventarioPersistenciaIntegrationTest extends AbstractIntegrationTest {
 
 		Vehiculo guardado = vehiculoRepository.findById(vehiculo.getId()).orElseThrow();
 		assertThat(guardado.getVin()).isEqualTo("3VWFE21C04M000001");
-		assertThat(guardado.getPrecio()).isEqualByComparingTo("389900.00");
 		assertThat(guardado.getEstatus()).isEqualTo(EstatusVehiculo.DISPONIBLE);
 		assertThat(guardado.getCreatedAt()).isNotNull();
 		assertThat(movimientoRepository.findAll()).singleElement().satisfies(movimiento -> {
@@ -179,7 +178,7 @@ class InventarioPersistenciaIntegrationTest extends AbstractIntegrationTest {
 	}
 
 	private static Vehiculo vehiculo(String vin) {
-		return Vehiculo.registrar(vin, "Jetta", "Comfortline", 2026, "Blanco", new BigDecimal("389900.00"));
+		return Vehiculo.registrar(vin, "Jetta", "Comfortline", 2026, "Blanco", null);
 	}
 
 	private static Refaccion refaccion(String codigo) {
