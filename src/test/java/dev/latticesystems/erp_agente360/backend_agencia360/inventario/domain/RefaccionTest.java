@@ -155,6 +155,18 @@ class RefaccionTest {
 		assertThat(refaccion.getDescripcion()).isEqualTo("Filtro de aceite");
 	}
 
+	@Test
+	void quedaBajoMinimoCuandoLaExistenciaLlegaAlMinimo() {
+		Refaccion refaccion = Refaccion.registrar("FIL-ACE-01", "Filtro de aceite", COSTO, PRECIO, 5);
+		assertThat(refaccion.estaBajoMinimo()).isTrue();
+
+		refaccion.recibir(recepcion(5), RESPONSABLE, AHORA);
+		assertThat(refaccion.estaBajoMinimo()).isTrue();
+
+		refaccion.recibir(recepcion(1), RESPONSABLE, AHORA);
+		assertThat(refaccion.estaBajoMinimo()).isFalse();
+	}
+
 	private static Recepcion recepcion(int cantidad) {
 		return new Recepcion(cantidad, "Refacciones del Bajío", null, null);
 	}

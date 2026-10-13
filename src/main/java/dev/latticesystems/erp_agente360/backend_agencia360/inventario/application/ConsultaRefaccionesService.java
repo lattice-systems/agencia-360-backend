@@ -1,5 +1,6 @@
 package dev.latticesystems.erp_agente360.backend_agencia360.inventario.application;
 
+import dev.latticesystems.erp_agente360.backend_agencia360.inventario.domain.Refaccion;
 import dev.latticesystems.erp_agente360.backend_agencia360.inventario.infrastructure.RefaccionRepository;
 import dev.latticesystems.erp_agente360.backend_agencia360.shared.exception.RecursoNoEncontradoException;
 import java.util.List;
@@ -16,10 +17,19 @@ public class ConsultaRefaccionesService {
 		this.refaccionRepository = refaccionRepository;
 	}
 
-	/** Ordenadas por código, como un catálogo. */
+	/**
+	 * Ordenadas por código, como un catálogo.
+	 *
+	 * @param soloBajoMinimo
+	 *            {@code true} para traer solo las que llegaron al mínimo o quedaron
+	 *            por debajo (el aviso de Refacciones y del Administrador)
+	 */
 	@Transactional(readOnly = true)
-	public List<RefaccionVista> listar() {
-		return refaccionRepository.findAllByOrderByCodigoAsc().stream().map(RefaccionVista::de).toList();
+	public List<RefaccionVista> listar(boolean soloBajoMinimo) {
+		List<Refaccion> refacciones = soloBajoMinimo
+				? refaccionRepository.buscarBajoMinimo()
+				: refaccionRepository.findAllByOrderByCodigoAsc();
+		return refacciones.stream().map(RefaccionVista::de).toList();
 	}
 
 	/**

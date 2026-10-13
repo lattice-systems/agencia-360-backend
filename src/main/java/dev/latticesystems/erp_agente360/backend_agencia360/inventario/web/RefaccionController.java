@@ -17,6 +17,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
@@ -51,9 +52,10 @@ public class RefaccionController {
 
 	@GetMapping
 	@PreAuthorize("hasAnyRole('INVENTARIO', 'REFACCIONES', 'ADMINISTRADOR')")
-	@Operation(summary = "Listar refacciones", description = "Ordenadas por código.")
-	public List<RefaccionVista> listar() {
-		return consultaRefaccionesService.listar();
+	@Operation(summary = "Listar refacciones", description = "Ordenadas por código. Con bajoMinimo=true solo "
+			+ "trae las que llegaron al mínimo o quedaron por debajo, para el aviso de Refacciones y del Administrador.")
+	public List<RefaccionVista> listar(@RequestParam(defaultValue = "false") boolean bajoMinimo) {
+		return consultaRefaccionesService.listar(bajoMinimo);
 	}
 
 	@GetMapping("/{id}")
