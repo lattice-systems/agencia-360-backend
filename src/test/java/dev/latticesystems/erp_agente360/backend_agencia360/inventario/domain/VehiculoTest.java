@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.math.BigDecimal;
 import org.junit.jupiter.api.Test;
+import org.springframework.test.util.ReflectionTestUtils;
 
 class VehiculoTest {
 
@@ -147,5 +148,39 @@ class VehiculoTest {
 		vehiculo.editar(VIN, "Jetta", "Comfortline", 2026, "Blanco", new BigDecimal("399900.00"), null);
 
 		assertThat(vehiculo.getPrecio()).isEqualByComparingTo("399900.00");
+	}
+
+	@Test
+	void rechazaUnVinVacioONulo() {
+		assertThatThrownBy(() -> Vehiculo.registrar(null, "Jetta", "Comfortline", 2026, "Blanco", PRECIO, null))
+				.isInstanceOf(IllegalArgumentException.class)
+				.hasMessage("El VIN debe tener 17 caracteres, sin las letras I, O ni Q");
+		assertThatThrownBy(() -> Vehiculo.registrar("   ", "Jetta", "Comfortline", 2026, "Blanco", PRECIO, null))
+				.isInstanceOf(IllegalArgumentException.class)
+				.hasMessage("El VIN debe tener 17 caracteres, sin las letras I, O ni Q");
+	}
+
+	@Test
+	void inventarioNoSacaDeApartadaAUnaUnidad() {
+		Vehiculo vehiculo = Vehiculo.registrar(VIN, "Jetta", "Comfortline", 2026, "Blanco", PRECIO, null);
+		// Apartada la pone la venta, que todavía no existe en el dominio.
+		ReflectionTestUtils.setField(vehiculo, "estatus", EstatusVehiculo.APARTADA);
+
+		assertThatThrownBy(
+				() -> vehiculo.editar(VIN, "Jetta", "Comfortline", 2026, "Blanco", PRECIO, EstatusVehiculo.DISPONIBLE))
+				.isInstanceOf(IllegalArgumentException.class)
+				.hasMessage("Inventario solo cambia el estatus entre Disponible y No disponible");
+		assertThat(vehiculo.getEstatus()).isEqualTo(EstatusVehiculo.APARTADA);
+	}
+
+	@Test
+	void unaUnidadApartadaSeCorrigeSinTocarSuEstatus() {
+		Vehiculo vehiculo = Vehiculo.registrar(VIN, "Jetta", "Comfortline", 2026, "Blanco", PRECIO, null);
+		ReflectionTestUtils.setField(vehiculo, "estatus", EstatusVehiculo.APARTADA);
+
+		vehiculo.editar(VIN, "Jetta", "Comfortline", 2026, "Rojo", PRECIO, EstatusVehiculo.APARTADA);
+
+		assertThat(vehiculo.getColor()).isEqualTo("Rojo");
+		assertThat(vehiculo.getEstatus()).isEqualTo(EstatusVehiculo.APARTADA);
 	}
 }

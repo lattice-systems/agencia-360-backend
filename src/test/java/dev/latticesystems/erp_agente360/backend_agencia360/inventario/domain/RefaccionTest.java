@@ -45,6 +45,8 @@ class RefaccionTest {
 
 	@Test
 	void rechazaMontosOMinimoInvalidos() {
+		assertThatThrownBy(() -> Refaccion.registrar("FIL-ACE-01", "Filtro de aceite", null, PRECIO, 5))
+				.isInstanceOf(IllegalArgumentException.class).hasMessage("El costo no puede ser negativo");
 		assertThatThrownBy(() -> Refaccion.registrar("FIL-ACE-01", "Filtro de aceite", new BigDecimal("-1"), PRECIO, 5))
 				.isInstanceOf(IllegalArgumentException.class).hasMessage("El costo no puede ser negativo");
 		assertThatThrownBy(() -> Refaccion.registrar("FIL-ACE-01", "Filtro de aceite", COSTO, BigDecimal.ZERO, 5))
