@@ -44,10 +44,11 @@ public class SeguimientoProspectoController {
 
 	@PatchMapping("/{id}/etapa")
 	@PreAuthorize("hasRole('VENTAS')")
-	@Operation(summary = "Cambiar la etapa de un prospecto", description = "Registra la fecha y hora en el "
-			+ "historial. Responde 404 si el prospecto no existe o es de otro vendedor.")
+	@Operation(summary = "Cambiar la etapa de un prospecto", description = "Solo el vendedor dueño del prospecto. "
+			+ "Registra la fecha y hora en el historial. Para pasar a CERRADO el motivo es obligatorio (400 si "
+			+ "falta). Responde 404 si el prospecto no existe o es de otro vendedor.")
 	public ProspectoVista cambiarEtapa(@PathVariable Long id, @Valid @RequestBody CambiarEtapaRequest request,
 			@AuthenticationPrincipal UsuarioAutenticado actor) {
-		return seguimientoProspectosService.cambiarEtapa(id, request.etapa(), actor);
+		return seguimientoProspectosService.cambiarEtapa(id, request.etapa(), request.motivoCierre(), actor);
 	}
 }

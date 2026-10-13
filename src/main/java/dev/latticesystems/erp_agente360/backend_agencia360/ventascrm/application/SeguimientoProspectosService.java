@@ -21,9 +21,9 @@ import org.springframework.transaction.annotation.Transactional;
  * CRM-0.1:
  * <ul>
  * <li>Ventas ve y cambia solo sus prospectos.</li>
- * <li>Gerente de marketing ve todos.</li>
- * <li>Los demás roles no ven prospectos; Contabilidad queda fuera hasta que el
- * PO defina su función en el CRM.</li>
+ * <li>Gerente de marketing ve todos, pero no cambia etapas (decisión del PO del
+ * 12 de octubre); solo los reasigna.</li>
+ * <li>Los demás roles, incluida Contabilidad, no ven prospectos.</li>
  * </ul>
  * Un prospecto ajeno se trata como inexistente (404) para no confirmar que
  * existe.
@@ -63,10 +63,17 @@ public class SeguimientoProspectosService {
 		return prospectos.stream().map(ProspectoVista::de).toList();
 	}
 
+	/**
+	 * @param motivoCierre
+	 *            obligatorio al pasar a {@link Etapa#CERRADO}
+	 */
 	@Transactional
-	public ProspectoVista cambiarEtapa(Long prospectoId, Etapa etapa, UsuarioAutenticado actor) {
+	public ProspectoVista cambiarEtapa(Long prospectoId, Etapa etapa, String motivoCierre, UsuarioAutenticado actor) {
+		if (!actor.tieneRol(Role.VENTAS)) {
+			throw new AccessDeniedException("Solo el vendedor cambia la etapa de sus prospectos");
+		}
 		Prospecto prospecto = buscarVisible(prospectoId, actor);
-		prospecto.cambiarEtapa(etapa, OrigenCambio.CRM, Instant.now(reloj));
+		prospecto.cambiarEtapa(etapa, motivoCierre, OrigenCambio.CRM, Instant.now(reloj));
 		return ProspectoVista.de(prospecto);
 	}
 
