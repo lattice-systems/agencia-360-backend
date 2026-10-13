@@ -1,0 +1,271 @@
+package dev.latticesystems.erp_agente360.backend_agencia360.inventario;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+import com.jayway.jsonpath.JsonPath;
+import dev.latticesystems.erp_agente360.backend_agencia360.acceso.domain.Rol;
+import dev.latticesystems.erp_agente360.backend_agencia360.acceso.domain.Usuario;
+import dev.latticesystems.erp_agente360.backend_agencia360.acceso.infrastructure.RolRepository;
+import dev.latticesystems.erp_agente360.backend_agencia360.acceso.infrastructure.UsuarioRepository;
+import dev.latticesystems.erp_agente360.backend_agencia360.shared.AbstractIntegrationTest;
+import dev.latticesystems.erp_agente360.backend_agencia360.shared.security.JwtService;
+import dev.latticesystems.erp_agente360.backend_agencia360.shared.security.Role;
+import jakarta.persistence.EntityManager;
+import java.util.List;
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
+import org.springframework.transaction.annotation.Transactional;
+
+/**
+ * Prueba el alta y la consulta de refacciones (ERP-2.0) de punta a punta:
+ * seguridad, endpoints y base de datos real (Testcontainers). Cada prueba se
+ * revierte al terminar.
+ */
+@AutoConfigureMockMvc
+@Transactional
+class RefaccionesIntegrationTest extends AbstractIntegrationTest {
+
+	private static final String URL = "/api/v1/refacciones";
+
+	@Autowired
+	private MockMvc mockMvc;
+
+	@Autowired
+	private UsuarioRepository usuarioRepository;
+
+	@Autowired
+	private RolRepository rolRepository;
+
+	@Autowired
+	private JwtService jwtService;
+
+	@Autowired
+	private JdbcTemplate jdbcTemplate;
+
+	@Autowired
+	private EntityManager entityManager;
+
+	@Test
+	void inventarioDaDeAltaUnaRefaccionConExistenciaEnCero() throws Exception {
+		Usuario almacen = registrar("almacen1", Role.INVENTARIO);
+
+		mockMvc.perform(alta(token(almacen), cuerpo(" fil-ace-01 "))).andExpect(status().isCreated())
+				.andExpect(header().exists(HttpHeaders.LOCATION)).andExpect(jsonPath("$.id").isNumber())
+				.andExpect(jsonPath("$.codigo").value("FIL-ACE-01"))
+				.andExpect(jsonPath("$.descripcion").value("Filtro de aceite"))
+				.andExpect(jsonPath("$.costo").value(180.50)).andExpect(jsonPath("$.precio").value(320.00))
+				.andExpect(jsonPath("$.existencia").value(0)).andExpect(jsonPath("$.minimo").value(5))
+				.andExpect(jsonPath("$.creadoEn").isNotEmpty());
+	}
+
+	@Test
+	void elAltaIgnoraUnaExistenciaYNoCreaMovimientos() throws Exception {
+		Usuario almacen = registrar("almacen1", Role.INVENTARIO);
+
+		long id = idDe(mockMvc.perform(alta(token(almacen), """
+				{"codigo":"FIL-ACE-01","descripcion":"Filtro de aceite","costo":180.50,"precio":320.00,
+				"existencia":12,"minimo":5}
+				""")).andExpect(status().isCreated()).andExpect(jsonPath("$.existencia").value(0)).andReturn()
+				.getResponse().getContentAsString());
+
+		entityManager.flush();
+		assertThat(jdbcTemplate.queryForObject("select count(*) from movimiento_inventario where refaccion_id = ?",
+				Integer.class, id)).isZero();
+	}
+
+	@Test
+	void rechazaUnCodigoRepetidoCon409() throws Exception {
+		Usuario almacen = registrar("almacen1", Role.INVENTARIO);
+		altaDe(almacen, "FIL-ACE-01");
+
+		mockMvc.perform(alta(token(almacen), cuerpo("fil-ace-01"))).andExpect(status().isConflict())
+				.andExpect(jsonPath("$.message").value("Ya existe una refacción con el código FIL-ACE-01"));
+	}
+
+	@Test
+	void rechazaDatosInvalidosCon400() throws Exception {
+		Usuario almacen = registrar("almacen1", Role.INVENTARIO);
+
+		mockMvc.perform(alta(token(almacen), """
+				{"codigo":"FIL-ACE-01","descripcion":"Filtro de aceite","costo":-1,"precio":320.00,"minimo":5}
+				""")).andExpect(status().isBadRequest())
+				.andExpect(jsonPath("$.message").value("El costo no puede ser negativo"));
+		mockMvc.perform(alta(token(almacen), """
+				{"codigo":"FIL-ACE-01","descripcion":"Filtro de aceite","costo":180.50,"precio":320.00}
+				""")).andExpect(status().isBadRequest());
+	}
+
+	@Test
+	void sinSesionResponde401() throws Exception {
+		mockMvc.perform(get(URL)).andExpect(status().isUnauthorized());
+	}
+
+	@Test
+	void soloInventarioDaDeAltaRefacciones() throws Exception {
+		Usuario refacciones = registrar("refacciones1", Role.REFACCIONES);
+		Usuario administrador = registrar("admin1", Role.ADMINISTRADOR);
+
+		mockMvc.perform(alta(token(refacciones), cuerpo("FIL-ACE-01"))).andExpect(status().isForbidden());
+		mockMvc.perform(alta(token(administrador), cuerpo("FIL-ACE-01"))).andExpect(status().isForbidden());
+	}
+
+	@Test
+	void refaccionesYAdministradorConsultanLasRefacciones() throws Exception {
+		Usuario almacen = registrar("almacen1", Role.INVENTARIO);
+		Usuario refacciones = registrar("refacciones1", Role.REFACCIONES);
+		Usuario administrador = registrar("admin1", Role.ADMINISTRADOR);
+		long id = altaDe(almacen, "FIL-ACE-01");
+
+		for (Usuario usuario : List.of(refacciones, administrador)) {
+			mockMvc.perform(conToken(get(URL), token(usuario))).andExpect(status().isOk())
+					.andExpect(jsonPath("$.length()").value(1));
+			mockMvc.perform(conToken(get(URL + "/{id}", id), token(usuario))).andExpect(status().isOk());
+		}
+	}
+
+	@Test
+	void otrosRolesNoConsultanRefacciones() throws Exception {
+		Usuario cajero = registrar("caja1", Role.CAJA);
+		Usuario vendedor = registrar("vendedor1", Role.VENTAS);
+
+		mockMvc.perform(conToken(get(URL), token(cajero))).andExpect(status().isForbidden());
+		mockMvc.perform(conToken(get(URL), token(vendedor))).andExpect(status().isForbidden());
+	}
+	@Test
+	void listaLasRefaccionesOrdenadasPorCodigo() throws Exception {
+		Usuario almacen = registrar("almacen1", Role.INVENTARIO);
+		altaDe(almacen, "FIL-ACE-01");
+		altaDe(almacen, "BAL-DEL-01");
+
+		mockMvc.perform(conToken(get(URL), token(almacen))).andExpect(status().isOk())
+				.andExpect(jsonPath("$.length()").value(2)).andExpect(jsonPath("$[0].codigo").value("BAL-DEL-01"))
+				.andExpect(jsonPath("$[1].codigo").value("FIL-ACE-01"));
+	}
+
+	@Test
+	void consultaUnaRefaccionPorId() throws Exception {
+		Usuario almacen = registrar("almacen1", Role.INVENTARIO);
+		long id = altaDe(almacen, "FIL-ACE-01");
+
+		mockMvc.perform(conToken(get(URL + "/{id}", id), token(almacen))).andExpect(status().isOk())
+				.andExpect(jsonPath("$.id").value(id)).andExpect(jsonPath("$.codigo").value("FIL-ACE-01"));
+	}
+
+	@Test
+	void unaRefaccionQueNoExisteResponde404() throws Exception {
+		Usuario almacen = registrar("almacen1", Role.INVENTARIO);
+
+		mockMvc.perform(conToken(get(URL + "/{id}", 999_999), token(almacen))).andExpect(status().isNotFound());
+	}
+
+	@Test
+	void inventarioCorrigeLosDatosSinTocarLaExistencia() throws Exception {
+		Usuario almacen = registrar("almacen1", Role.INVENTARIO);
+		long id = altaDe(almacen, "FIL-ACE-01");
+		mockMvc.perform(conToken(post(URL + "/{id}/recepciones", id), token(almacen))
+				.contentType(MediaType.APPLICATION_JSON).content("{\"cantidad\":7,\"proveedor\":\"Bajío\"}"))
+				.andExpect(status().isCreated());
+
+		mockMvc.perform(edicion(token(almacen), id, """
+				{"codigo":"fil-ace-02","descripcion":"Filtro sintético","costo":190.00,"precio":350.00,
+				"existencia":999,"minimo":3}
+				""")).andExpect(status().isOk()).andExpect(jsonPath("$.codigo").value("FIL-ACE-02"))
+				.andExpect(jsonPath("$.descripcion").value("Filtro sintético")).andExpect(jsonPath("$.minimo").value(3))
+				.andExpect(jsonPath("$.existencia").value(7));
+	}
+
+	@Test
+	void editarConElCodigoDeOtraRefaccionResponde409() throws Exception {
+		Usuario almacen = registrar("almacen1", Role.INVENTARIO);
+		altaDe(almacen, "FIL-ACE-01");
+		long id = altaDe(almacen, "BAL-DEL-01");
+
+		mockMvc.perform(edicion(token(almacen), id, cuerpo("fil-ace-01"))).andExpect(status().isConflict())
+				.andExpect(jsonPath("$.message").value("Ya existe una refacción con el código FIL-ACE-01"));
+	}
+
+	@Test
+	void soloInventarioEditaYNadaSeElimina() throws Exception {
+		Usuario almacen = registrar("almacen1", Role.INVENTARIO);
+		Usuario refacciones = registrar("refacciones1", Role.REFACCIONES);
+		long id = altaDe(almacen, "FIL-ACE-01");
+
+		mockMvc.perform(edicion(token(refacciones), id, cuerpo("FIL-ACE-01"))).andExpect(status().isForbidden());
+		mockMvc.perform(conToken(delete(URL + "/{id}", id), token(almacen))).andExpect(status().isMethodNotAllowed());
+	}
+
+	@Test
+	void editarUnaRefaccionQueNoExisteResponde404() throws Exception {
+		Usuario almacen = registrar("almacen1", Role.INVENTARIO);
+
+		mockMvc.perform(edicion(token(almacen), 999_999, cuerpo("FIL-ACE-01"))).andExpect(status().isNotFound());
+	}
+
+	@Test
+	void marcaYFiltraLasRefaccionesBajoMinimo() throws Exception {
+		Usuario almacen = registrar("almacen1", Role.INVENTARIO);
+		Usuario refacciones = registrar("refacciones1", Role.REFACCIONES);
+		long surtida = altaDe(almacen, "FIL-ACE-01");
+		altaDe(almacen, "BAL-DEL-01");
+		mockMvc.perform(conToken(post(URL + "/{id}/recepciones", surtida), token(almacen))
+				.contentType(MediaType.APPLICATION_JSON).content("{\"cantidad\":6,\"proveedor\":\"Bajío\"}"))
+				.andExpect(status().isCreated());
+
+		mockMvc.perform(conToken(get(URL), token(refacciones))).andExpect(status().isOk())
+				.andExpect(jsonPath("$[0].codigo").value("BAL-DEL-01"))
+				.andExpect(jsonPath("$[0].bajoMinimo").value(true))
+				.andExpect(jsonPath("$[1].codigo").value("FIL-ACE-01"))
+				.andExpect(jsonPath("$[1].bajoMinimo").value(false));
+		mockMvc.perform(conToken(get(URL).param("bajoMinimo", "true"), token(refacciones))).andExpect(status().isOk())
+				.andExpect(jsonPath("$.length()").value(1)).andExpect(jsonPath("$[0].codigo").value("BAL-DEL-01"));
+	}
+
+	private Usuario registrar(String usuario, Role rol) {
+		Rol encontrado = rolRepository.findByNombre(rol.name()).orElseThrow();
+		return usuarioRepository.save(new Usuario(usuario, "hash-de-prueba", "Persona " + usuario, encontrado));
+	}
+
+	private String token(Usuario usuario) {
+		return jwtService.generateToken(usuario.getId(), usuario.getUsuario(), List.of(usuario.getRol().comoRole()));
+	}
+
+	private long altaDe(Usuario usuario, String codigo) throws Exception {
+		return idDe(mockMvc.perform(alta(token(usuario), cuerpo(codigo))).andExpect(status().isCreated()).andReturn()
+				.getResponse().getContentAsString());
+	}
+
+	private static long idDe(String respuesta) {
+		return ((Number) JsonPath.read(respuesta, "$.id")).longValue();
+	}
+
+	private static String cuerpo(String codigo) {
+		return """
+				{"codigo":"%s","descripcion":"Filtro de aceite","costo":180.50,"precio":320.00,"minimo":5}
+				""".formatted(codigo);
+	}
+
+	private static MockHttpServletRequestBuilder alta(String token, String cuerpo) {
+		return conToken(post(URL), token).contentType(MediaType.APPLICATION_JSON).content(cuerpo);
+	}
+
+	private static MockHttpServletRequestBuilder edicion(String token, long id, String cuerpo) {
+		return conToken(put(URL + "/{id}", id), token).contentType(MediaType.APPLICATION_JSON).content(cuerpo);
+	}
+
+	private static MockHttpServletRequestBuilder conToken(MockHttpServletRequestBuilder peticion, String token) {
+		return peticion.header(HttpHeaders.AUTHORIZATION, "Bearer " + token);
+	}
+}
