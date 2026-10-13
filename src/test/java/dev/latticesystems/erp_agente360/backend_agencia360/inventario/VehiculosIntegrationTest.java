@@ -68,7 +68,7 @@ class VehiculosIntegrationTest extends AbstractIntegrationTest {
 				.andExpect(jsonPath("$.vin").value("3VWFE21C04M000001")).andExpect(jsonPath("$.modelo").value("Jetta"))
 				.andExpect(jsonPath("$.version").value("Comfortline")).andExpect(jsonPath("$.anio").value(2026))
 				.andExpect(jsonPath("$.color").value("Blanco")).andExpect(jsonPath("$.estatus").value("DISPONIBLE"))
-				.andExpect(jsonPath("$.precio").doesNotExist()).andExpect(jsonPath("$.creadoEn").isNotEmpty());
+				.andExpect(jsonPath("$.precio").value(389900.00)).andExpect(jsonPath("$.creadoEn").isNotEmpty());
 	}
 
 	@Test
@@ -120,6 +120,21 @@ class VehiculosIntegrationTest extends AbstractIntegrationTest {
 
 		mockMvc.perform(alta(token(almacen), cuerpo("3VWFE21C04M00000O"))).andExpect(status().isBadRequest())
 				.andExpect(jsonPath("$.message").value("El VIN debe tener 17 caracteres, sin las letras I, O ni Q"));
+	}
+
+	@Test
+	void rechazaUnPrecioInvalidoCon400() throws Exception {
+		Usuario almacen = registrar("almacen1", Role.INVENTARIO);
+
+		mockMvc.perform(alta(token(almacen), """
+				{"vin":"3VWFE21C04M000001","modelo":"Jetta","version":"Comfortline","anio":2026,"color":"Blanco",
+				"precio":0}
+				""")).andExpect(status().isBadRequest())
+				.andExpect(jsonPath("$.message").value("El precio debe ser mayor a cero"));
+		mockMvc.perform(alta(token(almacen), """
+				{"vin":"3VWFE21C04M000001","modelo":"Jetta","version":"Comfortline","anio":2026,"color":"Blanco",
+				"precio":1000.555}
+				""")).andExpect(status().isBadRequest());
 	}
 
 	@Test
@@ -239,10 +254,12 @@ class VehiculosIntegrationTest extends AbstractIntegrationTest {
 
 		mockMvc.perform(edicion(token(almacen), id, """
 				{"vin":"3vwfe21c04m000009","modelo":"Jetta","version":"GLI","anio":2025,"color":"Rojo",
+				"precio":409900.50,
 				"estatus":"NO_DISPONIBLE"}
 				""")).andExpect(status().isOk()).andExpect(jsonPath("$.vin").value("3VWFE21C04M000009"))
 				.andExpect(jsonPath("$.version").value("GLI")).andExpect(jsonPath("$.anio").value(2025))
-				.andExpect(jsonPath("$.estatus").value("NO_DISPONIBLE"));
+				.andExpect(jsonPath("$.estatus").value("NO_DISPONIBLE"))
+				.andExpect(jsonPath("$.precio").value(409900.50));
 
 		mockMvc.perform(conToken(get(URL + "/{id}", id), token(almacen))).andExpect(jsonPath("$.color").value("Rojo"));
 	}
@@ -323,13 +340,14 @@ class VehiculosIntegrationTest extends AbstractIntegrationTest {
 
 	private static String cuerpo(String vin) {
 		return """
-				{"vin":"%s","modelo":"Jetta","version":"Comfortline","anio":2026,"color":"Blanco"}
+				{"vin":"%s","modelo":"Jetta","version":"Comfortline","anio":2026,"color":"Blanco","precio":389900.00}
 				""".formatted(vin);
 	}
 
 	private static String cuerpoConEstatus(String vin, String estatus) {
 		return """
-				{"vin":"%s","modelo":"Jetta","version":"Comfortline","anio":2026,"color":"Blanco","estatus":"%s"}
+				{"vin":"%s","modelo":"Jetta","version":"Comfortline","anio":2026,"color":"Blanco","precio":389900.00,
+				"estatus":"%s"}
 				""".formatted(vin, estatus);
 	}
 

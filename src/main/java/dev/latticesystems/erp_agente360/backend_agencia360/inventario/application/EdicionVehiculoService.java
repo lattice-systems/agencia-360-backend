@@ -39,7 +39,8 @@ public class EdicionVehiculoService {
 		if (vehiculoRepository.existsByVinAndIdNot(vin, id)) {
 			throw new ConflictoException("Ya existe un vehículo con el VIN " + vin);
 		}
-		vehiculo.editar(vin, datos.modelo(), datos.version(), datos.anio(), datos.color(), datos.estatus());
+		vehiculo.editar(vin, datos.modelo(), datos.version(), datos.anio(), datos.color(), datos.precio(),
+				datos.estatus());
 		return VehiculoVista.de(vehiculo);
 	}
 }

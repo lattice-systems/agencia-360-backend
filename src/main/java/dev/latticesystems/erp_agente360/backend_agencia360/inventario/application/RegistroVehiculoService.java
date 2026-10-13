@@ -46,7 +46,7 @@ public class RegistroVehiculoService {
 	@Transactional
 	public VehiculoVista registrar(NuevoVehiculo nuevo, UsuarioAutenticado responsable) {
 		Vehiculo vehiculo = Vehiculo.registrar(nuevo.vin(), nuevo.modelo(), nuevo.version(), nuevo.anio(),
-				nuevo.color(), nuevo.estatus());
+				nuevo.color(), nuevo.precio(), nuevo.estatus());
 		if (vehiculoRepository.existsByVin(vehiculo.getVin())) {
 			throw new ConflictoException("Ya existe un vehículo con el VIN " + vehiculo.getVin());
 		}

@@ -9,6 +9,7 @@ import dev.latticesystems.erp_agente360.backend_agencia360.inventario.domain.Veh
 import dev.latticesystems.erp_agente360.backend_agencia360.inventario.infrastructure.VehiculoRepository;
 import dev.latticesystems.erp_agente360.backend_agencia360.shared.exception.ConflictoException;
 import dev.latticesystems.erp_agente360.backend_agencia360.shared.exception.RecursoNoEncontradoException;
+import java.math.BigDecimal;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -18,6 +19,8 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 @ExtendWith(MockitoExtension.class)
 class EdicionVehiculoServiceTest {
+
+	private static final BigDecimal PRECIO = new BigDecimal("389900.00");
 
 	@Mock
 	private VehiculoRepository vehiculoRepository;
@@ -31,11 +34,12 @@ class EdicionVehiculoServiceTest {
 
 	@Test
 	void corrigeLosDatosDeLaUnidad() {
-		Vehiculo vehiculo = Vehiculo.registrar("3VWFE21C04M000001", "Jetta", "Comfortline", 2026, "Blanco", null);
+		Vehiculo vehiculo = Vehiculo.registrar("3VWFE21C04M000001", "Jetta", "Comfortline", 2026, "Blanco", PRECIO,
+				null);
 		when(vehiculoRepository.findById(1L)).thenReturn(Optional.of(vehiculo));
 
-		VehiculoVista vista = service.editar(1L,
-				new VehiculoEditado("3vwfe21c04m000009", "Jetta", "GLI", 2026, "Rojo", EstatusVehiculo.NO_DISPONIBLE));
+		VehiculoVista vista = service.editar(1L, new VehiculoEditado("3vwfe21c04m000009", "Jetta", "GLI", 2026, "Rojo",
+				PRECIO, EstatusVehiculo.NO_DISPONIBLE));
 
 		assertThat(vista.vin()).isEqualTo("3VWFE21C04M000009");
 		assertThat(vista.version()).isEqualTo("GLI");
@@ -45,12 +49,13 @@ class EdicionVehiculoServiceTest {
 
 	@Test
 	void rechazaUnVinQueYaTieneOtraUnidadSinTocarLaUnidad() {
-		Vehiculo vehiculo = Vehiculo.registrar("3VWFE21C04M000001", "Jetta", "Comfortline", 2026, "Blanco", null);
+		Vehiculo vehiculo = Vehiculo.registrar("3VWFE21C04M000001", "Jetta", "Comfortline", 2026, "Blanco", PRECIO,
+				null);
 		when(vehiculoRepository.findById(1L)).thenReturn(Optional.of(vehiculo));
 		when(vehiculoRepository.existsByVinAndIdNot("3VWFE21C04M000002", 1L)).thenReturn(true);
 
 		assertThatThrownBy(() -> service.editar(1L,
-				new VehiculoEditado("3VWFE21C04M000002", "Jetta", "Comfortline", 2026, "Rojo", null)))
+				new VehiculoEditado("3VWFE21C04M000002", "Jetta", "Comfortline", 2026, "Rojo", PRECIO, null)))
 				.isInstanceOf(ConflictoException.class)
 				.hasMessage("Ya existe un vehículo con el VIN 3VWFE21C04M000002");
 		assertThat(vehiculo.getVin()).isEqualTo("3VWFE21C04M000001");
@@ -62,7 +67,7 @@ class EdicionVehiculoServiceTest {
 		when(vehiculoRepository.findById(99L)).thenReturn(Optional.empty());
 
 		assertThatThrownBy(() -> service.editar(99L,
-				new VehiculoEditado("3VWFE21C04M000001", "Jetta", "Comfortline", 2026, "Blanco", null)))
+				new VehiculoEditado("3VWFE21C04M000001", "Jetta", "Comfortline", 2026, "Blanco", PRECIO, null)))
 				.isInstanceOf(RecursoNoEncontradoException.class).hasMessage("No existe el vehículo 99");
 	}
 }

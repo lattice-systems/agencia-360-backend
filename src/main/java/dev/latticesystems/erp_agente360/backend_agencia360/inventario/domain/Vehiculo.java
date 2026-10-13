@@ -9,6 +9,7 @@ import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
+import java.math.BigDecimal;
 import java.util.Locale;
 import java.util.Set;
 import java.util.regex.Pattern;
@@ -16,10 +17,6 @@ import java.util.regex.Pattern;
 /**
  * Unidad del inventario (ERP-2.0). Los vehículos se registran uno por uno y se
  * identifican por su VIN, que no se repite.
- *
- * <p>
- * No guarda precio: varía mucho mes con mes (decisión del PO del 13 de
- * octubre); el precio se fija en la venta.
  */
 @Entity
 @Table(name = "vehiculo")
@@ -56,6 +53,9 @@ public class Vehiculo extends Auditable {
 	@Column(nullable = false, length = 40)
 	private String color;
 
+	@Column(nullable = false, precision = 12, scale = 2)
+	private BigDecimal precio;
+
 	@Enumerated(EnumType.STRING)
 	@Column(nullable = false, length = 20)
 	private EstatusVehiculo estatus;
@@ -64,12 +64,14 @@ public class Vehiculo extends Auditable {
 		// Requerido por JPA
 	}
 
-	private Vehiculo(String vin, String modelo, String version, int anio, String color, EstatusVehiculo estatus) {
+	private Vehiculo(String vin, String modelo, String version, int anio, String color, BigDecimal precio,
+			EstatusVehiculo estatus) {
 		this.vin = vin;
 		this.modelo = modelo;
 		this.version = version;
 		this.anio = anio;
 		this.color = color;
+		this.precio = precio;
 		this.estatus = estatus;
 	}
 
@@ -81,10 +83,11 @@ public class Vehiculo extends Auditable {
 	 *            Disponible o No disponible; {@code null} para Disponible
 	 * @throws IllegalArgumentException
 	 *             si falta un dato, el VIN no tiene el formato del estándar, el año
-	 *             es menor a 1900 o el estatus no es de entrada
+	 *             es menor a 1900, el precio no es mayor a cero o el estatus no es
+	 *             de entrada
 	 */
 	public static Vehiculo registrar(String vin, String modelo, String version, int anio, String color,
-			EstatusVehiculo estatus) {
+			BigDecimal precio, EstatusVehiculo estatus) {
 		String vinLimpio = normalizarVin(vin);
 		validarAnio(anio);
 		EstatusVehiculo estatusDeEntrada = estatus == null ? EstatusVehiculo.DISPONIBLE : estatus;
@@ -93,7 +96,7 @@ public class Vehiculo extends Auditable {
 		}
 		return new Vehiculo(vinLimpio, Texto.obligatorio(modelo, "El modelo es obligatorio"),
 				Texto.obligatorio(version, "La versión es obligatoria"), anio,
-				Texto.obligatorio(color, "El color es obligatorio"), estatusDeEntrada);
+				Texto.obligatorio(color, "El color es obligatorio"), Montos.mayorACero(precio), estatusDeEntrada);
 	}
 
 	/**
@@ -110,12 +113,14 @@ public class Vehiculo extends Auditable {
 	 *             si un dato no es válido o el cambio de estatus no le toca a
 	 *             Inventario
 	 */
-	public void editar(String vin, String modelo, String version, int anio, String color, EstatusVehiculo estatus) {
+	public void editar(String vin, String modelo, String version, int anio, String color, BigDecimal precio,
+			EstatusVehiculo estatus) {
 		String vinLimpio = normalizarVin(vin);
 		validarAnio(anio);
 		String modeloLimpio = Texto.obligatorio(modelo, "El modelo es obligatorio");
 		String versionLimpia = Texto.obligatorio(version, "La versión es obligatoria");
 		String colorLimpio = Texto.obligatorio(color, "El color es obligatorio");
+		BigDecimal precioValido = Montos.mayorACero(precio);
 		EstatusVehiculo nuevoEstatus = estatus == null ? this.estatus : estatus;
 		if (nuevoEstatus != this.estatus
 				&& !(ESTATUS_DE_ENTRADA.contains(this.estatus) && ESTATUS_DE_ENTRADA.contains(nuevoEstatus))) {
@@ -126,6 +131,7 @@ public class Vehiculo extends Auditable {
 		this.version = versionLimpia;
 		this.anio = anio;
 		this.color = colorLimpio;
+		this.precio = precioValido;
 		this.estatus = nuevoEstatus;
 	}
 
@@ -172,6 +178,10 @@ public class Vehiculo extends Auditable {
 
 	public String getColor() {
 		return color;
+	}
+
+	public BigDecimal getPrecio() {
+		return precio;
 	}
 
 	public EstatusVehiculo getEstatus() {
