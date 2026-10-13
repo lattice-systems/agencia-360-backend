@@ -1,8 +1,10 @@
 package dev.latticesystems.erp_agente360.backend_agencia360.inventario;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -169,6 +171,49 @@ class RefaccionesIntegrationTest extends AbstractIntegrationTest {
 		mockMvc.perform(conToken(get(URL + "/{id}", 999_999), token(almacen))).andExpect(status().isNotFound());
 	}
 
+	@Test
+	void inventarioCorrigeLosDatosSinTocarLaExistencia() throws Exception {
+		Usuario almacen = registrar("almacen1", Role.INVENTARIO);
+		long id = altaDe(almacen, "FIL-ACE-01");
+		mockMvc.perform(conToken(post(URL + "/{id}/recepciones", id), token(almacen))
+				.contentType(MediaType.APPLICATION_JSON).content("{\"cantidad\":7,\"proveedor\":\"Bajío\"}"))
+				.andExpect(status().isCreated());
+
+		mockMvc.perform(edicion(token(almacen), id, """
+				{"codigo":"fil-ace-02","descripcion":"Filtro sintético","costo":190.00,"precio":350.00,
+				"existencia":999,"minimo":3}
+				""")).andExpect(status().isOk()).andExpect(jsonPath("$.codigo").value("FIL-ACE-02"))
+				.andExpect(jsonPath("$.descripcion").value("Filtro sintético")).andExpect(jsonPath("$.minimo").value(3))
+				.andExpect(jsonPath("$.existencia").value(7));
+	}
+
+	@Test
+	void editarConElCodigoDeOtraRefaccionResponde409() throws Exception {
+		Usuario almacen = registrar("almacen1", Role.INVENTARIO);
+		altaDe(almacen, "FIL-ACE-01");
+		long id = altaDe(almacen, "BAL-DEL-01");
+
+		mockMvc.perform(edicion(token(almacen), id, cuerpo("fil-ace-01"))).andExpect(status().isConflict())
+				.andExpect(jsonPath("$.message").value("Ya existe una refacción con el código FIL-ACE-01"));
+	}
+
+	@Test
+	void soloInventarioEditaYNadaSeElimina() throws Exception {
+		Usuario almacen = registrar("almacen1", Role.INVENTARIO);
+		Usuario refacciones = registrar("refacciones1", Role.REFACCIONES);
+		long id = altaDe(almacen, "FIL-ACE-01");
+
+		mockMvc.perform(edicion(token(refacciones), id, cuerpo("FIL-ACE-01"))).andExpect(status().isForbidden());
+		mockMvc.perform(conToken(delete(URL + "/{id}", id), token(almacen))).andExpect(status().isMethodNotAllowed());
+	}
+
+	@Test
+	void editarUnaRefaccionQueNoExisteResponde404() throws Exception {
+		Usuario almacen = registrar("almacen1", Role.INVENTARIO);
+
+		mockMvc.perform(edicion(token(almacen), 999_999, cuerpo("FIL-ACE-01"))).andExpect(status().isNotFound());
+	}
+
 	private Usuario registrar(String usuario, Role rol) {
 		Rol encontrado = rolRepository.findByNombre(rol.name()).orElseThrow();
 		return usuarioRepository.save(new Usuario(usuario, "hash-de-prueba", "Persona " + usuario, encontrado));
@@ -195,6 +240,10 @@ class RefaccionesIntegrationTest extends AbstractIntegrationTest {
 
 	private static MockHttpServletRequestBuilder alta(String token, String cuerpo) {
 		return conToken(post(URL), token).contentType(MediaType.APPLICATION_JSON).content(cuerpo);
+	}
+
+	private static MockHttpServletRequestBuilder edicion(String token, long id, String cuerpo) {
+		return conToken(put(URL + "/{id}", id), token).contentType(MediaType.APPLICATION_JSON).content(cuerpo);
 	}
 
 	private static MockHttpServletRequestBuilder conToken(MockHttpServletRequestBuilder peticion, String token) {

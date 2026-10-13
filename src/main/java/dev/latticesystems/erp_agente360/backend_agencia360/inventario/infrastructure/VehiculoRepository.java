@@ -12,6 +12,8 @@ public interface VehiculoRepository extends JpaRepository<Vehiculo, Long> {
 	/** El VIN se guarda en mayúsculas; se debe buscar igual. */
 	boolean existsByVin(String vin);
 
+	boolean existsByVinAndIdNot(String vin, Long id);
+
 	List<Vehiculo> findAllByOrderByCreatedAtDescIdDesc();
 
 	List<Vehiculo> findByEstatusOrderByCreatedAtDescIdDesc(EstatusVehiculo estatus);

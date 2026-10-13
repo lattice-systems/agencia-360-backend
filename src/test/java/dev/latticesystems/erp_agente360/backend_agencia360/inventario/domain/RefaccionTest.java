@@ -129,6 +129,32 @@ class RefaccionTest {
 		assertThat(refaccion.getExistencia()).isEqualTo(Integer.MAX_VALUE);
 	}
 
+	@Test
+	void seEditanSusDatosSinTocarLaExistencia() {
+		Refaccion refaccion = Refaccion.registrar("FIL-ACE-01", "Filtro de aceite", COSTO, PRECIO, 5);
+		refaccion.recibir(recepcion(7), RESPONSABLE, AHORA);
+
+		refaccion.editar(" fil-ace-02 ", " Filtro de aceite sintético ", new BigDecimal("190.00"),
+				new BigDecimal("350.00"), 3);
+
+		assertThat(refaccion.getCodigo()).isEqualTo("FIL-ACE-02");
+		assertThat(refaccion.getDescripcion()).isEqualTo("Filtro de aceite sintético");
+		assertThat(refaccion.getCosto()).isEqualByComparingTo("190.00");
+		assertThat(refaccion.getPrecio()).isEqualByComparingTo("350.00");
+		assertThat(refaccion.getMinimo()).isEqualTo(3);
+		assertThat(refaccion.getExistencia()).isEqualTo(7);
+	}
+
+	@Test
+	void unaEdicionInvalidaNoCambiaNada() {
+		Refaccion refaccion = Refaccion.registrar("FIL-ACE-01", "Filtro de aceite", COSTO, PRECIO, 5);
+
+		assertThatThrownBy(() -> refaccion.editar("FIL-ACE-02", "Otra", COSTO, BigDecimal.ZERO, 5))
+				.isInstanceOf(IllegalArgumentException.class).hasMessage("El precio debe ser mayor a cero");
+		assertThat(refaccion.getCodigo()).isEqualTo("FIL-ACE-01");
+		assertThat(refaccion.getDescripcion()).isEqualTo("Filtro de aceite");
+	}
+
 	private static Recepcion recepcion(int cantidad) {
 		return new Recepcion(cantidad, "Refacciones del Bajío", null, null);
 	}
