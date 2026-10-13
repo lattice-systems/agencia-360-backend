@@ -1,7 +1,7 @@
 package dev.latticesystems.erp_agente360.backend_agencia360.ventascrm.web;
 
 import dev.latticesystems.erp_agente360.backend_agencia360.shared.security.UsuarioAutenticado;
-import dev.latticesystems.erp_agente360.backend_agencia360.ventascrm.application.ProspectoVista;
+import dev.latticesystems.erp_agente360.backend_agencia360.ventascrm.application.ProspectoRegistrado;
 import dev.latticesystems.erp_agente360.backend_agencia360.ventascrm.application.RegistroProspectoService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -30,11 +30,12 @@ public class RegistroProspectoController {
 	@PostMapping
 	@PreAuthorize("hasRole('VENTAS')")
 	@Operation(summary = "Registrar un prospecto", description = "Lo crea en Primer contacto, a cargo del vendedor "
-			+ "en sesión. Responde 400 si falta el nombre o faltan a la vez el teléfono y el correo, y 409 si el "
-			+ "teléfono o el correo ya existen.")
-	public ResponseEntity<ProspectoVista> registrar(@Valid @RequestBody RegistrarProspectoRequest request,
+			+ "en sesión. Responde 400 si falta el nombre, si faltan a la vez el teléfono y el correo, o si el "
+			+ "teléfono no es de 10 dígitos. Si el teléfono o el correo ya existen lo registra de todos modos y "
+			+ "responde contactoRepetido = true.")
+	public ResponseEntity<ProspectoRegistrado> registrar(@Valid @RequestBody RegistrarProspectoRequest request,
 			@AuthenticationPrincipal UsuarioAutenticado actor) {
-		ProspectoVista creado = registroProspectoService.registrar(request.comoNuevoProspecto(), actor);
-		return ResponseEntity.created(URI.create("/api/v1/prospectos/" + creado.id())).body(creado);
+		ProspectoRegistrado creado = registroProspectoService.registrar(request.comoNuevoProspecto(), actor);
+		return ResponseEntity.created(URI.create("/api/v1/prospectos/" + creado.prospecto().id())).body(creado);
 	}
 }

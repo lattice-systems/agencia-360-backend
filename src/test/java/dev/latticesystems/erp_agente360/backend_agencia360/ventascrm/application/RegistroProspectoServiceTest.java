@@ -3,11 +3,11 @@ package dev.latticesystems.erp_agente360.backend_agencia360.ventascrm.applicatio
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import dev.latticesystems.erp_agente360.backend_agencia360.shared.exception.ConflictoException;
 import dev.latticesystems.erp_agente360.backend_agencia360.shared.security.Role;
 import dev.latticesystems.erp_agente360.backend_agencia360.shared.security.UsuarioAutenticado;
 import dev.latticesystems.erp_agente360.backend_agencia360.ventascrm.domain.Etapa;
@@ -21,6 +21,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
+import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
@@ -42,13 +43,15 @@ class RegistroProspectoServiceTest {
 
 	@Test
 	void registraAlProspectoAsignadoAlVendedorEnSesion() {
-		when(prospectoRepository.save(any(Prospecto.class))).thenAnswer(invocation -> invocation.getArgument(0));
+		guardarSinCambios();
 
-		ProspectoVista creado = service.registrar(new NuevoProspecto("Ana López", "4771234567", null), VENDEDOR);
+		ProspectoRegistrado resultado = service.registrar(new NuevoProspecto("Ana López", "4771234567", null),
+				VENDEDOR);
 
-		assertThat(creado.nombre()).isEqualTo("Ana López");
-		assertThat(creado.etapa()).isEqualTo(Etapa.PRIMER_CONTACTO);
-		assertThat(creado.vendedorId()).isEqualTo(7L);
+		assertThat(resultado.prospecto().nombre()).isEqualTo("Ana López");
+		assertThat(resultado.prospecto().etapa()).isEqualTo(Etapa.PRIMER_CONTACTO);
+		assertThat(resultado.prospecto().vendedorId()).isEqualTo(7L);
+		assertThat(resultado.contactoRepetido()).isFalse();
 		ArgumentCaptor<Prospecto> guardado = ArgumentCaptor.forClass(Prospecto.class);
 		verify(prospectoRepository).save(guardado.capture());
 		assertThat(guardado.getValue().getHistorial()).singleElement()
@@ -56,26 +59,42 @@ class RegistroProspectoServiceTest {
 	}
 
 	@Test
-	void rechazaUnTelefonoQueYaExiste() {
+	void registraAunqueElTelefonoYaExistaYLoAvisa() {
 		when(prospectoRepository.existsByTelefono("4771234567")).thenReturn(true);
+		guardarSinCambios();
 
-		assertThatThrownBy(() -> service.registrar(new NuevoProspecto("Ana López", "4771234567", null), VENDEDOR))
-				.isInstanceOf(ConflictoException.class).hasMessage("Ya existe un prospecto con ese teléfono o correo");
-		verify(prospectoRepository, never()).save(any());
+		ProspectoRegistrado resultado = service.registrar(new NuevoProspecto("Ana López", "4771234567", null),
+				VENDEDOR);
+
+		assertThat(resultado.contactoRepetido()).isTrue();
+		verify(prospectoRepository).save(any(Prospecto.class));
 	}
 
 	@Test
-	void rechazaUnCorreoQueYaExisteSinImportarMayusculas() {
+	void registraAunqueElCorreoYaExistaSinImportarMayusculasYLoAvisa() {
 		when(prospectoRepository.existsByCorreo("ana@ejemplo.com")).thenReturn(true);
+		guardarSinCambios();
 
-		assertThatThrownBy(() -> service.registrar(new NuevoProspecto("Ana López", null, "ANA@ejemplo.com"), VENDEDOR))
-				.isInstanceOf(ConflictoException.class);
-		verify(prospectoRepository, never()).save(any());
+		ProspectoRegistrado resultado = service.registrar(new NuevoProspecto("Ana López", null, "ANA@ejemplo.com"),
+				VENDEDOR);
+
+		assertThat(resultado.contactoRepetido()).isTrue();
 	}
 
 	@Test
-	void noBuscaDuplicadosDeUnDatoQueNoSeCapturo() {
-		when(prospectoRepository.save(any(Prospecto.class))).thenAnswer(invocation -> invocation.getArgument(0));
+	void buscaRepetidosAntesDeGuardarParaNoEncontrarseASiMismo() {
+		guardarSinCambios();
+
+		service.registrar(new NuevoProspecto("Ana López", "4771234567", null), VENDEDOR);
+
+		InOrder orden = inOrder(prospectoRepository);
+		orden.verify(prospectoRepository).existsByTelefono("4771234567");
+		orden.verify(prospectoRepository).save(any(Prospecto.class));
+	}
+
+	@Test
+	void noBuscaRepetidosDeUnDatoQueNoSeCapturo() {
+		guardarSinCambios();
 
 		service.registrar(new NuevoProspecto("Ana López", "4771234567", null), VENDEDOR);
 
@@ -88,5 +107,9 @@ class RegistroProspectoServiceTest {
 				.isInstanceOf(IllegalArgumentException.class);
 		verify(prospectoRepository, never()).existsByTelefono(any());
 		verify(prospectoRepository, never()).save(any());
+	}
+
+	private void guardarSinCambios() {
+		when(prospectoRepository.save(any(Prospecto.class))).thenAnswer(invocation -> invocation.getArgument(0));
 	}
 }

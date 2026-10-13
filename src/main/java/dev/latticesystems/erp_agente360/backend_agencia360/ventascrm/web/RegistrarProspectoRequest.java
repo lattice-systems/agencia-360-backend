@@ -6,8 +6,9 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 
 /**
- * Alta de un prospecto. La regla "teléfono o correo" la valida el dominio. El
- * formato del teléfono todavía no está definido; solo se limita su longitud.
+ * Alta de un prospecto. El dominio valida que venga teléfono o correo y que el
+ * teléfono tenga 10 dígitos; aquí solo se limita el largo de lo capturado, que
+ * puede traer espacios o guiones.
  */
 public record RegistrarProspectoRequest(@NotBlank @Size(max = 120) String nombre, @Size(max = 20) String telefono,
 		@Email @Size(max = 120) String correo) {

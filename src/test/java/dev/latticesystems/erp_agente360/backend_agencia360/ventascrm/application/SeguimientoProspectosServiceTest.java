@@ -92,7 +92,7 @@ class SeguimientoProspectosServiceTest {
 		Prospecto ana = prospecto("Ana López", 7L);
 		when(prospectoRepository.findByIdAndVendedorId(1L, 7L)).thenReturn(Optional.of(ana));
 
-		ProspectoVista actualizado = service.cambiarEtapa(1L, Etapa.VISITA, VENDEDOR);
+		ProspectoVista actualizado = service.cambiarEtapa(1L, Etapa.VISITA, null, VENDEDOR);
 
 		assertThat(actualizado.etapa()).isEqualTo(Etapa.VISITA);
 		assertThat(ana.getHistorial()).last().satisfies(movimiento -> {
@@ -105,11 +105,30 @@ class SeguimientoProspectosServiceTest {
 	void unProspectoAjenoSeTrataComoInexistente() {
 		when(prospectoRepository.findByIdAndVendedorId(1L, 7L)).thenReturn(Optional.empty());
 
-		assertThatThrownBy(() -> service.cambiarEtapa(1L, Etapa.VISITA, VENDEDOR))
+		assertThatThrownBy(() -> service.cambiarEtapa(1L, Etapa.VISITA, null, VENDEDOR))
 				.isInstanceOf(RecursoNoEncontradoException.class).hasMessage("No existe el prospecto 1");
 	}
 
+	@Test
+	void unVendedorCierraSuProspectoConMotivo() {
+		Prospecto ana = prospecto("Ana López", 7L);
+		when(prospectoRepository.findByIdAndVendedorId(1L, 7L)).thenReturn(Optional.of(ana));
+
+		ProspectoVista cerrado = service.cambiarEtapa(1L, Etapa.CERRADO, "Compró en otra agencia", VENDEDOR);
+
+		assertThat(cerrado.etapa()).isEqualTo(Etapa.CERRADO);
+		assertThat(cerrado.motivoCierre()).isEqualTo("Compró en otra agencia");
+		assertThat(cerrado.ultimaEtapa()).isEqualTo(Etapa.PRIMER_CONTACTO);
+	}
+
+	@Test
+	void elGerenteDeMarketingNoCambiaEtapasAunqueVeaTodo() {
+		assertThatThrownBy(() -> service.cambiarEtapa(1L, Etapa.VISITA, null, GERENTE))
+				.isInstanceOf(AccessDeniedException.class);
+		verifyNoInteractions(prospectoRepository);
+	}
+
 	private static Prospecto prospecto(String nombre, Long vendedorId) {
-		return Prospecto.registrar(nombre, "477" + vendedorId, null, vendedorId, REGISTRO);
+		return Prospecto.registrar(nombre, "47700000%02d".formatted(vendedorId), null, vendedorId, REGISTRO);
 	}
 }
