@@ -247,7 +247,7 @@ La API lee su configuración de variables de entorno. Si no defines ninguna, usa
 | `DB_PASSWORD` | `agencia360` | Contraseña de la base de datos |
 | `REDIS_HOST` | `localhost` | Host de Redis |
 | `REDIS_PORT` | `6379` | Puerto de Redis |
-| `CORS_ALLOWED_ORIGINS` | `http://localhost:5173` | Origen del frontend que puede llamar a la API |
+| `CORS_ALLOWED_ORIGINS` | `http://localhost:5173`; con el perfil `dev`, también `http://localhost:5174` | Orígenes de los frontends que pueden llamar a la API, separados por comas |
 | `JWT_SECRET` | Valor de solo-desarrollo | Llave para firmar los JWT |
 | `JWT_EXPIRATION_MINUTES` | `60` | Duración del token |
 | `ADMIN_INICIAL_USUARIO` / `ADMIN_INICIAL_CONTRASENA` | Vacío | Si tienen valor, al arrancar se crea el primer Administrador (ERP) cuando todavía no existe |
@@ -261,35 +261,74 @@ Ejemplo, para apuntar a otro PostgreSQL sin tocar código:
 DB_URL=jdbc:postgresql://localhost:5433/agencia360 ./mvnw spring-boot:run -Dspring-boot.run.profiles=dev
 ```
 
-### 5.6 Usuarios de ejemplo
+### 5.6 Datos de ejemplo
 
-La base empieza sin usuarios. Para probar el ERP y el CRM en local, crea uno por rol:
+La base empieza vacía. Para probar el ERP y el CRM en local hay un juego de datos de ejemplo:
+- un usuario por rol;
+- 8 vehículos;
+- 8 refacciones con sus recepciones;
+- 12 prospectos repartidos en las 7 etapas.
+
+Qué contiene y qué demuestra cada dato está en [`docs/datos-de-ejemplo.md`](docs/datos-de-ejemplo.md).
+
+> **Solo para desarrollo local.** Estas contraseñas son públicas: nunca las uses en un ambiente real.
+
+**Cargar los datos**
 
 ```bash
-# 1. Levanta la API con el Administrador (ERP) y el Gerente de marketing (CRM) iniciales
+# 1. Levanta la base y la API con el Administrador (ERP) y el Gerente de marketing (CRM) iniciales
+docker compose up -d
 ADMIN_INICIAL_USUARIO=admin ADMIN_INICIAL_CONTRASENA=Admin12345 \
 GERENTE_INICIAL_USUARIO=gerente GERENTE_INICIAL_CONTRASENA=Gerente12345 \
 ./mvnw spring-boot:run -Dspring-boot.run.profiles=dev
 
-# 2. En otra terminal, crea los demás usuarios (se puede correr varias veces)
-./scripts/usuarios-de-ejemplo.sh
+# 2. En otra terminal, carga los datos
+./scripts/cargar-datos-de-ejemplo.sh
 ```
 
-> **Solo para desarrollo local.** Estas contraseñas son públicas: nunca las uses en un ambiente real.
+El script carga todo **por la API**, como lo haría una persona desde las pantallas: pasa por las mismas validaciones y permisos, y deja los movimientos de inventario y el historial de cada prospecto. Muestra qué creó y termina en `Listo.`.
+
+Se puede correr varias veces: lo que ya existe se deja igual y no se duplica. Si una carga se cortó a medias, al volver a correrlo agrega lo que faltó, incluidas las recepciones de una refacción que se quedó sin ellas.
+
+Solo necesita `bash` y `curl`; en Windows, corre en Git Bash. Para apuntar a otra API o usar otras contraseñas iniciales: `API=http://localhost:9090 ADMIN_CONTRASENA=... GERENTE_CONTRASENA=... ./scripts/cargar-datos-de-ejemplo.sh`.
+
+**Usuarios**
 
 | Usuario | Contraseña | Rol | Entra a | Para probar |
 |---|---|---|---|---|
-| `admin` | `Admin12345` | Administrador | ERP | Usuarios del ERP; consulta de vehículos y refacciones |
-| `gerente` | `Gerente12345` | Gerente de marketing | CRM | Usuarios del CRM; todos los prospectos y su reasignación |
+| `admin` | `Admin12345` | Administrador | ERP | Usuarios del ERP; consulta de vehículos y refacciones con el aviso de resurtir |
+| `gerente` | `Gerente12345` | Gerente de marketing | CRM | Usuarios del CRM; los 12 prospectos y su reasignación |
 | `inventario1` | `Inventario123` | Inventario | ERP | Alta, edición y consulta de vehículos y refacciones; recepciones |
-| `refacciones1` | `Refacciones123` | Refacciones | ERP | Consulta del stock y aviso de refacciones por resurtir |
+| `refacciones1` | `Refacciones123` | Refacciones | ERP | Consulta del stock, aviso de las 4 refacciones por resurtir e historial de recepciones |
 | `facturacion1` | `Facturacion123` | Facturación | ERP | Menú vacío por ahora (sus historias llegan después) |
 | `servicio1` | `Servicio123` | Servicio | ERP | Menú vacío por ahora |
 | `caja1` | `Caja12345` | Caja | ERP | Menú vacío por ahora |
 | `contabilidad1` | `Contabilidad123` | Contabilidad | ERP y CRM | Menú vacío por ahora |
-| `vendedor1`, `vendedor2` | `Vendedor123` | Ventas | CRM | Registro y seguimiento de sus prospectos; reasignación entre los dos |
+| `vendedor1` | `Vendedor123` | Ventas (Sergio Luna) | CRM | Sus 6 prospectos |
+| `vendedor2` | `Vendedor123` | Ventas (Elena Ríos) | CRM | Sus 6 prospectos, incluido uno que el Gerente le reasignó |
 
-Sin el script también se pueden crear desde la pantalla **Usuarios** del ERP (sesión de `admin`) o del CRM (sesión de `gerente`). Para borrar todo y empezar de cero: `docker compose down -v`.
+**Verificar que se cargaron**
+
+| Dónde | Con quién | Qué debe verse |
+|---|---|---|
+| ERP, Vehículos | `inventario1` o `admin` | 8 unidades: 6 disponibles y 2 no disponibles |
+| ERP, Refacciones | `refacciones1` o `admin` | 8 refacciones y el aviso "4 refacciones llegaron a su existencia mínima". En `REF-002`, el historial marca "Registrada después" |
+| CRM, Prospectos | `vendedor1` o `vendedor2` | 6 prospectos cada uno, solo los suyos |
+| CRM, Prospectos | `gerente` | Los 12, al menos uno en cada etapa |
+
+El CRM debe correr contra esta API y no contra su API simulada: crea su `.env.development.local` con `VITE_API_MOCK=false` (ver el README del CRM).
+
+**Limpiar los datos**
+
+```bash
+./scripts/limpiar-datos.sh        # pide confirmación; con --si no pregunta
+```
+
+- Borra usuarios, vehículos, refacciones, movimientos, prospectos y su historial de la base local del `docker-compose.yml`.
+- Conserva los roles y las migraciones, así que no hace falta volver a migrar.
+- Después reinicia la API para que vuelva a crear al Administrador y al Gerente iniciales, y vuelve a cargar con `./scripts/cargar-datos-de-ejemplo.sh`.
+
+Para borrar también el volumen de la base y empezar desde cero, incluidas las migraciones, usa `docker compose down -v`.
 
 ### 5.7 Comandos útiles
 
@@ -310,8 +349,10 @@ Sin el script también se pueden crear desde la pantalla **Usuarios** del ERP (s
 | La API arranca pero `/actuator/health` responde `{"status":"DOWN"}` (HTTP 503) | Redis no está corriendo: la API no lo necesita para arrancar, pero el health check lo revisa | `docker compose up -d redis` |
 | La API no arranca por un error de Flyway (`Validate failed`, `checksum mismatch`) | Se editó una migración que ya se había aplicado en tu base local | No edites migraciones ya integradas a `main`: crea una nueva. Si solo fue en tu máquina, reinicia la base con `docker compose down -v && docker compose up -d` |
 | La API no arranca con `Schema-validation: missing table` | Una entidad JPA no tiene su migración | Agrega la migración `V<n>__...sql` que crea esa tabla |
-| El login funciona, pero el ERP dice "No se pudo conectar con el servidor" | El navegador bloquea por CORS las peticiones con token: el frontend corre en un origen que no está en `CORS_ALLOWED_ORIGINS` (por ejemplo `5174`, si el CRM ya ocupa el `5173`) | Agrega el origen: `CORS_ALLOWED_ORIGINS=http://localhost:5173,http://localhost:5174` |
-| `./scripts/usuarios-de-ejemplo.sh` dice "No se pudo iniciar sesión" | La API se levantó sin las variables `ADMIN_INICIAL_*` y `GERENTE_INICIAL_*`, o con otras contraseñas | Levántala como en la sección 5.6, o pásale las tuyas: `ADMIN_CONTRASENA=... GERENTE_CONTRASENA=... ./scripts/usuarios-de-ejemplo.sh` |
+| El ERP dice "No se pudo conectar con el servidor" o el CRM "Ocurrió un error inesperado" al iniciar sesión | CORS: el frontend corre en un origen que no está permitido. Con el perfil `dev` se permiten `5173` y `5174`, el par que usa Vite al levantar el ERP y el CRM a la vez | Revisa en qué puerto quedó el frontend. Si es otro, o si no usas el perfil `dev`, agrégalo: `CORS_ALLOWED_ORIGINS=http://localhost:5173,http://localhost:5175` |
+| `./scripts/cargar-datos-de-ejemplo.sh` dice "No se pudo iniciar sesión" | La API se levantó sin las variables `ADMIN_INICIAL_*` y `GERENTE_INICIAL_*`, o con otras contraseñas. También pasa después de `./scripts/limpiar-datos.sh` si no reiniciaste la API | Reiníciala como en la sección 5.6, o pásale tus contraseñas: `ADMIN_CONTRASENA=... GERENTE_CONTRASENA=... ./scripts/cargar-datos-de-ejemplo.sh` |
+| `./scripts/cargar-datos-de-ejemplo.sh` dice "No hubo respuesta de la API" | La API no está corriendo o está en otro puerto | Levántala, o indica dónde está: `API=http://localhost:9090 ./scripts/cargar-datos-de-ejemplo.sh` |
+| `./scripts/limpiar-datos.sh` dice `service "postgres" is not running` | Los contenedores están detenidos | `docker compose up -d` |
 
 ## 6. Estrategia de pruebas (backend)
 
@@ -339,7 +380,8 @@ Para ver la cobertura sin tocar el `pom.xml`:
 
 - `docs/TEC-1_modelo-datos_v1.md` y `docs/diagramas/agencia360-modelo-datos-v1.drawio`: modelo de datos v1.
 - `docs/api/`: contrato OpenAPI de la app CareCar (YAML y PDF).
-- `scripts/usuarios-de-ejemplo.sh`: crea los usuarios de ejemplo de la sección 5.6.
+- `docs/datos-de-ejemplo.md`: los datos de ejemplo de TEC-3 y qué demuestra cada uno.
+- `scripts/cargar-datos-de-ejemplo.sh` y `scripts/limpiar-datos.sh`: cargan y limpian esos datos (sección 5.6).
 - `docs/convenciones-commits.md`: formato de commits (Conventional Commits), scopes por módulo y nombres de rama.
 - `docs/workflows-ci-cd.md`: qué hace cada GitHub Action (CI, lint, seguridad, publicación) y cómo lintear el código en local antes de subirlo.
 - La documentación de referencia del equipo vive en **Azure DevOps Wiki** (fuera de este repo).
