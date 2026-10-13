@@ -135,14 +135,50 @@ class VehiculosIntegrationTest extends AbstractIntegrationTest {
 	}
 
 	@Test
-	void otrosRolesNoDanDeAltaNiConsultanVehiculos() throws Exception {
+	void soloInventarioDaDeAltaUnidades() throws Exception {
 		Usuario vendedor = registrar("vendedor1", Role.VENTAS);
-		Usuario cajero = registrar("caja1", Role.CAJA);
+		Usuario administrador = registrar("admin1", Role.ADMINISTRADOR);
 
 		mockMvc.perform(alta(token(vendedor), cuerpo("3VWFE21C04M000001"))).andExpect(status().isForbidden());
-		mockMvc.perform(conToken(get(URL), token(cajero))).andExpect(status().isForbidden());
+		mockMvc.perform(alta(token(administrador), cuerpo("3VWFE21C04M000001"))).andExpect(status().isForbidden());
 	}
 
+	@Test
+	void otrosRolesNoConsultanUnidades() throws Exception {
+		Usuario cajero = registrar("caja1", Role.CAJA);
+		Usuario refacciones = registrar("refacciones1", Role.REFACCIONES);
+
+		mockMvc.perform(conToken(get(URL), token(cajero))).andExpect(status().isForbidden());
+		mockMvc.perform(conToken(get(URL), token(refacciones))).andExpect(status().isForbidden());
+	}
+
+	@Test
+	void elAdministradorVeTodasLasUnidades() throws Exception {
+		Usuario almacen = registrar("almacen1", Role.INVENTARIO);
+		Usuario administrador = registrar("admin1", Role.ADMINISTRADOR);
+		altaDe(almacen, "3VWFE21C04M000001");
+		long noDisponible = altaNoDisponible(almacen, "3VWFE21C04M000002");
+
+		mockMvc.perform(conToken(get(URL), token(administrador))).andExpect(status().isOk())
+				.andExpect(jsonPath("$.length()").value(2));
+		mockMvc.perform(conToken(get(URL + "/{id}", noDisponible), token(administrador))).andExpect(status().isOk())
+				.andExpect(jsonPath("$.estatus").value("NO_DISPONIBLE"));
+	}
+
+	@Test
+	void ventasSoloVeLasUnidadesDisponibles() throws Exception {
+		Usuario almacen = registrar("almacen1", Role.INVENTARIO);
+		Usuario vendedor = registrar("vendedor1", Role.VENTAS);
+		long disponible = altaDe(almacen, "3VWFE21C04M000001");
+		long noDisponible = altaNoDisponible(almacen, "3VWFE21C04M000002");
+
+		mockMvc.perform(conToken(get(URL), token(vendedor))).andExpect(status().isOk())
+				.andExpect(jsonPath("$.length()").value(1)).andExpect(jsonPath("$[0].id").value(disponible));
+		mockMvc.perform(conToken(get(URL).param("estatus", "NO_DISPONIBLE"), token(vendedor)))
+				.andExpect(status().isOk()).andExpect(jsonPath("$.length()").value(0));
+		mockMvc.perform(conToken(get(URL + "/{id}", disponible), token(vendedor))).andExpect(status().isOk());
+		mockMvc.perform(conToken(get(URL + "/{id}", noDisponible), token(vendedor))).andExpect(status().isNotFound());
+	}
 	@Test
 	void listaLasUnidadesDeLaMasRecienteALaMasAntigua() throws Exception {
 		Usuario almacen = registrar("almacen1", Role.INVENTARIO);
@@ -206,6 +242,12 @@ class VehiculosIntegrationTest extends AbstractIntegrationTest {
 	private long altaDe(Usuario usuario, String vin) throws Exception {
 		String respuesta = mockMvc.perform(alta(token(usuario), cuerpo(vin))).andExpect(status().isCreated())
 				.andReturn().getResponse().getContentAsString();
+		return ((Number) JsonPath.read(respuesta, "$.id")).longValue();
+	}
+
+	private long altaNoDisponible(Usuario usuario, String vin) throws Exception {
+		String respuesta = mockMvc.perform(alta(token(usuario), cuerpoConEstatus(vin, "NO_DISPONIBLE")))
+				.andExpect(status().isCreated()).andReturn().getResponse().getContentAsString();
 		return ((Number) JsonPath.read(respuesta, "$.id")).longValue();
 	}
 

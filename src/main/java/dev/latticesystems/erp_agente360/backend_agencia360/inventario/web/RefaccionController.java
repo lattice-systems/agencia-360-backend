@@ -17,10 +17,12 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-/** Alta y consulta de refacciones del inventario (ERP-2.0). Solo Inventario. */
+/**
+ * Alta y consulta de refacciones del inventario (ERP-2.0). Solo Inventario da
+ * de alta; Refacciones y Administrador solo consultan.
+ */
 @RestController
 @RequestMapping("/api/v1/refacciones")
-@PreAuthorize("hasRole('INVENTARIO')")
 @Tag(name = "Refacciones", description = "Alta y consulta de las refacciones del inventario")
 public class RefaccionController {
 
@@ -34,6 +36,7 @@ public class RefaccionController {
 	}
 
 	@PostMapping
+	@PreAuthorize("hasRole('INVENTARIO')")
 	@Operation(summary = "Dar de alta una refacción", description = "Entra con existencia cero; la existencia "
 			+ "crece con las recepciones. Responde 400 si faltan datos, el costo es negativo, el precio no es mayor a "
 			+ "cero o el mínimo es negativo, y 409 si el código ya existe.")
@@ -43,12 +46,14 @@ public class RefaccionController {
 	}
 
 	@GetMapping
+	@PreAuthorize("hasAnyRole('INVENTARIO', 'REFACCIONES', 'ADMINISTRADOR')")
 	@Operation(summary = "Listar refacciones", description = "Ordenadas por código.")
 	public List<RefaccionVista> listar() {
 		return consultaRefaccionesService.listar();
 	}
 
 	@GetMapping("/{id}")
+	@PreAuthorize("hasAnyRole('INVENTARIO', 'REFACCIONES', 'ADMINISTRADOR')")
 	@Operation(summary = "Consultar una refacción", description = "Responde 404 si no existe.")
 	public RefaccionVista obtener(@PathVariable Long id) {
 		return consultaRefaccionesService.obtener(id);
