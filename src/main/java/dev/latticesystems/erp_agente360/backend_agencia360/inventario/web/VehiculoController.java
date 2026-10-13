@@ -47,8 +47,8 @@ public class VehiculoController {
 	@PreAuthorize("hasRole('INVENTARIO')")
 	@Operation(summary = "Dar de alta una unidad", description = "Entra como Disponible, o como No disponible si "
 			+ "se indica (daños u otros motivos), y deja su entrada al inventario a cargo del usuario en sesión. Responde "
-			+ "400 si faltan datos, el VIN no tiene 17 caracteres (sin I, O ni Q), el año es menor a 1900 o el estatus no "
-			+ "es de entrada, y 409 si el VIN ya existe.")
+			+ "400 si faltan datos, el VIN no tiene 17 caracteres (sin I, O ni Q), el año es menor a 1900, el precio no es "
+			+ "mayor a cero o el estatus no es de entrada, y 409 si el VIN ya existe.")
 	public ResponseEntity<VehiculoVista> registrar(@Valid @RequestBody RegistrarVehiculoRequest request,
 			@AuthenticationPrincipal UsuarioAutenticado actor) {
 		VehiculoVista creado = registroVehiculoService.registrar(request.comoNuevoVehiculo(), actor);

@@ -34,6 +34,8 @@ import org.springframework.transaction.annotation.Transactional;
 @Transactional
 class InventarioPersistenciaIntegrationTest extends AbstractIntegrationTest {
 
+	private static final BigDecimal PRECIO = new BigDecimal("389900.00");
+
 	private static final Instant AHORA = Instant.parse("2026-10-13T16:00:00Z");
 	private static final Instant AYER = Instant.parse("2026-10-12T15:30:00Z");
 
@@ -67,6 +69,7 @@ class InventarioPersistenciaIntegrationTest extends AbstractIntegrationTest {
 
 		Vehiculo guardado = vehiculoRepository.findById(vehiculo.getId()).orElseThrow();
 		assertThat(guardado.getVin()).isEqualTo("3VWFE21C04M000001");
+		assertThat(guardado.getPrecio()).isEqualByComparingTo("389900.00");
 		assertThat(guardado.getEstatus()).isEqualTo(EstatusVehiculo.DISPONIBLE);
 		assertThat(guardado.getCreatedAt()).isNotNull();
 		assertThat(movimientoRepository.findAll()).singleElement().satisfies(movimiento -> {
@@ -178,7 +181,7 @@ class InventarioPersistenciaIntegrationTest extends AbstractIntegrationTest {
 	}
 
 	private static Vehiculo vehiculo(String vin) {
-		return Vehiculo.registrar(vin, "Jetta", "Comfortline", 2026, "Blanco", null);
+		return Vehiculo.registrar(vin, "Jetta", "Comfortline", 2026, "Blanco", PRECIO, null);
 	}
 
 	private static Refaccion refaccion(String codigo) {

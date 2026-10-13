@@ -11,6 +11,7 @@ import dev.latticesystems.erp_agente360.backend_agencia360.inventario.infrastruc
 import dev.latticesystems.erp_agente360.backend_agencia360.shared.exception.RecursoNoEncontradoException;
 import dev.latticesystems.erp_agente360.backend_agencia360.shared.security.Role;
 import dev.latticesystems.erp_agente360.backend_agencia360.shared.security.UsuarioAutenticado;
+import java.math.BigDecimal;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
@@ -23,6 +24,8 @@ import org.springframework.security.access.AccessDeniedException;
 
 @ExtendWith(MockitoExtension.class)
 class ConsultaVehiculosServiceTest {
+
+	private static final BigDecimal PRECIO = new BigDecimal("389900.00");
 
 	private static final UsuarioAutenticado ALMACEN = actor(Role.INVENTARIO);
 	private static final UsuarioAutenticado ADMINISTRADOR = actor(Role.ADMINISTRADOR);
@@ -106,6 +109,6 @@ class ConsultaVehiculosServiceTest {
 	}
 
 	private static Vehiculo vehiculo(String vin) {
-		return Vehiculo.registrar(vin, "Jetta", "Comfortline", 2026, "Blanco", null);
+		return Vehiculo.registrar(vin, "Jetta", "Comfortline", 2026, "Blanco", PRECIO, null);
 	}
 }
