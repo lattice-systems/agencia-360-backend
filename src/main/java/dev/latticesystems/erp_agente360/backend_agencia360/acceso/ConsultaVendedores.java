@@ -7,8 +7,7 @@ package dev.latticesystems.erp_agente360.backend_agencia360.acceso;
 public interface ConsultaVendedores {
 
 	/**
-	 * @return {@code true} si el usuario existe, está activo y tiene el rol
-	 *         VENTAS
+	 * @return {@code true} si el usuario existe, está activo y tiene el rol VENTAS
 	 */
 	boolean esVendedorActivo(Long usuarioId);
 }
