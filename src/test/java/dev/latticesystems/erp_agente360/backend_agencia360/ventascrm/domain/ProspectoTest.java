@@ -67,7 +67,7 @@ class ProspectoTest {
 	void cambiarDeEtapaRegistraElMovimientoConSuFechaYOrigen() {
 		Prospecto prospecto = Prospecto.registrar("Ana López", "4771234567", null, VENDEDOR, AHORA);
 
-		boolean cambio = prospecto.cambiarEtapa(Etapa.VISITA, OrigenCambio.CRM, DESPUES);
+		boolean cambio = prospecto.cambiarEtapa(Etapa.VISITA, null, OrigenCambio.CRM, DESPUES);
 
 		assertThat(cambio).isTrue();
 		assertThat(prospecto.getEtapa()).isEqualTo(Etapa.VISITA);
@@ -82,7 +82,7 @@ class ProspectoTest {
 	void aceptaCambiosQueVienenDelErp() {
 		Prospecto prospecto = Prospecto.registrar("Ana López", "4771234567", null, VENDEDOR, AHORA);
 
-		prospecto.cambiarEtapa(Etapa.FACTURACION, OrigenCambio.ERP, DESPUES);
+		prospecto.cambiarEtapa(Etapa.FACTURACION, null, OrigenCambio.ERP, DESPUES);
 
 		assertThat(prospecto.getHistorial()).last().extracting(HistorialEtapa::getOrigen).isEqualTo(OrigenCambio.ERP);
 	}
@@ -91,18 +91,71 @@ class ProspectoTest {
 	void pedirLaMismaEtapaNoEscribeHistorial() {
 		Prospecto prospecto = Prospecto.registrar("Ana López", "4771234567", null, VENDEDOR, AHORA);
 
-		boolean cambio = prospecto.cambiarEtapa(Etapa.PRIMER_CONTACTO, OrigenCambio.CRM, DESPUES);
+		boolean cambio = prospecto.cambiarEtapa(Etapa.PRIMER_CONTACTO, null, OrigenCambio.CRM, DESPUES);
 
 		assertThat(cambio).isFalse();
 		assertThat(prospecto.getHistorial()).hasSize(1);
 	}
 
 	@Test
+	void normalizaUnTelefonoDeDiezDigitosEscritoConSeparadores() {
+		Prospecto prospecto = Prospecto.registrar("Ana López", "(477) 123-45 67", null, VENDEDOR, AHORA);
+
+		assertThat(prospecto.getTelefono()).isEqualTo("4771234567");
+	}
+
+	@Test
+	void rechazaUnTelefonoQueNoTieneDiezDigitos() {
+		assertThatThrownBy(() -> Prospecto.registrar("Ana López", "47712345", null, VENDEDOR, AHORA))
+				.isInstanceOf(IllegalArgumentException.class).hasMessage("El teléfono debe tener 10 dígitos");
+	}
+
+	@Test
+	void rechazaUnTelefonoConLadaInternacional() {
+		assertThatThrownBy(() -> Prospecto.registrar("Ana López", "+52 477 123 4567", null, VENDEDOR, AHORA))
+				.isInstanceOf(IllegalArgumentException.class);
+	}
+
+	@Test
+	void rechazaUnTelefonoConLetras() {
+		assertThatThrownBy(() -> Prospecto.registrar("Ana López", "477ABC4567", null, VENDEDOR, AHORA))
+				.isInstanceOf(IllegalArgumentException.class);
+	}
+
+	@Test
+	void noSePuedeCerrarSinMotivo() {
+		Prospecto prospecto = Prospecto.registrar("Ana López", "4771234567", null, VENDEDOR, AHORA);
+
+		assertThatThrownBy(() -> prospecto.cambiarEtapa(Etapa.CERRADO, "  ", OrigenCambio.CRM, DESPUES))
+				.isInstanceOf(IllegalArgumentException.class).hasMessage("El motivo de cierre es obligatorio");
+		assertThat(prospecto.getEtapa()).isEqualTo(Etapa.PRIMER_CONTACTO);
+		assertThat(prospecto.getHistorial()).hasSize(1);
+	}
+
+	@Test
+	void alCerrarseGuardaElMotivo() {
+		Prospecto prospecto = Prospecto.registrar("Ana López", "4771234567", null, VENDEDOR, AHORA);
+
+		prospecto.cambiarEtapa(Etapa.CERRADO, "  Compró en otra agencia ", OrigenCambio.CRM, DESPUES);
+
+		assertThat(prospecto.getMotivoCierre()).isEqualTo("Compró en otra agencia");
+	}
+
+	@Test
+	void ignoraElMotivoCuandoNoSeCierra() {
+		Prospecto prospecto = Prospecto.registrar("Ana López", "4771234567", null, VENDEDOR, AHORA);
+
+		prospecto.cambiarEtapa(Etapa.VISITA, "No aplica", OrigenCambio.CRM, DESPUES);
+
+		assertThat(prospecto.getMotivoCierre()).isNull();
+	}
+
+	@Test
 	void alCerrarseGuardaLaUltimaEtapaAlcanzada() {
 		Prospecto prospecto = Prospecto.registrar("Ana López", "4771234567", null, VENDEDOR, AHORA);
-		prospecto.cambiarEtapa(Etapa.COTIZACION, OrigenCambio.CRM, AHORA);
+		prospecto.cambiarEtapa(Etapa.COTIZACION, null, OrigenCambio.CRM, AHORA);
 
-		prospecto.cambiarEtapa(Etapa.CERRADO, OrigenCambio.CRM, DESPUES);
+		prospecto.cambiarEtapa(Etapa.CERRADO, "No le alcanzó el crédito", OrigenCambio.CRM, DESPUES);
 
 		assertThat(prospecto.getEtapa()).isEqualTo(Etapa.CERRADO);
 		assertThat(prospecto.getUltimaEtapa()).isEqualTo(Etapa.COTIZACION);
@@ -111,11 +164,12 @@ class ProspectoTest {
 	@Test
 	void alReabrirseOlvidaLaUltimaEtapa() {
 		Prospecto prospecto = Prospecto.registrar("Ana López", "4771234567", null, VENDEDOR, AHORA);
-		prospecto.cambiarEtapa(Etapa.CERRADO, OrigenCambio.CRM, AHORA);
+		prospecto.cambiarEtapa(Etapa.CERRADO, "No le alcanzó el crédito", OrigenCambio.CRM, AHORA);
 
-		prospecto.cambiarEtapa(Etapa.VISITA, OrigenCambio.CRM, DESPUES);
+		prospecto.cambiarEtapa(Etapa.VISITA, null, OrigenCambio.CRM, DESPUES);
 
 		assertThat(prospecto.getUltimaEtapa()).isNull();
+		assertThat(prospecto.getMotivoCierre()).isNull();
 	}
 
 	@Test

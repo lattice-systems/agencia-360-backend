@@ -1,6 +1,5 @@
 package dev.latticesystems.erp_agente360.backend_agencia360.ventascrm.application;
 
-import dev.latticesystems.erp_agente360.backend_agencia360.shared.exception.ConflictoException;
 import dev.latticesystems.erp_agente360.backend_agencia360.shared.security.UsuarioAutenticado;
 import dev.latticesystems.erp_agente360.backend_agencia360.ventascrm.domain.Prospecto;
 import dev.latticesystems.erp_agente360.backend_agencia360.ventascrm.infrastructure.ProspectoRepository;
@@ -13,11 +12,15 @@ import org.springframework.transaction.annotation.Transactional;
 /**
  * Registro de prospectos (CRM-1.0). El prospecto queda a cargo del vendedor que
  * lo captura.
+ *
+ * <p>
+ * Decisión del PO del 12 de octubre: un teléfono o correo repetido no bloquea
+ * el registro, porque un cliente suele hablar con más de un vendedor. Solo se
+ * avisa, sin decir de quién es el otro prospecto; cada vendedor conserva el
+ * suyo.
  */
 @Service
 public class RegistroProspectoService {
-
-	static final String DUPLICADO = "Ya existe un prospecto con ese teléfono o correo";
 
 	private final ProspectoRepository prospectoRepository;
 	private final Clock reloj;
@@ -33,28 +36,16 @@ public class RegistroProspectoService {
 	}
 
 	@Transactional
-	public ProspectoVista registrar(NuevoProspecto nuevo, UsuarioAutenticado vendedor) {
+	public ProspectoRegistrado registrar(NuevoProspecto nuevo, UsuarioAutenticado vendedor) {
 		Prospecto prospecto = Prospecto.registrar(nuevo.nombre(), nuevo.telefono(), nuevo.correo(), vendedor.id(),
 				Instant.now(reloj));
-		validarQueNoEsteRepetido(prospecto);
-		return ProspectoVista.de(prospectoRepository.save(prospecto));
+		// Se busca antes de guardar para no encontrarse a sí mismo.
+		boolean contactoRepetido = tieneContactoRepetido(prospecto);
+		return new ProspectoRegistrado(ProspectoVista.de(prospectoRepository.save(prospecto)), contactoRepetido);
 	}
 
-	/**
-	 * Busca en todos los prospectos, no solo en los del vendedor, y no dice de
-	 * quién es el repetido para no romper la regla de visibilidad.
-	 *
-	 * <p>
-	 * PENDIENTE P1 (PO): falta decidir si el duplicado bloquea el registro o solo
-	 * avisa. Por ahora bloquea con 409.
-	 */
-	private void validarQueNoEsteRepetido(Prospecto prospecto) {
-		boolean telefonoRepetido = prospecto.getTelefono() != null
-				&& prospectoRepository.existsByTelefono(prospecto.getTelefono());
-		boolean correoRepetido = prospecto.getCorreo() != null
-				&& prospectoRepository.existsByCorreo(prospecto.getCorreo());
-		if (telefonoRepetido || correoRepetido) {
-			throw new ConflictoException(DUPLICADO);
-		}
+	private boolean tieneContactoRepetido(Prospecto prospecto) {
+		return (prospecto.getTelefono() != null && prospectoRepository.existsByTelefono(prospecto.getTelefono()))
+				|| (prospecto.getCorreo() != null && prospectoRepository.existsByCorreo(prospecto.getCorreo()));
 	}
 }

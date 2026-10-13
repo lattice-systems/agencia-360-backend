@@ -18,6 +18,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
+import java.util.regex.Pattern;
 
 /**
  * Persona interesada en comprar, a cargo de un vendedor (CRM-1.0). Avanza por
@@ -31,6 +32,10 @@ import java.util.Objects;
 @Entity
 @Table(name = "prospecto")
 public class Prospecto extends Auditable {
+
+	private static final Pattern SEPARADORES_TELEFONO = Pattern.compile("[\\s().-]");
+	private static final Pattern DIEZ_DIGITOS = Pattern.compile("\\d{10}");
+	private static final int LARGO_MAXIMO_MOTIVO = 200;
 
 	@Id
 	@GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -52,7 +57,7 @@ public class Prospecto extends Auditable {
 	@Column(name = "vendedor_id", nullable = false)
 	private Long vendedorId;
 
-	/** Lo captura CRM-1.2 (S2) al cerrar el prospecto. */
+	/** Obligatorio al cerrar (decisión del PO del 12 de octubre). */
 	@Column(name = "motivo_cierre", length = 200)
 	private String motivoCierre;
 
@@ -78,15 +83,17 @@ public class Prospecto extends Auditable {
 	/**
 	 * Registra un prospecto en "Primer contacto" y escribe el primer movimiento de
 	 * su historial (CRM-1.0). Quita espacios sobrantes, trata los campos vacíos
-	 * como no capturados y guarda el correo en minúsculas para poder comparar
-	 * duplicados.
+	 * como no capturados, guarda el teléfono solo con sus 10 dígitos y el correo en
+	 * minúsculas para poder comparar repetidos.
 	 *
 	 * @throws IllegalArgumentException
-	 *             si falta el nombre o faltan a la vez el teléfono y el correo
+	 *             si falta el nombre, faltan a la vez el teléfono y el correo, o el
+	 *             teléfono no es de 10 dígitos (decisión del PO del 12 de octubre:
+	 *             solo números de México)
 	 */
 	public static Prospecto registrar(String nombre, String telefono, String correo, Long vendedorId, Instant ahora) {
 		String nombreLimpio = limpiar(nombre);
-		String telefonoLimpio = limpiar(telefono);
+		String telefonoLimpio = normalizarTelefono(limpiar(telefono));
 		String correoLimpio = limpiar(correo);
 		if (nombreLimpio == null) {
 			throw new IllegalArgumentException("El nombre es obligatorio");
@@ -104,19 +111,34 @@ public class Prospecto extends Auditable {
 
 	/**
 	 * Mueve el prospecto a otra etapa y lo deja en el historial (CRM-1.1). Al
-	 * cerrar guarda la última etapa alcanzada; al reabrir la olvida.
+	 * cerrar exige el motivo y guarda la última etapa alcanzada; al reabrir olvida
+	 * los dos.
 	 *
+	 * @param motivoCierre
+	 *            obligatorio solo si {@code nueva} es {@link Etapa#CERRADO}; en
+	 *            otro caso se ignora
 	 * @return {@code false} si el prospecto ya estaba en esa etapa; en ese caso no
 	 *         se escribe historial
+	 * @throws IllegalArgumentException
+	 *             si se cierra sin motivo o con un motivo de más de 200 caracteres
 	 */
-	public boolean cambiarEtapa(Etapa nueva, OrigenCambio origen, Instant ahora) {
+	public boolean cambiarEtapa(Etapa nueva, String motivoCierre, OrigenCambio origen, Instant ahora) {
 		Objects.requireNonNull(nueva, "nueva");
 		if (nueva == etapa) {
 			return false;
 		}
 		if (nueva == Etapa.CERRADO) {
+			String motivo = limpiar(motivoCierre);
+			if (motivo == null) {
+				throw new IllegalArgumentException("El motivo de cierre es obligatorio");
+			}
+			if (motivo.length() > LARGO_MAXIMO_MOTIVO) {
+				throw new IllegalArgumentException("El motivo de cierre admite hasta 200 caracteres");
+			}
+			this.motivoCierre = motivo;
 			ultimaEtapa = etapa;
 		} else if (etapa == Etapa.CERRADO) {
+			this.motivoCierre = null;
 			ultimaEtapa = null;
 		}
 		moverA(nueva, origen, ahora);
@@ -143,6 +165,17 @@ public class Prospecto extends Auditable {
 		Objects.requireNonNull(ahora, "ahora");
 		etapa = nueva;
 		historial.add(new HistorialEtapa(this, nueva, origen, ahora));
+	}
+
+	private static String normalizarTelefono(String telefono) {
+		if (telefono == null) {
+			return null;
+		}
+		String digitos = SEPARADORES_TELEFONO.matcher(telefono).replaceAll("");
+		if (!DIEZ_DIGITOS.matcher(digitos).matches()) {
+			throw new IllegalArgumentException("El teléfono debe tener 10 dígitos");
+		}
+		return digitos;
 	}
 
 	private static String limpiar(String valor) {

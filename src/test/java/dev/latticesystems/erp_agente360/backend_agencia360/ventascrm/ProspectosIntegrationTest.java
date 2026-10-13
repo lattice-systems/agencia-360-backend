@@ -69,7 +69,7 @@ class ProspectosIntegrationTest extends AbstractIntegrationTest {
 				.andExpect(jsonPath("$.telefono").value("4771234567")).andExpect(jsonPath("$.correo").isEmpty())
 				.andExpect(jsonPath("$.etapa").value("PRIMER_CONTACTO"))
 				.andExpect(jsonPath("$.vendedorId").value(vendedor.getId()))
-				.andExpect(jsonPath("$.creadoEn").isNotEmpty());
+				.andExpect(jsonPath("$.creadoEn").isNotEmpty()).andExpect(jsonPath("$.contactoRepetido").value(false));
 	}
 
 	@Test
@@ -116,15 +116,19 @@ class ProspectosIntegrationTest extends AbstractIntegrationTest {
 	}
 
 	@Test
-	void avisaQueElTelefonoYaExisteAunqueSeaDeOtroVendedorSinDecirDeQuien() throws Exception {
+	void registraUnTelefonoRepetidoDeOtroVendedorYSoloAvisaSinDecirDeQuien() throws Exception {
 		Usuario vendedor1 = registrar("vendedor1", Role.VENTAS);
 		Usuario vendedor2 = registrar("vendedor2", Role.VENTAS);
 		crearProspecto(vendedor1, "Ana López", "4771234567", null);
 
 		mockMvc.perform(registro(token(vendedor2), """
-				{"nombre":"Otra persona","telefono":"4771234567"}
-				""")).andExpect(status().isConflict())
-				.andExpect(jsonPath("$.message").value("Ya existe un prospecto con ese teléfono o correo"));
+				{"nombre":"Ana López","telefono":"4771234567"}
+				""")).andExpect(status().isCreated()).andExpect(jsonPath("$.contactoRepetido").value(true))
+				.andExpect(jsonPath("$.vendedorId").value(vendedor2.getId()));
+
+		// Cada vendedor conserva su propio prospecto.
+		mockMvc.perform(conToken(get(URL), token(vendedor1))).andExpect(jsonPath("$.length()").value(1));
+		mockMvc.perform(conToken(get(URL), token(vendedor2))).andExpect(jsonPath("$.length()").value(1));
 	}
 
 	@Test
@@ -134,7 +138,17 @@ class ProspectosIntegrationTest extends AbstractIntegrationTest {
 
 		mockMvc.perform(registro(token(vendedor), """
 				{"nombre":"Ana","correo":"ANA@Ejemplo.com"}
-				""")).andExpect(status().isConflict());
+				""")).andExpect(status().isCreated()).andExpect(jsonPath("$.contactoRepetido").value(true));
+	}
+
+	@Test
+	void rechazaUnTelefonoQueNoEsDeDiezDigitos() throws Exception {
+		Usuario vendedor = registrar("vendedor1", Role.VENTAS);
+
+		mockMvc.perform(registro(token(vendedor), """
+				{"nombre":"Ana López","telefono":"477123"}
+				""")).andExpect(status().isBadRequest())
+				.andExpect(jsonPath("$.message").value("El teléfono debe tener 10 dígitos"));
 	}
 
 	@Test
@@ -218,11 +232,24 @@ class ProspectosIntegrationTest extends AbstractIntegrationTest {
 		long id = crearProspecto(vendedor, "Ana López", "4771234567", null);
 		mockMvc.perform(cambioDeEtapa(token(vendedor), id, "COTIZACION")).andExpect(status().isOk());
 
-		mockMvc.perform(cambioDeEtapa(token(vendedor), id, "CERRADO")).andExpect(status().isOk());
+		mockMvc.perform(cierre(token(vendedor), id, "Compró en otra agencia")).andExpect(status().isOk())
+				.andExpect(jsonPath("$.etapa").value("CERRADO"))
+				.andExpect(jsonPath("$.motivoCierre").value("Compró en otra agencia"))
+				.andExpect(jsonPath("$.ultimaEtapa").value("COTIZACION"));
 
 		entityManager.flush();
-		assertThat(jdbcTemplate.queryForObject("select ultima_etapa from prospecto where id = ?", String.class, id))
-				.isEqualTo("COTIZACION");
+		assertThat(jdbcTemplate.queryForMap("select ultima_etapa, motivo_cierre from prospecto where id = ?", id))
+				.containsEntry("ultima_etapa", "COTIZACION").containsEntry("motivo_cierre", "Compró en otra agencia");
+	}
+
+	@Test
+	void noSePuedeCerrarSinMotivo() throws Exception {
+		Usuario vendedor = registrar("vendedor1", Role.VENTAS);
+		long id = crearProspecto(vendedor, "Ana López", "4771234567", null);
+
+		mockMvc.perform(cambioDeEtapa(token(vendedor), id, "CERRADO")).andExpect(status().isBadRequest())
+				.andExpect(jsonPath("$.message").value("El motivo de cierre es obligatorio"));
+		assertThat(historialDe(id)).hasSize(1);
 	}
 
 	@Test
@@ -285,6 +312,11 @@ class ProspectosIntegrationTest extends AbstractIntegrationTest {
 	private static MockHttpServletRequestBuilder cambioDeEtapa(String token, long id, String etapa) {
 		return conToken(patch(URL + "/{id}/etapa", id), token).contentType(MediaType.APPLICATION_JSON)
 				.content("{\"etapa\":\"" + etapa + "\"}");
+	}
+
+	private static MockHttpServletRequestBuilder cierre(String token, long id, String motivo) {
+		return conToken(patch(URL + "/{id}/etapa", id), token).contentType(MediaType.APPLICATION_JSON)
+				.content("{\"etapa\":\"CERRADO\",\"motivoCierre\":\"" + motivo + "\"}");
 	}
 
 	private static MockHttpServletRequestBuilder conToken(MockHttpServletRequestBuilder peticion, String token) {
