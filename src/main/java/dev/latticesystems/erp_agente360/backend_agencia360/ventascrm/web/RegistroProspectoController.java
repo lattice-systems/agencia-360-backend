@@ -10,9 +10,11 @@ import java.net.URI;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 /** Registro de prospectos (CRM-1.0). Solo lo hace Ventas. */
@@ -37,5 +39,21 @@ public class RegistroProspectoController {
 			@AuthenticationPrincipal UsuarioAutenticado actor) {
 		ProspectoRegistrado creado = registroProspectoService.registrar(request.comoNuevoProspecto(), actor);
 		return ResponseEntity.created(URI.create("/api/v1/prospectos/" + creado.prospecto().id())).body(creado);
+	}
+
+	@GetMapping("/coincidencias")
+	@PreAuthorize("hasRole('VENTAS')")
+	@Operation(summary = "Revisar si un teléfono o correo ya existen", description = "Para avisar mientras se "
+			+ "captura. Busca en todos los prospectos y no dice de quién es el repetido.")
+	public Coincidencias coincidencias(@RequestParam(required = false) String telefono,
+			@RequestParam(required = false) String correo) {
+		return new Coincidencias(registroProspectoService.hayContactoRepetido(telefono, correo));
+	}
+
+	/**
+	 * @param contactoRepetido
+	 *            el teléfono o el correo ya existen en otro prospecto
+	 */
+	public record Coincidencias(boolean contactoRepetido) {
 	}
 }

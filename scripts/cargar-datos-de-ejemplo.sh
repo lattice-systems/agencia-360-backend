@@ -147,7 +147,7 @@ recibir() {
   echo "              + $1 de $2${llegada:+ (llegó antes de registrarse)}"
 }
 
-# Registra un prospecto y lo avanza por sus etapas. Deja su id en PROSPECTO_ID,
+# Registra un prospecto y el vendedor lo avanza por sus etapas. Deja su id en PROSPECTO_ID,
 # o vacío si ya existía. Los nombres se buscan en la lista del Gerente de
 # marketing, que ve todos.
 # $1 token del vendedor, $2 nombre, $3 teléfono, $4 correo, $5 etapas separadas
@@ -237,12 +237,28 @@ pedir GET /api/v1/prospectos "$TOKEN_GERENTE"
 PROSPECTOS_EXISTENTES="$RESPUESTA"
 TOKEN_VENDEDOR1=$(iniciar_sesion vendedor1 Vendedor123 CRM)
 TOKEN_VENDEDOR2=$(iniciar_sesion vendedor2 Vendedor123 CRM)
+# Desde Pago el proceso lo avanzan Contabilidad (valida el pago) y Facturación
+# (emite la factura) desde el ERP; el vendedor no mueve esas etapas.
+TOKEN_CONTABILIDAD=$(iniciar_sesion contabilidad1 Contabilidad123 ERP)
+TOKEN_FACTURACION=$(iniciar_sesion facturacion1 Facturacion123 ERP)
+
+# Lleva un prospecto que ya está en Pago hasta la etapa indicada (FACTURACION o
+# ENTREGA), como lo harían Contabilidad y Facturación.
+# $1 id del prospecto, $2 etapa final.
+avanzar_desde_erp() {
+  [ -n "$1" ] || return 0
+  avanzar_etapas "$TOKEN_CONTABILIDAD" "$1" "FACTURACION" ""
+  if [ "$2" = ENTREGA ]; then
+    avanzar_etapas "$TOKEN_FACTURACION" "$1" "ENTREGA" ""
+  fi
+}
 crear_prospecto "$TOKEN_VENDEDOR1" "Ana López" "477 555 0101" "ana.lopez@example.com" "PRIMER_CONTACTO"
 crear_prospecto "$TOKEN_VENDEDOR1" "Diego Ramírez" "477 555 0102" "" "VISITA"
 crear_prospecto "$TOKEN_VENDEDOR1" "Fernanda Soto" "" "fernanda.soto@example.com" "VISITA COTIZACION"
 crear_prospecto "$TOKEN_VENDEDOR1" "Luis Herrera" "477 555 0104" "luis.h@example.com" "VISITA COTIZACION PAGO"
 crear_prospecto "$TOKEN_VENDEDOR1" "Valeria Díaz" "477 555 0105" "valeria.d@example.com" \
-  "VISITA COTIZACION PAGO FACTURACION ENTREGA"
+  "VISITA COTIZACION PAGO"
+avanzar_desde_erp "$PROSPECTO_ID" ENTREGA
 crear_prospecto "$TOKEN_VENDEDOR1" "Jorge Medina" "477 555 0106" "" "VISITA COTIZACION CERRADO" \
   "Compró en otra agencia"
 
@@ -260,10 +276,22 @@ fi
 
 echo "Prospectos de Elena Ríos (vendedor2):"
 crear_prospecto "$TOKEN_VENDEDOR2" "Mariana Torres" "477 555 0108" "mariana.t@example.com" "PRIMER_CONTACTO"
-crear_prospecto "$TOKEN_VENDEDOR2" "Carlos Núñez" "477 555 0109" "" "VISITA COTIZACION PAGO FACTURACION"
+crear_prospecto "$TOKEN_VENDEDOR2" "Carlos Núñez" "477 555 0109" "" "VISITA COTIZACION PAGO"
+avanzar_desde_erp "$PROSPECTO_ID" FACTURACION
+if [ -n "$PROSPECTO_ID" ]; then
+  pedir POST "/api/v1/prospectos/$PROSPECTO_ID/solicitudes-cierre" "$TOKEN_VENDEDOR2" \
+    '{"motivo":"El cliente pidió cancelar la compra"}'
+  [ "$CODIGO" = 201 ] || fallar "solicitar el cierre de Carlos Núñez"
+  echo "              con una solicitud de cierre pendiente para el Administrador"
+fi
 crear_prospecto "$TOKEN_VENDEDOR2" "Paola Vega" "" "paola.vega@example.com" "VISITA"
 crear_prospecto "$TOKEN_VENDEDOR2" "Ana Lucía López" "477 555 0101" "" "PRIMER_CONTACTO"
 crear_prospecto "$TOKEN_VENDEDOR2" "Óscar Ramos" "477 555 0111" "" "CERRADO" "No calificó para el crédito"
+crear_prospecto "$TOKEN_VENDEDOR2" "Roberto Salas" "477 555 0112" "roberto.s@example.com" "COTIZACION PAGO"
+if [ -n "$PROSPECTO_ID" ]; then
+  avanzar_desde_erp "$PROSPECTO_ID" ENTREGA
+  avanzar_etapas "$TOKEN_VENDEDOR2" "$PROSPECTO_ID" "FINALIZADO" ""
+fi
 
 echo
 echo "Listo. Qué demuestra cada dato: docs/datos-de-ejemplo.md. Contraseñas: README, sección 5.6."
