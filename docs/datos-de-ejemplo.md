@@ -72,7 +72,7 @@ Qué se puede probar:
 
 ## Prospectos
 
-Los registran los vendedores desde el CRM; cada cambio de etapa queda en el historial. El script avanza cada prospecto etapa por etapa, como lo haría el vendedor.
+Los registran los vendedores desde el CRM; cada cambio de etapa queda en el historial. El script avanza cada prospecto etapa por etapa, con el usuario al que le corresponde cada una (decisión del PO del 12 de octubre): el vendedor hasta Pago, Contabilidad de Pago a Facturación, Facturación de Facturación a Entrega y otra vez el vendedor para finalizar.
 
 | Prospecto | Teléfono | Correo | Vendedor | Etapa | Notas |
 |---|---|---|---|---|---|
@@ -80,19 +80,21 @@ Los registran los vendedores desde el CRM; cada cambio de etapa queda en el hist
 | Diego Ramírez | 477 555 0102 | | Sergio Luna | Visita | |
 | Fernanda Soto | | fernanda.soto@example.com | Sergio Luna | Cotización | Solo correo |
 | Luis Herrera | 477 555 0104 | luis.h@example.com | Sergio Luna | Pago | |
-| Valeria Díaz | 477 555 0105 | valeria.d@example.com | Sergio Luna | Entrega | Pasó por Facturación |
+| Valeria Díaz | 477 555 0105 | valeria.d@example.com | Sergio Luna | Entrega | Contabilidad validó el pago y Facturación emitió la factura |
 | Jorge Medina | 477 555 0106 | | Sergio Luna | Cerrado | Desde Cotización; motivo: "Compró en otra agencia" |
 | Ricardo Fuentes | 477 555 0107 | | Elena Ríos | Visita | Lo registró Sergio Luna y el Gerente lo **reasignó** a Elena Ríos |
 | Mariana Torres | 477 555 0108 | mariana.t@example.com | Elena Ríos | Primer contacto | |
-| Carlos Núñez | 477 555 0109 | | Elena Ríos | Facturación | |
+| Carlos Núñez | 477 555 0109 | | Elena Ríos | Facturación | Tiene una **solicitud de cierre pendiente** para el Administrador |
 | Paola Vega | | paola.vega@example.com | Elena Ríos | Visita | Solo correo |
 | Ana Lucía López | 477 555 0101 | | Elena Ríos | Primer contacto | **Mismo teléfono** que Ana López: al registrarla, el CRM avisa del contacto repetido |
 | Óscar Ramos | 477 555 0111 | | Elena Ríos | Cerrado | Desde Primer contacto; motivo: "No calificó para el crédito" |
+| Roberto Salas | 477 555 0112 | roberto.s@example.com | Elena Ríos | Finalizado | Recorrió todo el proceso hasta la entrega |
 
 Qué se puede probar:
-- Con `vendedor1` y `vendedor2`, que cada uno ve **solo sus prospectos** (6 cada uno).
-- Con `gerente`, que se ven los 12 y que se pueden reasignar.
-- El filtro por etapa: hay al menos un prospecto en cada una de las 7.
+- Con `vendedor1` y `vendedor2`, que cada uno ve **solo sus prospectos** (6 y 7).
+- Con `gerente`, que se ven los 13 y que se pueden reasignar.
+- El filtro por etapa: hay al menos un prospecto en cada una de las 8.
+- Con `admin`, la solicitud de cierre pendiente de Carlos Núñez (`GET /api/v1/solicitudes-cierre`).
 - Los cerrados guardan su motivo y la última etapa a la que llegaron.
 
 ## Lo que no incluye todavía
