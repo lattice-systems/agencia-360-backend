@@ -279,6 +279,93 @@ class ProspectosIntegrationTest extends AbstractIntegrationTest {
 		mockMvc.perform(cambioDeEtapa(token(gerente), id, "VISITA")).andExpect(status().isForbidden());
 	}
 
+	@Test
+	void elVendedorSeSaltaEtapasHastaPagoPeroAhiYaNoMueveNada() throws Exception {
+		Usuario vendedor = registrar("vendedor1", Role.VENTAS);
+		long id = crearProspecto(vendedor, "Ana López", "4771234567", null);
+
+		mockMvc.perform(cambioDeEtapa(token(vendedor), id, "PAGO")).andExpect(status().isOk());
+
+		mockMvc.perform(cambioDeEtapa(token(vendedor), id, "FACTURACION")).andExpect(status().isConflict()).andExpect(
+				jsonPath("$.message").value("En Pago el prospecto avanza cuando Contabilidad valida el pago"));
+		mockMvc.perform(cierre(token(vendedor), id, "Ya no quiere")).andExpect(status().isConflict());
+	}
+
+	@Test
+	void contabilidadYFacturacionAvanzanElProcesoYElVendedorFinaliza() throws Exception {
+		Usuario vendedor = registrar("vendedor1", Role.VENTAS);
+		Usuario contador = registrar("contabilidad1", Role.CONTABILIDAD);
+		Usuario facturista = registrar("facturacion1", Role.FACTURACION);
+		long id = crearProspecto(vendedor, "Ana López", "4771234567", null);
+		mockMvc.perform(cambioDeEtapa(token(vendedor), id, "PAGO")).andExpect(status().isOk());
+
+		mockMvc.perform(cambioDeEtapa(token(contador), id, "FACTURACION")).andExpect(status().isOk())
+				.andExpect(jsonPath("$.etapa").value("FACTURACION"));
+		mockMvc.perform(cambioDeEtapa(token(facturista), id, "ENTREGA")).andExpect(status().isOk())
+				.andExpect(jsonPath("$.etapa").value("ENTREGA"));
+		mockMvc.perform(cambioDeEtapa(token(vendedor), id, "FINALIZADO")).andExpect(status().isOk())
+				.andExpect(jsonPath("$.etapa").value("FINALIZADO"));
+
+		assertThat(historialDe(id)).extracting(movimiento -> movimiento.get("origen")).containsExactly("CRM", "CRM",
+				"ERP", "ERP", "CRM");
+	}
+
+	@Test
+	void contabilidadSoloPasaDePagoAFacturacion() throws Exception {
+		Usuario vendedor = registrar("vendedor1", Role.VENTAS);
+		Usuario contador = registrar("contabilidad1", Role.CONTABILIDAD);
+		long id = crearProspecto(vendedor, "Ana López", "4771234567", null);
+
+		mockMvc.perform(cambioDeEtapa(token(contador), id, "VISITA")).andExpect(status().isForbidden());
+		mockMvc.perform(cambioDeEtapa(token(contador), id, "FACTURACION")).andExpect(status().isConflict());
+	}
+
+	@Test
+	void laListaMuestraElUltimoCambioDeEtapa() throws Exception {
+		Usuario vendedor = registrar("vendedor1", Role.VENTAS);
+		long id = crearProspecto(vendedor, "Ana López", "4771234567", null);
+		mockMvc.perform(cambioDeEtapa(token(vendedor), id, "VISITA")).andExpect(status().isOk());
+
+		mockMvc.perform(conToken(get(URL), token(vendedor))).andExpect(jsonPath("$[0].ultimoCambio").isNotEmpty())
+				.andExpect(jsonPath("$[0].cierrePendiente").value(false));
+	}
+
+	@Test
+	void elHistorialDiceQuienHizoCadaCambio() throws Exception {
+		Usuario vendedor = registrar("vendedor1", Role.VENTAS);
+		Usuario gerente = registrar("gerente1", Role.GERENTE_MARKETING);
+		long id = crearProspecto(vendedor, "Ana López", "4771234567", null);
+		mockMvc.perform(cambioDeEtapa(token(vendedor), id, "VISITA")).andExpect(status().isOk());
+
+		mockMvc.perform(conToken(get(URL + "/{id}/historial", id), token(gerente))).andExpect(status().isOk())
+				.andExpect(jsonPath("$.length()").value(2)).andExpect(jsonPath("$[0].etapa").value("PRIMER_CONTACTO"))
+				.andExpect(jsonPath("$[1].etapa").value("VISITA"))
+				.andExpect(jsonPath("$[1].usuarioNombre").value("Persona vendedor1"))
+				.andExpect(jsonPath("$[1].fechaHora").isNotEmpty());
+	}
+
+	@Test
+	void unVendedorNoVeElHistorialDeOtro() throws Exception {
+		Usuario vendedor1 = registrar("vendedor1", Role.VENTAS);
+		Usuario vendedor2 = registrar("vendedor2", Role.VENTAS);
+		long id = crearProspecto(vendedor1, "Ana López", "4771234567", null);
+
+		mockMvc.perform(conToken(get(URL + "/{id}/historial", id), token(vendedor2))).andExpect(status().isNotFound());
+	}
+
+	@Test
+	void avisaDeCoincidenciasMientrasSeCapturaSinDecirDeQuien() throws Exception {
+		Usuario vendedor1 = registrar("vendedor1", Role.VENTAS);
+		Usuario vendedor2 = registrar("vendedor2", Role.VENTAS);
+		crearProspecto(vendedor1, "Ana López", "4771234567", "ana@ejemplo.com");
+
+		mockMvc.perform(conToken(get(URL + "/coincidencias").param("telefono", "477 123 4567"), token(vendedor2)))
+				.andExpect(status().isOk()).andExpect(jsonPath("$.contactoRepetido").value(true))
+				.andExpect(jsonPath("$.nombre").doesNotExist());
+		mockMvc.perform(conToken(get(URL + "/coincidencias").param("correo", "otra@ejemplo.com"), token(vendedor2)))
+				.andExpect(jsonPath("$.contactoRepetido").value(false));
+	}
+
 	private Usuario registrar(String usuario, Role rol) {
 		Rol encontrado = rolRepository.findByNombre(rol.name()).orElseThrow();
 		return usuarioRepository.save(new Usuario(usuario, "hash-de-prueba", "Persona " + usuario, encontrado));

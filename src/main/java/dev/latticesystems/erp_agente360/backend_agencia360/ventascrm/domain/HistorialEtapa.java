@@ -14,8 +14,8 @@ import jakarta.persistence.Table;
 import java.time.Instant;
 
 /**
- * Movimiento de un prospecto a una etapa, con su fecha y hora. Solo lo crea
- * {@link Prospecto}; no se modifica ni se borra.
+ * Movimiento de un prospecto a una etapa, con su fecha y hora y quién lo hizo.
+ * Solo lo crea {@link Prospecto}; no se modifica ni se borra.
  */
 @Entity
 @Table(name = "historial_etapa")
@@ -37,6 +37,10 @@ public class HistorialEtapa {
 	@Column(nullable = false, length = 3)
 	private OrigenCambio origen;
 
+	/** Usuario que hizo el cambio; nulo si no se conoce. */
+	@Column(name = "usuario_id")
+	private Long usuarioId;
+
 	@Column(name = "fecha_hora", nullable = false)
 	private Instant fechaHora;
 
@@ -44,10 +48,11 @@ public class HistorialEtapa {
 		// Requerido por JPA
 	}
 
-	HistorialEtapa(Prospecto prospecto, Etapa etapa, OrigenCambio origen, Instant fechaHora) {
+	HistorialEtapa(Prospecto prospecto, Etapa etapa, OrigenCambio origen, Long usuarioId, Instant fechaHora) {
 		this.prospecto = prospecto;
 		this.etapa = etapa;
 		this.origen = origen;
+		this.usuarioId = usuarioId;
 		this.fechaHora = fechaHora;
 	}
 
@@ -61,6 +66,10 @@ public class HistorialEtapa {
 
 	public OrigenCambio getOrigen() {
 		return origen;
+	}
+
+	public Long getUsuarioId() {
+		return usuarioId;
 	}
 
 	public Instant getFechaHora() {

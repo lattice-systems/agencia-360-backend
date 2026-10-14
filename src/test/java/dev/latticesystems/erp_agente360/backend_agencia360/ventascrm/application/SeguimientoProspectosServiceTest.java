@@ -5,6 +5,8 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
+import dev.latticesystems.erp_agente360.backend_agencia360.acceso.DirectorioUsuarios;
+import dev.latticesystems.erp_agente360.backend_agencia360.shared.exception.ConflictoException;
 import dev.latticesystems.erp_agente360.backend_agencia360.shared.exception.RecursoNoEncontradoException;
 import dev.latticesystems.erp_agente360.backend_agencia360.shared.security.Role;
 import dev.latticesystems.erp_agente360.backend_agencia360.shared.security.UsuarioAutenticado;
@@ -16,6 +18,7 @@ import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import org.junit.jupiter.api.BeforeEach;
@@ -37,14 +40,23 @@ class SeguimientoProspectosServiceTest {
 	private static final UsuarioAutenticado CONTABILIDAD = new UsuarioAutenticado(3L, "conta1",
 			Set.of(Role.CONTABILIDAD));
 
+	private static final UsuarioAutenticado CONTADOR = new UsuarioAutenticado(30L, "contabilidad1",
+			Set.of(Role.CONTABILIDAD));
+	private static final UsuarioAutenticado FACTURISTA = new UsuarioAutenticado(40L, "facturacion1",
+			Set.of(Role.FACTURACION));
+
 	@Mock
 	private ProspectoRepository prospectoRepository;
+
+	@Mock
+	private DirectorioUsuarios directorioUsuarios;
 
 	private SeguimientoProspectosService service;
 
 	@BeforeEach
 	void setUp() {
-		service = new SeguimientoProspectosService(prospectoRepository, Clock.fixed(AHORA, ZoneOffset.UTC));
+		service = new SeguimientoProspectosService(prospectoRepository, directorioUsuarios,
+				Clock.fixed(AHORA, ZoneOffset.UTC));
 	}
 
 	@Test
@@ -126,6 +138,65 @@ class SeguimientoProspectosServiceTest {
 		assertThatThrownBy(() -> service.cambiarEtapa(1L, Etapa.VISITA, null, GERENTE))
 				.isInstanceOf(AccessDeniedException.class);
 		verifyNoInteractions(prospectoRepository);
+	}
+
+	@Test
+	void unVendedorNoPuedeMoverUnProspectoEnPago() {
+		Prospecto ana = prospecto("Ana López", 7L);
+		ana.moverPorVendedor(Etapa.PAGO, null, 7L, REGISTRO);
+		when(prospectoRepository.findByIdAndVendedorId(1L, 7L)).thenReturn(Optional.of(ana));
+
+		assertThatThrownBy(() -> service.cambiarEtapa(1L, Etapa.FACTURACION, null, VENDEDOR))
+				.isInstanceOf(ConflictoException.class);
+	}
+
+	@Test
+	void contabilidadPasaDePagoAFacturacion() {
+		Prospecto ana = prospecto("Ana López", 7L);
+		ana.moverPorVendedor(Etapa.PAGO, null, 7L, REGISTRO);
+		when(prospectoRepository.findById(1L)).thenReturn(Optional.of(ana));
+
+		ProspectoVista actualizado = service.cambiarEtapa(1L, Etapa.FACTURACION, null, CONTADOR);
+
+		assertThat(actualizado.etapa()).isEqualTo(Etapa.FACTURACION);
+		assertThat(actualizado.ultimoCambio()).isEqualTo(AHORA);
+	}
+
+	@Test
+	void contabilidadSoloPuedePasarAFacturacion() {
+		assertThatThrownBy(() -> service.cambiarEtapa(1L, Etapa.ENTREGA, null, CONTADOR))
+				.isInstanceOf(AccessDeniedException.class);
+		verifyNoInteractions(prospectoRepository);
+	}
+
+	@Test
+	void facturacionPasaDeFacturacionAEntrega() {
+		Prospecto ana = prospecto("Ana López", 7L);
+		ana.moverPorVendedor(Etapa.PAGO, null, 7L, REGISTRO);
+		ana.validarPago(30L, REGISTRO);
+		when(prospectoRepository.findById(1L)).thenReturn(Optional.of(ana));
+
+		assertThat(service.cambiarEtapa(1L, Etapa.ENTREGA, null, FACTURISTA).etapa()).isEqualTo(Etapa.ENTREGA);
+	}
+
+	@Test
+	void elHistorialMuestraQuienHizoCadaCambio() {
+		Prospecto ana = prospecto("Ana López", 7L);
+		ana.moverPorVendedor(Etapa.VISITA, null, 7L, AHORA);
+		when(prospectoRepository.findById(1L)).thenReturn(Optional.of(ana));
+		when(directorioUsuarios.nombresDe(List.of(7L, 7L))).thenReturn(Map.of(7L, "Sergio Luna"));
+
+		List<MovimientoVista> historial = service.historial(1L, GERENTE);
+
+		assertThat(historial).extracting(MovimientoVista::etapa).containsExactly(Etapa.PRIMER_CONTACTO, Etapa.VISITA);
+		assertThat(historial).extracting(MovimientoVista::usuarioNombre).containsOnly("Sergio Luna");
+	}
+
+	@Test
+	void unVendedorNoVeElHistorialDeUnProspectoAjeno() {
+		when(prospectoRepository.findByIdAndVendedorId(1L, 7L)).thenReturn(Optional.empty());
+
+		assertThatThrownBy(() -> service.historial(1L, VENDEDOR)).isInstanceOf(RecursoNoEncontradoException.class);
 	}
 
 	private static Prospecto prospecto(String nombre, Long vendedorId) {

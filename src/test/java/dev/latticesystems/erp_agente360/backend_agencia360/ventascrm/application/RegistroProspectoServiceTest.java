@@ -109,6 +109,26 @@ class RegistroProspectoServiceTest {
 		verify(prospectoRepository, never()).save(any());
 	}
 
+	@Test
+	void revisaCoincidenciasMientrasSeCapturaConElTelefonoNormalizado() {
+		when(prospectoRepository.existsByTelefono("4771234567")).thenReturn(true);
+
+		assertThat(service.hayContactoRepetido("477 123 45 67", null)).isTrue();
+	}
+
+	@Test
+	void unTelefonoIncompletoTodaviaNoSeCompara() {
+		assertThat(service.hayContactoRepetido("477", null)).isFalse();
+		verify(prospectoRepository, never()).existsByTelefono(any());
+	}
+
+	@Test
+	void revisaCoincidenciasDelCorreoEnMinusculas() {
+		when(prospectoRepository.existsByCorreo("ana@ejemplo.com")).thenReturn(true);
+
+		assertThat(service.hayContactoRepetido(null, " Ana@Ejemplo.com ")).isTrue();
+	}
+
 	private void guardarSinCambios() {
 		when(prospectoRepository.save(any(Prospecto.class))).thenAnswer(invocation -> invocation.getArgument(0));
 	}

@@ -44,8 +44,28 @@ public class RegistroProspectoService {
 		return new ProspectoRegistrado(ProspectoVista.de(prospectoRepository.save(prospecto)), contactoRepetido);
 	}
 
+	/**
+	 * Revisa, mientras el vendedor captura, si el teléfono o el correo ya existen
+	 * en otro prospecto. No dice de quién es. Un teléfono incompleto todavía no se
+	 * compara.
+	 */
+	@Transactional(readOnly = true)
+	public boolean hayContactoRepetido(String telefono, String correo) {
+		String telefonoNormalizado;
+		try {
+			telefonoNormalizado = Prospecto.normalizarTelefono(telefono);
+		} catch (IllegalArgumentException incompleto) {
+			telefonoNormalizado = null;
+		}
+		return existe(telefonoNormalizado, Prospecto.normalizarCorreo(correo));
+	}
+
 	private boolean tieneContactoRepetido(Prospecto prospecto) {
-		return (prospecto.getTelefono() != null && prospectoRepository.existsByTelefono(prospecto.getTelefono()))
-				|| (prospecto.getCorreo() != null && prospectoRepository.existsByCorreo(prospecto.getCorreo()));
+		return existe(prospecto.getTelefono(), prospecto.getCorreo());
+	}
+
+	private boolean existe(String telefono, String correo) {
+		return (telefono != null && prospectoRepository.existsByTelefono(telefono))
+				|| (correo != null && prospectoRepository.existsByCorreo(correo));
 	}
 }
