@@ -1,6 +1,7 @@
 package dev.latticesystems.erp_agente360.backend_agencia360.ventascrm.web;
 
 import dev.latticesystems.erp_agente360.backend_agencia360.shared.security.UsuarioAutenticado;
+import dev.latticesystems.erp_agente360.backend_agencia360.ventascrm.application.MovimientoVista;
 import dev.latticesystems.erp_agente360.backend_agencia360.ventascrm.application.ProspectoVista;
 import dev.latticesystems.erp_agente360.backend_agencia360.ventascrm.application.SeguimientoProspectosService;
 import dev.latticesystems.erp_agente360.backend_agencia360.ventascrm.domain.Etapa;
@@ -42,11 +43,20 @@ public class SeguimientoProspectoController {
 		return seguimientoProspectosService.listar(etapa == null ? null : Etapa.desde(etapa), actor);
 	}
 
+	@GetMapping("/{id}/historial")
+	@PreAuthorize("hasAnyRole('VENTAS', 'GERENTE_MARKETING')")
+	@Operation(summary = "Historial de etapas de un prospecto", description = "Del más antiguo al más reciente, "
+			+ "con quién hizo cada cambio. Responde 404 si el prospecto no existe o es de otro vendedor.")
+	public List<MovimientoVista> historial(@PathVariable Long id, @AuthenticationPrincipal UsuarioAutenticado actor) {
+		return seguimientoProspectosService.historial(id, actor);
+	}
+
 	@PatchMapping("/{id}/etapa")
-	@PreAuthorize("hasRole('VENTAS')")
-	@Operation(summary = "Cambiar la etapa de un prospecto", description = "Solo el vendedor dueño del prospecto. "
-			+ "Registra la fecha y hora en el historial. Para pasar a CERRADO el motivo es obligatorio (400 si "
-			+ "falta). Responde 404 si el prospecto no existe o es de otro vendedor.")
+	@PreAuthorize("hasAnyRole('VENTAS', 'CONTABILIDAD', 'FACTURACION')")
+	@Operation(summary = "Cambiar la etapa de un prospecto", description = "El vendedor dueño mueve Primer contacto, "
+			+ "Visita y Cotización entre sí, a Pago o a Cerrado (con motivo), y de Entrega a Finalizado. Contabilidad "
+			+ "pasa de Pago a Facturación y Facturación de Facturación a Entrega. Un cambio que no corresponde "
+			+ "responde 409; un rol que no puede hacerlo, 403; un prospecto ajeno, 404.")
 	public ProspectoVista cambiarEtapa(@PathVariable Long id, @Valid @RequestBody CambiarEtapaRequest request,
 			@AuthenticationPrincipal UsuarioAutenticado actor) {
 		return seguimientoProspectosService.cambiarEtapa(id, request.etapa(), request.motivoCierre(), actor);

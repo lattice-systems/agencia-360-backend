@@ -9,17 +9,22 @@ import java.time.Instant;
  *
  * @param creadoEn
  *            fecha y hora de registro
+ * @param ultimoCambio
+ *            fecha y hora del último cambio de etapa
  * @param motivoCierre
  *            solo si el prospecto está cerrado
  * @param ultimaEtapa
  *            etapa en la que estaba al cerrarse; solo si está cerrado
+ * @param cierrePendiente
+ *            hay una solicitud de cierre esperando al Administrador
  */
 public record ProspectoVista(Long id, String nombre, String telefono, String correo, Etapa etapa, Long vendedorId,
-		Instant creadoEn, String motivoCierre, Etapa ultimaEtapa) {
+		Instant creadoEn, Instant ultimoCambio, String motivoCierre, Etapa ultimaEtapa, boolean cierrePendiente) {
 
 	static ProspectoVista de(Prospecto prospecto) {
 		return new ProspectoVista(prospecto.getId(), prospecto.getNombre(), prospecto.getTelefono(),
 				prospecto.getCorreo(), prospecto.getEtapa(), prospecto.getVendedorId(), prospecto.getCreatedAt(),
-				prospecto.getMotivoCierre(), prospecto.getUltimaEtapa());
+				prospecto.getEtapaActualizadaEn(), prospecto.getMotivoCierre(), prospecto.getUltimaEtapa(),
+				prospecto.isCierrePendiente());
 	}
 }
