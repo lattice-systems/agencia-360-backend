@@ -23,8 +23,8 @@ public class GlobalExceptionHandler {
 	private static final Logger LOG = LoggerFactory.getLogger(GlobalExceptionHandler.class);
 
 	/**
-	 * Lo que ve el usuario ante un error no previsto. El detalle técnico va solo
-	 * al log: la app CareCar y los frontends muestran el message tal cual.
+	 * Lo que ve el usuario ante un error no previsto. El detalle técnico va solo al
+	 * log: la app CareCar y los frontends muestran el message tal cual.
 	 */
 	static final String MENSAJE_ERROR_INESPERADO = "Ocurrió un error inesperado. Intenta de nuevo más tarde.";
 
@@ -93,7 +93,7 @@ public class GlobalExceptionHandler {
 
 	@ExceptionHandler(Exception.class)
 	public ResponseEntity<ApiError> handleUnexpected(Exception ex, HttpServletRequest request) {
-		LOG.error("Error inesperado en {} {}", request.getMethod(), request.getRequestURI(), ex);
+		LOG.error("Error inesperado al atender la petición", ex);
 		return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
 				.body(ApiError.of(HttpStatus.INTERNAL_SERVER_ERROR.value(), "Internal Server Error",
 						MENSAJE_ERROR_INESPERADO, request.getRequestURI()));
