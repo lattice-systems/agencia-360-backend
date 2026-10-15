@@ -1,6 +1,8 @@
 package dev.latticesystems.erp_agente360.backend_agencia360.shared.exception;
 
 import jakarta.servlet.http.HttpServletRequest;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -17,6 +19,14 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
  */
 @RestControllerAdvice
 public class GlobalExceptionHandler {
+
+	private static final Logger LOG = LoggerFactory.getLogger(GlobalExceptionHandler.class);
+
+	/**
+	 * Lo que ve el usuario ante un error no previsto. El detalle técnico va solo
+	 * al log: la app CareCar y los frontends muestran el message tal cual.
+	 */
+	static final String MENSAJE_ERROR_INESPERADO = "Ocurrió un error inesperado. Intenta de nuevo más tarde.";
 
 	@ExceptionHandler(MethodArgumentNotValidException.class)
 	public ResponseEntity<ApiError> handleValidation(MethodArgumentNotValidException ex, HttpServletRequest request) {
@@ -83,8 +93,9 @@ public class GlobalExceptionHandler {
 
 	@ExceptionHandler(Exception.class)
 	public ResponseEntity<ApiError> handleUnexpected(Exception ex, HttpServletRequest request) {
+		LOG.error("Error inesperado en {} {}", request.getMethod(), request.getRequestURI(), ex);
 		return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-				.body(ApiError.of(HttpStatus.INTERNAL_SERVER_ERROR.value(), "Internal Server Error", ex.getMessage(),
-						request.getRequestURI()));
+				.body(ApiError.of(HttpStatus.INTERNAL_SERVER_ERROR.value(), "Internal Server Error",
+						MENSAJE_ERROR_INESPERADO, request.getRequestURI()));
 	}
 }
