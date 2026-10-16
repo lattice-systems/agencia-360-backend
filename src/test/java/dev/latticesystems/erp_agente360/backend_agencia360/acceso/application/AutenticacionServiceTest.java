@@ -30,7 +30,7 @@ class AutenticacionServiceTest {
 
 	private static final Rol CAJA = new Rol("CAJA", "Registro de cobros", true, false);
 	private static final Rol VENTAS = new Rol("VENTAS", "Vendedor", false, true);
-	private static final Rol CONTABILIDAD = new Rol("CONTABILIDAD", "Contabilidad", true, true);
+	private static final Rol CONTABILIDAD = new Rol("CONTABILIDAD", "Contabilidad", true, false);
 
 	@Mock
 	private UsuarioRepository usuarioRepository;
@@ -104,11 +104,12 @@ class AutenticacionServiceTest {
 	}
 
 	@Test
-	void contabilidadEntraAlErpYAlCrm() {
+	void contabilidadEntraAlErpPeroNoAlCrm() {
 		registrar("conta1", CONTABILIDAD);
 
 		assertThat(service.iniciarSesion("conta1", CONTRASENA, Aplicacion.ERP).rol()).isEqualTo(Role.CONTABILIDAD);
-		assertThat(service.iniciarSesion("conta1", CONTRASENA, Aplicacion.CRM).rol()).isEqualTo(Role.CONTABILIDAD);
+		assertThatThrownBy(() -> service.iniciarSesion("conta1", CONTRASENA, Aplicacion.CRM))
+				.isInstanceOf(AccessDeniedException.class);
 	}
 
 	private Usuario registrar(String nombreUsuario, Rol rol) {
