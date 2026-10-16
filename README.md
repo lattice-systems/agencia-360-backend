@@ -106,6 +106,7 @@ src/main/java/dev/latticesystems/erp_agente360/backend_agencia360/
 │   └── domain/      # clases base (auditoría)
 ├── acceso/          # Usuarios, roles y login del personal — ERP-0.1 · CRM-0.1
 ├── ventascrm/       # Ventas y CRM de prospectos       — ERP HU 1.1 · CareCar HU 1.1, 1.2
+├── clientes/        # Clientes de la agencia y sus vehículos — CRM-1.5
 ├── facturacion/     # Facturación y Administración      — ERP HU 1.2
 ├── inventario/      # Vehículos, refacciones y recepciones — ERP HU 2.0 · 2.1
 ├── servicio/        # Taller y Servicio (órdenes, tickets) — ERP HU 3.1
@@ -126,7 +127,7 @@ Cada módulo de negocio sigue la misma convención interna (capas, no sub-módul
 └── infrastructure/      # repositorios Spring Data, adaptadores externos (p. ej. cliente del PAC)
 ```
 
-Ya tienen código `acceso`, `ventascrm` e `inventario`; los demás módulos siguen vacíos (solo `.gitkeep`) hasta que lleguen sus historias. El modelo de datos v1 está en `docs/TEC-1_modelo-datos_v1.md`. `ModularityTests` (en `src/test/java/.../ModularityTests.java`) corre `ApplicationModules.verify()`: cualquier ciclo entre módulos o acceso a un paquete interno de otro módulo rompe el build.
+Ya tienen código `acceso`, `ventascrm`, `inventario` y `clientes`; los demás módulos siguen vacíos (solo `.gitkeep`) hasta que lleguen sus historias. El modelo de datos v1 está en `docs/TEC-1_modelo-datos_v1.md`. `ModularityTests` (en `src/test/java/.../ModularityTests.java`) corre `ApplicationModules.verify()`: cualquier ciclo entre módulos o acceso a un paquete interno de otro módulo rompe el build.
 
 ### Endpoints implementados
 
@@ -142,6 +143,7 @@ Todos van bajo `/api/v1` y, salvo el login, piden el token en `Authorization: Be
 | `inventario` | `GET /vehiculos?estatus=`, `GET /vehiculos/{id}` | Inventario y Administrador (todas); Ventas (solo Disponibles) |
 | `inventario` | `POST /refacciones`, `PUT /refacciones/{id}`, `POST /refacciones/{id}/recepciones` | Inventario |
 | `inventario` | `GET /refacciones?bajoMinimo=`, `GET /refacciones/{id}`, `GET /refacciones/{id}/recepciones` | Inventario, Refacciones y Administrador |
+| `clientes` | `GET /clientes?buscar=`, `GET /clientes/{id}` | Gerente de marketing |
 
 Reglas del inventario (decisiones del PO del 13 de octubre):
 - Las unidades y refacciones se editan, pero no se eliminan.
