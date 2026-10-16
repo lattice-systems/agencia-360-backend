@@ -35,7 +35,7 @@ class AdministracionUsuariosServiceTest {
 
 	private static final Rol CAJA = new Rol("CAJA", "Registro de cobros", true, false);
 	private static final Rol VENTAS = new Rol("VENTAS", "Vendedor", false, true);
-	private static final Rol CONTABILIDAD = new Rol("CONTABILIDAD", "Contabilidad", true, true);
+	private static final Rol CONTABILIDAD = new Rol("CONTABILIDAD", "Contabilidad", true, false);
 
 	@Mock
 	private UsuarioRepository usuarioRepository;
@@ -134,8 +134,7 @@ class AdministracionUsuariosServiceTest {
 
 		assertThat(service.rolesAsignables(ADMINISTRADOR)).extracting(RolVista::nombre).containsExactly("CAJA",
 				"CONTABILIDAD");
-		assertThat(service.rolesAsignables(GERENTE)).extracting(RolVista::nombre).containsExactly("CONTABILIDAD",
-				"VENTAS");
+		assertThat(service.rolesAsignables(GERENTE)).extracting(RolVista::nombre).containsExactly("VENTAS");
 	}
 
 	@Test

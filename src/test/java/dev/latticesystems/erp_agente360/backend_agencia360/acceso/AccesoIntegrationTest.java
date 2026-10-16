@@ -93,6 +93,14 @@ class AccesoIntegrationTest extends AbstractIntegrationTest {
 	}
 
 	@Test
+	void contabilidadEntraAlErpPeroNoAlCrm() throws Exception {
+		registrar("conta1", "CONTABILIDAD");
+
+		mockMvc.perform(login("conta1", CONTRASENA, "ERP")).andExpect(status().isOk());
+		mockMvc.perform(login("conta1", CONTRASENA, "CRM")).andExpect(status().isForbidden());
+	}
+
+	@Test
 	void rechazaLoginSinAplicacion() throws Exception {
 		mockMvc.perform(post("/api/v1/auth/login").contentType(MediaType.APPLICATION_JSON)
 				.content("{\"usuario\":\"caja1\",\"contrasena\":\"x\"}")).andExpect(status().isBadRequest());
