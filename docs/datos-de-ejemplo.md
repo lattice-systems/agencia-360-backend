@@ -21,7 +21,7 @@ Uno por rol. El Administrador y el Gerente de marketing se crean al arrancar la 
 | `facturacion1` | `Facturacion123` | Sofía Méndez | Facturación | ERP |
 | `servicio1` | `Servicio123` | Jorge Castillo | Servicio | ERP |
 | `caja1` | `Caja12345` | Carla Cajera | Caja | ERP |
-| `contabilidad1` | `Contabilidad123` | Marco Ortiz | Contabilidad | ERP y CRM |
+| `contabilidad1` | `Contabilidad123` | Marco Ortiz | Contabilidad | ERP |
 | `vendedor1` | `Vendedor123` | Sergio Luna | Ventas | CRM |
 | `vendedor2` | `Vendedor123` | Elena Ríos | Ventas | CRM |
 

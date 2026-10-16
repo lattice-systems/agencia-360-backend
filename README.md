@@ -155,7 +155,7 @@ Reglas del inventario (decisiones del PO del 13 de octubre):
 - **Dinero: no se borra, se revierte**: una cancelación de pago se registra como movimiento inverso, nunca como borrado, para conservar trazabilidad. Requiere autorización.
 - **Inventario por movimientos**: cada entrada/salida es un registro; se usa bloqueo de fila para no vender la misma pieza dos veces.
 - **Citas sin empalmes**: restricción a nivel de base de datos para que dos clientes no reserven el mismo horario.
-- **Acceso por roles**: cada usuario del personal tiene un solo rol, y el rol define si entra al ERP, al CRM o a ambos (tabla `rol`, migración V2). Roles: Administrador, Gerente de marketing, Ventas, Facturación, Inventario, Servicio, Refacciones, Caja y Contabilidad. El enum `shared/security/Role.java` debe coincidir con esa tabla.
+- **Acceso por roles**: cada usuario del personal tiene un solo rol, y el rol define si entra al ERP o al CRM (tabla `rol`, migraciones V2 y V6). Roles: Administrador, Gerente de marketing, Ventas, Facturación, Inventario, Servicio, Refacciones, Caja y Contabilidad. El enum `shared/security/Role.java` debe coincidir con esa tabla.
 - **Una sola API con OpenAPI**: de ella se generan los clientes React y Flutter — evitar romper el contrato sin versionarlo.
 - **App CareCar sin registro público**: el acceso es con usuario/contraseña emitidos por la agencia tras validar la compra.
 
@@ -303,7 +303,7 @@ Solo necesita `bash` y `curl`; en Windows, corre en Git Bash. Para apuntar a otr
 | `facturacion1` | `Facturacion123` | Facturación | ERP | Menú vacío por ahora (sus historias llegan después) |
 | `servicio1` | `Servicio123` | Servicio | ERP | Menú vacío por ahora |
 | `caja1` | `Caja12345` | Caja | ERP | Menú vacío por ahora |
-| `contabilidad1` | `Contabilidad123` | Contabilidad | ERP y CRM | Menú vacío por ahora |
+| `contabilidad1` | `Contabilidad123` | Contabilidad | ERP | Menú vacío por ahora |
 | `vendedor1` | `Vendedor123` | Ventas (Sergio Luna) | CRM | Sus 6 prospectos |
 | `vendedor2` | `Vendedor123` | Ventas (Elena Ríos) | CRM | Sus 6 prospectos, incluido uno que el Gerente le reasignó |
 
