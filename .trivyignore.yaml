@@ -1,0 +1,23 @@
+# CVE aceptados temporalmente por el paso que bloquea el PR en .github/workflows/trivy.yml.
+# Siguen apareciendo en Security → Code scanning: el SARIF se genera sin este archivo.
+#
+# Reglas para agregar una entrada:
+# - Solo si no hay versión corregida alcanzable o el código vulnerable no se usa.
+# - Con purl de la versión exacta: si la dependencia cambia de versión, la excepción deja de aplicar.
+# - Con statement (por qué no aplica) y expired_at (máximo 3 meses), para volver a revisarla.
+vulnerabilities:
+  # Spring Framework 6.2.x no tiene parche OSS; la corrección está en 7.0.9 (Spring Boot 4.x).
+  - id: CVE-2026-47884
+    purls:
+      - "pkg:maven/org.springframework/spring-webmvc@6.2.19"
+    statement: >-
+      Path traversal en XsltView. El proyecto no usa XsltView ni vistas del lado servidor:
+      todos los controladores son @RestController y responden JSON.
+    expired_at: 2027-01-18
+  - id: CVE-2026-47890
+    purls:
+      - "pkg:maven/org.springframework/spring-webmvc@6.2.19"
+    statement: >-
+      Corrupción de streams Server-Sent Events al renderizar fragmentos. El proyecto no usa
+      SseEmitter ni fragmentos de vista.
+    expired_at: 2027-01-18
