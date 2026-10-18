@@ -203,3 +203,8 @@ buildNumber.properties
 .ionide
 
 # End of https://www.toptal.com/developers/gitignore/api/git,java,visualstudiocode,intellij,redis,maven,azurefunctions
+
+### Seguridad ###
+# Reporte de la auditoría AppSec: el repositorio es público y los hallazgos abiertos
+# viven en Security → Advisories (borradores privados). No versionar.
+SECURITY_REPORT.md
