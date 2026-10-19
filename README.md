@@ -127,7 +127,7 @@ Cada módulo de negocio sigue la misma convención interna (capas, no sub-módul
 └── infrastructure/      # repositorios Spring Data, adaptadores externos (p. ej. cliente del PAC)
 ```
 
-Ya tienen código `acceso`, `ventascrm`, `inventario` y `clientes`; los demás módulos siguen vacíos (solo `.gitkeep`) hasta que lleguen sus historias. El modelo de datos v1 está en `docs/TEC-1_modelo-datos_v1.md`. `ModularityTests` (en `src/test/java/.../ModularityTests.java`) corre `ApplicationModules.verify()`: cualquier ciclo entre módulos o acceso a un paquete interno de otro módulo rompe el build.
+Ya tienen código `acceso`, `ventascrm`, `inventario`, `clientes` y `carecarapp`; los demás módulos siguen vacíos (solo `.gitkeep`) hasta que lleguen sus historias. El modelo de datos v1 está en `docs/TEC-1_modelo-datos_v1.md`. `ModularityTests` (en `src/test/java/.../ModularityTests.java`) corre `ApplicationModules.verify()`: cualquier ciclo entre módulos o acceso a un paquete interno de otro módulo rompe el build.
 
 ### Endpoints implementados
 
@@ -145,6 +145,8 @@ Todos van bajo `/api/v1` y, salvo el login, piden el token en `Authorization: Be
 | `inventario` | `POST /refacciones`, `PUT /refacciones/{id}`, `POST /refacciones/{id}/recepciones` | Inventario |
 | `inventario` | `GET /refacciones?bajoMinimo=`, `GET /refacciones/{id}`, `GET /refacciones/{id}/recepciones` | Inventario, Refacciones y Administrador |
 | `clientes` | `GET /clientes?buscar=`, `GET /clientes/{id}` | Gerente de marketing |
+| `carecarapp` | `POST /app/auth/login`, `/refrescar`, `/cerrar-sesion`, `/recuperar-contrasena`, `/restablecer-contrasena` | Clientes de la app (sin token) |
+| `carecarapp` | `POST /app/auth/cambiar-contrasena`, `GET /app/perfil` | Clientes de la app (rol `CLIENTE_CARECAR`) |
 
 Reglas del inventario (decisiones del PO del 13 de octubre):
 - Las unidades y refacciones se editan, pero no se eliminan.
@@ -183,6 +185,7 @@ Con **Podman** también funciona (`podman compose up -d`), siempre que tenga act
 |---|---|---|---|---|
 | `postgres` | `postgres:16-alpine` | `5432` | BD `agencia360`, usuario `agencia360`, contraseña `agencia360` | Sí, en el volumen `postgres-data` (sobreviven a `docker compose down`) |
 | `redis` | `redis:7-alpine` | `6379` | Sin contraseña | No hay que confiar en ellos: es caché y se puede vaciar en cualquier momento |
+| `mailpit` | `axllent/mailpit` | `1025` (SMTP) y `8025` (bandeja web) | Sin contraseña | No: atrapa los correos de desarrollo (códigos de recuperación de la app) |
 
 Estas credenciales son **solo para desarrollo local** y coinciden con los valores por defecto de `src/main/resources/application.properties`, así que no hay que configurar nada para que la API se conecte.
 
@@ -220,6 +223,7 @@ curl http://localhost:8080/actuator/health
 | `http://localhost:8080/actuator/health` | Estado de la API, la base de datos y Redis (`UP` / `DOWN`) |
 | `http://localhost:8080/swagger-ui.html` | Swagger UI para probar los endpoints |
 | `http://localhost:8080/v3/api-docs` | Contrato OpenAPI en JSON |
+| `http://localhost:8025` | Mailpit: correos que envía la API en el perfil `dev` (por ejemplo, el código de recuperación de la app) |
 
 **Perfil `dev`**: muestra el SQL que ejecuta Hibernate (`spring.jpa.show-sql=true`) y sube el nivel de log del proyecto a `DEBUG`. Ver `src/main/resources/application-dev.properties`.
 
