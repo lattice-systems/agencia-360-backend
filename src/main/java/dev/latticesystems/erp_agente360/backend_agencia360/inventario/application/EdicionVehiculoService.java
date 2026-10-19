@@ -4,20 +4,24 @@ import dev.latticesystems.erp_agente360.backend_agencia360.inventario.domain.Veh
 import dev.latticesystems.erp_agente360.backend_agencia360.inventario.infrastructure.VehiculoRepository;
 import dev.latticesystems.erp_agente360.backend_agencia360.shared.exception.ConflictoException;
 import dev.latticesystems.erp_agente360.backend_agencia360.shared.exception.RecursoNoEncontradoException;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
  * Corrección de los datos de una unidad (decisión del PO del 13 de octubre: se
- * edita, no se elimina).
+ * edita, no se elimina). Avisa del cambio para el inventario en tiempo real
+ * (ERP-2.1).
  */
 @Service
 public class EdicionVehiculoService {
 
 	private final VehiculoRepository vehiculoRepository;
+	private final ApplicationEventPublisher eventos;
 
-	public EdicionVehiculoService(VehiculoRepository vehiculoRepository) {
+	public EdicionVehiculoService(VehiculoRepository vehiculoRepository, ApplicationEventPublisher eventos) {
 		this.vehiculoRepository = vehiculoRepository;
+		this.eventos = eventos;
 	}
 
 	/**
@@ -41,6 +45,7 @@ public class EdicionVehiculoService {
 		}
 		vehiculo.editar(vin, datos.modelo(), datos.version(), datos.anio(), datos.color(), datos.precio(),
 				datos.estatus());
+		eventos.publishEvent(new VehiculoCambiado(vehiculo.getId()));
 		return VehiculoVista.de(vehiculo);
 	}
 }
