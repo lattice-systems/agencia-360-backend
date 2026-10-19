@@ -27,6 +27,8 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.test.util.ReflectionTestUtils;
 
 @ExtendWith(MockitoExtension.class)
 class RegistroVehiculoServiceTest {
@@ -44,12 +46,27 @@ class RegistroVehiculoServiceTest {
 	@Mock
 	private MovimientoInventarioRepository movimientoRepository;
 
+	@Mock
+	private ApplicationEventPublisher eventos;
+
 	private RegistroVehiculoService service;
 
 	@BeforeEach
 	void setUp() {
-		service = new RegistroVehiculoService(vehiculoRepository, movimientoRepository,
+		service = new RegistroVehiculoService(vehiculoRepository, movimientoRepository, eventos,
 				Clock.fixed(AHORA, ZoneOffset.UTC));
+	}
+
+	@Test
+	void avisaQueCambioElInventarioDeVehiculos() {
+		Vehiculo guardado = Vehiculo.registrar("3VWFE21C04M000001", "Jetta", "Comfortline", 2026, "Blanco", PRECIO,
+				null);
+		ReflectionTestUtils.setField(guardado, "id", 7L);
+		when(vehiculoRepository.save(any(Vehiculo.class))).thenReturn(guardado);
+
+		service.registrar(NUEVO, ALMACEN);
+
+		verify(eventos).publishEvent(new VehiculoCambiado(7L));
 	}
 
 	@Test
@@ -87,6 +104,7 @@ class RegistroVehiculoServiceTest {
 				.hasMessage("Ya existe un vehículo con el VIN 3VWFE21C04M000001");
 		verify(vehiculoRepository, never()).save(any());
 		verify(movimientoRepository, never()).save(any());
+		verify(eventos, never()).publishEvent(any(Object.class));
 	}
 
 	@Test
