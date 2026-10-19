@@ -43,6 +43,11 @@ public class JwtService {
 				.expiration(expiry).signWith(signingKey).compact();
 	}
 
+	/** Cuánto vive un token emitido, en segundos ({@code expiresIn} de la app). */
+	public long segundosDeVigencia() {
+		return expirationMillis / 1000;
+	}
+
 	public Claims parseClaims(String token) {
 		return Jwts.parser().verifyWith((javax.crypto.SecretKey) signingKey).build().parseSignedClaims(token)
 				.getPayload();

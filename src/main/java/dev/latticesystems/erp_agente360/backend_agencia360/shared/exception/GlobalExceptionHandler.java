@@ -5,6 +5,7 @@ import jakarta.servlet.http.HttpServletResponse;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
@@ -34,8 +35,8 @@ public class GlobalExceptionHandler {
 		String message = ex.getBindingResult().getFieldErrors().stream()
 				.map(fieldError -> fieldError.getField() + ": " + fieldError.getDefaultMessage())
 				.reduce((a, b) -> a + "; " + b).orElse("Datos inválidos");
-		return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-				.body(ApiError.of(HttpStatus.BAD_REQUEST.value(), "Bad Request", message, request.getRequestURI()));
+		return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(ApiError.of(HttpStatus.BAD_REQUEST.value(),
+				"Bad Request", message, request.getRequestURI(), CodigosError.DATOS_INVALIDOS));
 	}
 
 	@ExceptionHandler(AccessDeniedException.class)
@@ -46,14 +47,37 @@ public class GlobalExceptionHandler {
 
 	@ExceptionHandler(HttpMessageNotReadableException.class)
 	public ResponseEntity<ApiError> handleNotReadable(HttpMessageNotReadableException ex, HttpServletRequest request) {
-		return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(ApiError.of(HttpStatus.BAD_REQUEST.value(),
-				"Bad Request", "El cuerpo de la petición no es válido", request.getRequestURI()));
+		return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+				.body(ApiError.of(HttpStatus.BAD_REQUEST.value(), "Bad Request",
+						"El cuerpo de la petición no es válido", request.getRequestURI(),
+						CodigosError.DATOS_INVALIDOS));
 	}
 
 	@ExceptionHandler(NoAutenticadoException.class)
 	public ResponseEntity<ApiError> handleNoAutenticado(NoAutenticadoException ex, HttpServletRequest request) {
-		return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(
-				ApiError.of(HttpStatus.UNAUTHORIZED.value(), "Unauthorized", ex.getMessage(), request.getRequestURI()));
+		return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(ApiError.of(HttpStatus.UNAUTHORIZED.value(),
+				"Unauthorized", ex.getMessage(), request.getRequestURI(), ex.getCodigo()));
+	}
+
+	@ExceptionHandler(ProhibidoException.class)
+	public ResponseEntity<ApiError> handleProhibido(ProhibidoException ex, HttpServletRequest request) {
+		return ResponseEntity.status(HttpStatus.FORBIDDEN).body(ApiError.of(HttpStatus.FORBIDDEN.value(), "Forbidden",
+				ex.getMessage(), request.getRequestURI(), ex.getCodigo()));
+	}
+
+	@ExceptionHandler(SolicitudInvalidaException.class)
+	public ResponseEntity<ApiError> handleSolicitudInvalida(SolicitudInvalidaException ex, HttpServletRequest request) {
+		return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(ApiError.of(HttpStatus.BAD_REQUEST.value(),
+				"Bad Request", ex.getMessage(), request.getRequestURI(), ex.getCodigo()));
+	}
+
+	@ExceptionHandler(DemasiadosIntentosException.class)
+	public ResponseEntity<ApiError> handleDemasiadosIntentos(DemasiadosIntentosException ex,
+			HttpServletRequest request) {
+		return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS)
+				.header(HttpHeaders.RETRY_AFTER, String.valueOf(ex.getSegundosParaReintentar()))
+				.body(ApiError.of(HttpStatus.TOO_MANY_REQUESTS.value(), "Too Many Requests", ex.getMessage(),
+						request.getRequestURI(), CodigosError.DEMASIADOS_INTENTOS));
 	}
 
 	@ExceptionHandler(RecursoNoEncontradoException.class)
@@ -76,8 +100,8 @@ public class GlobalExceptionHandler {
 
 	@ExceptionHandler(IllegalArgumentException.class)
 	public ResponseEntity<ApiError> handleIllegalArgument(IllegalArgumentException ex, HttpServletRequest request) {
-		return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(
-				ApiError.of(HttpStatus.BAD_REQUEST.value(), "Bad Request", ex.getMessage(), request.getRequestURI()));
+		return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(ApiError.of(HttpStatus.BAD_REQUEST.value(),
+				"Bad Request", ex.getMessage(), request.getRequestURI(), CodigosError.DATOS_INVALIDOS));
 	}
 
 	/**
