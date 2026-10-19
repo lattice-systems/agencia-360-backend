@@ -13,6 +13,7 @@ import dev.latticesystems.erp_agente360.backend_agencia360.shared.security.Role;
 import dev.latticesystems.erp_agente360.backend_agencia360.shared.security.UsuarioAutenticado;
 import dev.latticesystems.erp_agente360.backend_agencia360.ventascrm.domain.EstadoSolicitud;
 import dev.latticesystems.erp_agente360.backend_agencia360.ventascrm.domain.Etapa;
+import dev.latticesystems.erp_agente360.backend_agencia360.ventascrm.domain.MotivoCierre;
 import dev.latticesystems.erp_agente360.backend_agencia360.ventascrm.domain.Prospecto;
 import dev.latticesystems.erp_agente360.backend_agencia360.ventascrm.domain.SolicitudCierre;
 import dev.latticesystems.erp_agente360.backend_agencia360.ventascrm.infrastructure.ProspectoRepository;
@@ -35,7 +36,7 @@ import org.springframework.security.access.AccessDeniedException;
 class SolicitudesCierreServiceTest {
 
 	private static final Instant AHORA = Instant.parse("2026-10-13T10:00:00Z");
-	private static final String MOTIVO = "El cliente canceló la compra";
+	private static final MotivoCierre MOTIVO = MotivoCierre.PERDIO_EL_INTERES;
 	private static final UsuarioAutenticado VENDEDOR = new UsuarioAutenticado(7L, "vendedor1", Set.of(Role.VENTAS));
 	private static final UsuarioAutenticado ADMINISTRADOR = new UsuarioAutenticado(1L, "admin",
 			Set.of(Role.ADMINISTRADOR));
