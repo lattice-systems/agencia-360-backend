@@ -11,6 +11,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import java.net.URI;
 import java.util.List;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -22,6 +23,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 /**
  * Alta y consulta de unidades del inventario (ERP-2.0). Solo Inventario da de
@@ -35,12 +37,15 @@ public class VehiculoController {
 	private final RegistroVehiculoService registroVehiculoService;
 	private final ConsultaVehiculosService consultaVehiculosService;
 	private final EdicionVehiculoService edicionVehiculoService;
+	private final AvisosDeVehiculos avisos;
 
 	public VehiculoController(RegistroVehiculoService registroVehiculoService,
-			ConsultaVehiculosService consultaVehiculosService, EdicionVehiculoService edicionVehiculoService) {
+			ConsultaVehiculosService consultaVehiculosService, EdicionVehiculoService edicionVehiculoService,
+			AvisosDeVehiculos avisos) {
 		this.registroVehiculoService = registroVehiculoService;
 		this.consultaVehiculosService = consultaVehiculosService;
 		this.edicionVehiculoService = edicionVehiculoService;
+		this.avisos = avisos;
 	}
 
 	@PostMapping
@@ -63,6 +68,16 @@ public class VehiculoController {
 	public List<VehiculoVista> listar(@RequestParam(required = false) String estatus,
 			@AuthenticationPrincipal UsuarioAutenticado actor) {
 		return consultaVehiculosService.listar(estatus == null ? null : EstatusVehiculo.desde(estatus), actor);
+	}
+
+	@GetMapping(path = "/eventos", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+	@PreAuthorize("hasAnyRole('INVENTARIO', 'ADMINISTRADOR', 'VENTAS')")
+	@Operation(summary = "Recibir los cambios del inventario en tiempo real", description = "Server-Sent Events "
+			+ "(ERP-2.1). Manda el evento \"vehiculos\" cada vez que se da de alta o se corrige una unidad; el cliente "
+			+ "vuelve a consultar la lista. Envía un comentario cada 25 s para mantener viva la conexión y la cierra a "
+			+ "los 30 min para que el cliente se reconecte con su token.")
+	public SseEmitter eventos() {
+		return avisos.suscribir();
 	}
 
 	@GetMapping("/{id}")

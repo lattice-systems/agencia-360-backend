@@ -2,6 +2,9 @@ package dev.latticesystems.erp_agente360.backend_agencia360.inventario.applicati
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import dev.latticesystems.erp_agente360.backend_agencia360.inventario.domain.EstatusVehiculo;
@@ -16,6 +19,8 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.test.util.ReflectionTestUtils;
 
 @ExtendWith(MockitoExtension.class)
 class EdicionVehiculoServiceTest {
@@ -25,11 +30,39 @@ class EdicionVehiculoServiceTest {
 	@Mock
 	private VehiculoRepository vehiculoRepository;
 
+	@Mock
+	private ApplicationEventPublisher eventos;
+
 	private EdicionVehiculoService service;
 
 	@BeforeEach
 	void setUp() {
-		service = new EdicionVehiculoService(vehiculoRepository);
+		service = new EdicionVehiculoService(vehiculoRepository, eventos);
+	}
+
+	@Test
+	void avisaQueCambioElInventarioDeVehiculos() {
+		Vehiculo vehiculo = Vehiculo.registrar("3VWFE21C04M000001", "Jetta", "Comfortline", 2026, "Blanco", PRECIO,
+				null);
+		ReflectionTestUtils.setField(vehiculo, "id", 1L);
+		when(vehiculoRepository.findById(1L)).thenReturn(Optional.of(vehiculo));
+
+		service.editar(1L,
+				new VehiculoEditado("3VWFE21C04M000001", "Jetta", "Comfortline", 2026, "Rojo", PRECIO, null));
+
+		verify(eventos).publishEvent(new VehiculoCambiado(1L));
+	}
+
+	@Test
+	void unaCorreccionRechazadaNoAvisa() {
+		Vehiculo vehiculo = Vehiculo.registrar("3VWFE21C04M000001", "Jetta", "Comfortline", 2026, "Blanco", PRECIO,
+				null);
+		when(vehiculoRepository.findById(1L)).thenReturn(Optional.of(vehiculo));
+
+		assertThatThrownBy(() -> service.editar(1L,
+				new VehiculoEditado("3VWFE21C04M000001", "Jetta", "Comfortline", 2026, " ", PRECIO, null)))
+				.isInstanceOf(IllegalArgumentException.class);
+		verify(eventos, never()).publishEvent(any(Object.class));
 	}
 
 	@Test
