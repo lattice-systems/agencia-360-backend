@@ -144,7 +144,8 @@ Todos van bajo `/api/v1` y, salvo el login, piden el token en `Authorization: Be
 | `inventario` | `GET /vehiculos/eventos` (Server-Sent Events: avisa cuando cambia una unidad) | Inventario, Administrador y Ventas |
 | `inventario` | `POST /refacciones`, `PUT /refacciones/{id}`, `POST /refacciones/{id}/recepciones` | Inventario |
 | `inventario` | `GET /refacciones?bajoMinimo=`, `GET /refacciones/{id}`, `GET /refacciones/{id}/recepciones` | Inventario, Refacciones y Administrador |
-| `clientes` | `GET /clientes?buscar=`, `GET /clientes/{id}` | Gerente de marketing |
+| `clientes` | `GET /clientes?buscar=`, `GET /clientes/{id}`, `POST /clientes`, `POST /clientes/{id}/vehiculos` | Gerente de marketing |
+| `carecarapp` | `GET` y `POST /clientes/{id}/cuenta-app`, `POST /clientes/{id}/cuenta-app/desactivar` y `/activar` | Gerente de marketing |
 | `carecarapp` | `POST /app/auth/login`, `/refrescar`, `/cerrar-sesion`, `/recuperar-contrasena`, `/restablecer-contrasena` | Clientes de la app (sin token) |
 | `carecarapp` | `POST /app/auth/cambiar-contrasena`, `GET /app/perfil` | Clientes de la app (rol `CLIENTE_CARECAR`) |
 
