@@ -1,0 +1,79 @@
+name: Trivy
+
+# Escaneo de CVE en las dependencias del pom.xml. Los resultados se suben a
+# Security → Code scanning junto con los de CodeQL, que guarda cuándo apareció y
+# cuándo se cerró cada alerta. Corre también cada lunes porque los CVE nuevos
+# se publican aunque el código no cambie.
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    - cron: "0 6 * * 1"
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+  security-events: write
+
+concurrency:
+  group: trivy-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # Se instala el binario con su SHA256 fijo en lugar de usar aquasecurity/trivy-action:
+  # en 2026 los tags de esa acción se reescribieron con código malicioso. Para subir de
+  # versión, actualiza las dos variables con el checksum oficial del release.
+  TRIVY_VERSION: "0.75.0"
+  TRIVY_SHA256: "c6e65abddb348e25f10549df887045629cf28cc72453cd1c63acb717316b3f3f"
+
+jobs:
+  escanear:
+    name: Escaneo de dependencias (Trivy)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Descargar el código
+        uses: actions/checkout@v7
+
+      # Trivy lee los pom de las dependencias del caché local de Maven. Sin él los pide a
+      # Maven Central uno por uno y Central responde 429 y bloquea la IP del runner.
+      - name: Configurar JDK 25 (Temurin)
+        uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: "25"
+          cache: maven
+
+      - name: Resolver dependencias al caché de Maven
+        run: ./mvnw --no-transfer-progress -B dependency:resolve
+
+      - name: Instalar Trivy (versión y checksum fijos)
+        run: |
+          archivo="trivy_${TRIVY_VERSION}_Linux-64bit.tar.gz"
+          curl -sSfLO "https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}/${archivo}"
+          echo "${TRIVY_SHA256}  ${archivo}" | sha256sum -c -
+          tar -xzf "${archivo}" trivy
+          sudo install -m 755 trivy /usr/local/bin/trivy
+          trivy --version
+
+      - name: Escanear dependencias, secretos y configuración
+        run: >
+          trivy fs --scanners vuln,secret,misconfig --skip-version-check --offline-scan
+          --format sarif --output trivy-results.sarif .
+
+      - name: Subir resultados a Code scanning
+        if: always()
+        uses: github/codeql-action/upload-sarif@v4
+        with:
+          sarif_file: trivy-results.sarif
+          category: trivy
+
+      # Falla el job con CVE HIGH/CRITICAL que ya tienen versión corregida, o con un secreto.
+      # Las excepciones justificadas van en .trivyignore.yaml, con fecha de expiración.
+      # Reutiliza la base de CVE que descargó el paso anterior.
+      - name: Bloquear si hay CVE altos o críticos con parche
+        run: >
+          trivy fs --scanners vuln,secret --skip-version-check --skip-db-update --offline-scan
+          --severity HIGH,CRITICAL --ignore-unfixed --ignorefile .trivyignore.yaml
+          --exit-code 1 .

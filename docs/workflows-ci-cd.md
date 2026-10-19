@@ -10,6 +10,7 @@ Todo vive en `.github/workflows/` y corre automáticamente en GitHub. Este docum
 | Lint | `lint.yml` | Push a cualquier rama + PR a `main` | Formato de código (Spotless) y reglas de estilo (Checkstyle) |
 | CodeQL | `codeql.yml` | Push/PR a `main` + todos los lunes | Vulnerabilidades y patrones de código inseguro |
 | Dependency Review | `dependency-review.yml` | Solo en PR | Que no se agregue una dependencia con una vulnerabilidad conocida |
+| Trivy | `trivy.yml` | Push/PR a `main` + todos los lunes | CVE en todas las dependencias (no solo las nuevas), secretos y configuración |
 | Publicar paquete | `publish.yml` | Al publicar un Release en GitHub | Compila, prueba y sube el `.jar` a GitHub Packages |
 
 ## 1. CI: build y pruebas (`ci.yml`)
@@ -44,6 +45,16 @@ Si los tres comandos pasan en tu máquina, el workflow de CI y el de Lint van a 
 
 - **CodeQL** (`codeql.yml`): análisis estático de GitHub para encontrar vulnerabilidades (inyección, deserialización insegura, etc.). Corre en cada push/PR a `main` y también una vez por semana (lunes) para atrapar vulnerabilidades reportadas después de que el código ya estaba en el repo. Los hallazgos aparecen en la pestaña **Security → Code scanning** del repositorio, no en el PR directamente.
 - **Dependency Review** (`dependency-review.yml`): en cada PR, compara las dependencias que se agregan o cambian contra la base de datos de vulnerabilidades de GitHub. Si se introduce una dependencia con severidad **alta o crítica**, bloquea el PR y deja un comentario explicando cuál es.
+- **Trivy** (`trivy.yml`): Dependency Review solo mira lo que cambia en el PR; Trivy revisa **todas** las dependencias del `pom.xml`, incluidas las transitivas, y además busca secretos y configuración insegura. Corre en cada push/PR a `main` y cada lunes, porque un CVE nuevo puede afectar una dependencia que nadie tocó. Los hallazgos van a **Security → Code scanning** (categoría `trivy`), donde GitHub guarda cuándo apareció y cuándo se cerró cada alerta. El binario se instala con versión y SHA256 fijos, no con `aquasecurity/trivy-action`, porque los tags de esa acción fueron reescritos con código malicioso en 2026.
+  - **Qué bloquea:** el job falla si hay un CVE `HIGH` o `CRITICAL` que ya tenga versión corregida, o un secreto en el código. Un CVE sin parche o de menor severidad solo aparece en Code scanning.
+  - **Cómo se corrige:** subiendo la versión. Si Spring Boot todavía no trae la corregida, se sobrescribe la propiedad de su BOM en `<properties>` del `pom.xml` (p. ej. `<tomcat.version>`), con un comentario que diga qué CVE corrige.
+  - **Excepciones:** solo cuando no hay parche alcanzable o el código vulnerable no se usa, en `.trivyignore.yaml`, con la versión exacta (`purls`), la justificación (`statement`) y una fecha de vencimiento (`expired_at`, máximo 3 meses). Al vencer, el job vuelve a fallar y obliga a revisarla.
+  - **Maven Central:** Trivy lee los `pom` del caché `~/.m2` (`--offline-scan`), que llena un `dependency:resolve` previo. Sin eso pide cada `pom` a Central, que responde `429` y bloquea la IP durante 30 minutos.
+  - **En local**, igual que el paso que bloquea (después de un `./mvnw verify` o `dependency:resolve`):
+
+    ```bash
+    trivy fs --scanners vuln,secret --offline-scan --severity HIGH,CRITICAL --ignore-unfixed --ignorefile .trivyignore.yaml --exit-code 1 .
+    ```
 - **Actualización de dependencias**: no se usa Dependabot. Las versiones de Maven (`pom.xml`) y de las Actions se actualizan a mano, en un PR propio (`build(deps): ...` o `ci(deps): ...`), cuando el equipo lo decide.
 
 ## 4. Publicación del paquete Maven (`publish.yml`)
