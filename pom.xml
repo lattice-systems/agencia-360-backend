@@ -102,6 +102,12 @@
 			<artifactId>spring-boot-starter-data-redis</artifactId>
 		</dependency>
 
+		<!-- Correo (recuperación de contraseña de la app; en desarrollo, Mailpit) -->
+		<dependency>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-mail</artifactId>
+		</dependency>
+
 		<!-- Seguridad -->
 		<dependency>
 			<groupId>org.springframework.boot</groupId>
