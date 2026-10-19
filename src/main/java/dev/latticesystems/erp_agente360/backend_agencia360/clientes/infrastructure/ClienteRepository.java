@@ -16,6 +16,10 @@ public interface ClienteRepository extends JpaRepository<Cliente, Long> {
 
 	Optional<Cliente> findByProspectoId(Long prospectoId);
 
+	/** El VIN se guarda en mayúsculas; se debe buscar igual. */
+	@Query("select count(v) > 0 from VehiculoCliente v where v.vin = :vin")
+	boolean existeVehiculoConVin(@Param("vin") String vin);
+
 	@EntityGraph(attributePaths = "vehiculos")
 	@Query("select distinct c from Cliente c order by c.nombre, c.id")
 	List<Cliente> listarConVehiculos();
