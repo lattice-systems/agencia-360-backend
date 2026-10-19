@@ -1,6 +1,7 @@
 package dev.latticesystems.erp_agente360.backend_agencia360.shared.exception;
 
 import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -91,8 +92,17 @@ public class GlobalExceptionHandler {
 				.of(HttpStatus.METHOD_NOT_ALLOWED.value(), "Method Not Allowed", mensaje, request.getRequestURI()));
 	}
 
+	/**
+	 * Si la respuesta ya se envió (por ejemplo, una conexión en tiempo real que el
+	 * navegador cerró), ya no se puede responder con un error: solo se registra.
+	 */
 	@ExceptionHandler(Exception.class)
-	public ResponseEntity<ApiError> handleUnexpected(Exception ex, HttpServletRequest request) {
+	public ResponseEntity<ApiError> handleUnexpected(Exception ex, HttpServletRequest request,
+			HttpServletResponse response) {
+		if (response.isCommitted()) {
+			LOG.debug("La respuesta de {} ya se había enviado: {}", request.getRequestURI(), ex.toString());
+			return null;
+		}
 		LOG.error("Error inesperado al atender la petición", ex);
 		return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
 				.body(ApiError.of(HttpStatus.INTERNAL_SERVER_ERROR.value(), "Internal Server Error",
