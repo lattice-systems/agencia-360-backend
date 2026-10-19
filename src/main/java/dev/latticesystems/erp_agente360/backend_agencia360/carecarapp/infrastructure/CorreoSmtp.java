@@ -30,26 +30,44 @@ public class CorreoSmtp implements EnvioCorreos {
 
 	@Override
 	public void enviarCodigoRecuperacion(String correo, String nombre, String codigo) {
-		JavaMailSender sender = mailSender.getIfAvailable();
-		if (sender == null) {
-			LOG.warn("No hay servidor de correo configurado (spring.mail.host); no se envió el código de recuperación");
-			return;
-		}
-		SimpleMailMessage mensaje = new SimpleMailMessage();
-		mensaje.setFrom(remitente);
-		mensaje.setTo(correo);
-		mensaje.setSubject("Tu código para restablecer la contraseña de CareCar");
-		mensaje.setText("""
+		enviar(correo, "Tu código para restablecer la contraseña de CareCar", """
 				Hola, %s:
 
 				Tu código para restablecer la contraseña de la app CareCar es: %s
 
 				Vence en 15 minutos y sirve una sola vez. Si no lo pediste, ignora este correo.
 				""".formatted(nombre, codigo));
+	}
+
+	@Override
+	public void enviarCuentaNueva(String correo, String nombre, String contrasenaTemporal) {
+		enviar(correo, "Tu cuenta de la app CareCar", """
+				Hola, %s:
+
+				La agencia te abrió una cuenta en la app CareCar.
+
+				Correo: %s
+				Contraseña temporal: %s
+
+				Al entrar por primera vez la app te pedirá cambiarla.
+				""".formatted(nombre, correo, contrasenaTemporal));
+	}
+
+	private void enviar(String correo, String asunto, String texto) {
+		JavaMailSender sender = mailSender.getIfAvailable();
+		if (sender == null) {
+			LOG.warn("No hay servidor de correo configurado (spring.mail.host); no se envió el correo: {}", asunto);
+			return;
+		}
+		SimpleMailMessage mensaje = new SimpleMailMessage();
+		mensaje.setFrom(remitente);
+		mensaje.setTo(correo);
+		mensaje.setSubject(asunto);
+		mensaje.setText(texto);
 		try {
 			sender.send(mensaje);
 		} catch (MailException ex) {
-			LOG.error("No se pudo enviar el código de recuperación", ex);
+			LOG.error("No se pudo enviar el correo: {}", asunto, ex);
 		}
 	}
 }
