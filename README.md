@@ -141,6 +141,7 @@ Todos van bajo `/api/v1` y, salvo el login, piden el token en `Authorization: Be
 | `ventascrm` | `PUT /prospectos/{id}/vendedor` | Gerente de marketing |
 | `inventario` | `POST /vehiculos`, `PUT /vehiculos/{id}` | Inventario |
 | `inventario` | `GET /vehiculos?estatus=`, `GET /vehiculos/{id}` | Inventario y Administrador (todas); Ventas (solo Disponibles) |
+| `inventario` | `GET /vehiculos/eventos` (Server-Sent Events: avisa cuando cambia una unidad) | Inventario, Administrador y Ventas |
 | `inventario` | `POST /refacciones`, `PUT /refacciones/{id}`, `POST /refacciones/{id}/recepciones` | Inventario |
 | `inventario` | `GET /refacciones?bajoMinimo=`, `GET /refacciones/{id}`, `GET /refacciones/{id}/recepciones` | Inventario, Refacciones y Administrador |
 | `clientes` | `GET /clientes?buscar=`, `GET /clientes/{id}` | Gerente de marketing |

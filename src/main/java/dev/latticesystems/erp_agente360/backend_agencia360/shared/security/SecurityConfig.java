@@ -2,6 +2,7 @@ package dev.latticesystems.erp_agente360.backend_agencia360.shared.security;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import dev.latticesystems.erp_agente360.backend_agencia360.shared.exception.ApiError;
+import jakarta.servlet.DispatcherType;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import java.io.IOException;
@@ -47,8 +48,12 @@ public class SecurityConfig {
 		// exigir sesión. Sin esto, el ERP no puede consultar la API desde otro origen.
 		return http.cors(Customizer.withDefaults()).csrf(csrf -> csrf.disable())
 				.sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
-				.authorizeHttpRequests(
-						auth -> auth.requestMatchers(PUBLIC_ENDPOINTS).permitAll().anyRequest().authenticated())
+				// Una respuesta asíncrona (Server-Sent Events) vuelve a pasar por los filtros
+				// al
+				// cerrarse, ya sin el token. La petición original ya se autorizó; si se revisa
+				// otra vez, la conexión termina con un error.
+				.authorizeHttpRequests(auth -> auth.dispatcherTypeMatchers(DispatcherType.ASYNC).permitAll()
+						.requestMatchers(PUBLIC_ENDPOINTS).permitAll().anyRequest().authenticated())
 				.exceptionHandling(errors -> errors
 						.authenticationEntryPoint((request, response, ex) -> escribirError(request, response,
 								HttpStatus.UNAUTHORIZED, "Se requiere iniciar sesión"))
