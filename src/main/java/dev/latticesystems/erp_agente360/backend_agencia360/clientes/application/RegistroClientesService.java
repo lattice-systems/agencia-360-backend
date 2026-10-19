@@ -3,6 +3,8 @@ package dev.latticesystems.erp_agente360.backend_agencia360.clientes.application
 import dev.latticesystems.erp_agente360.backend_agencia360.clientes.domain.Cliente;
 import dev.latticesystems.erp_agente360.backend_agencia360.clientes.infrastructure.ClienteRepository;
 import dev.latticesystems.erp_agente360.backend_agencia360.shared.exception.ConflictoException;
+import dev.latticesystems.erp_agente360.backend_agencia360.shared.exception.RecursoNoEncontradoException;
+import java.util.Locale;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -36,5 +38,30 @@ public class RegistroClientesService {
 			throw new ConflictoException("El prospecto " + cliente.getProspectoId() + " ya tiene un cliente");
 		}
 		return ClienteDetalle.de(clienteRepository.save(cliente));
+	}
+
+	/**
+	 * Asigna un vehículo al cliente (CRM-1.3). Si el cliente ya lo tiene no hace
+	 * nada.
+	 *
+	 * @throws RecursoNoEncontradoException
+	 *             si el cliente no existe (404)
+	 * @throws IllegalArgumentException
+	 *             si el VIN, el modelo o el año no son válidos (400)
+	 * @throws ConflictoException
+	 *             si el VIN ya es de otro cliente (409)
+	 */
+	@Transactional
+	public ClienteDetalle asignarVehiculo(Long clienteId, VehiculoNuevo vehiculo) {
+		Cliente cliente = clienteRepository.obtenerConVehiculos(clienteId)
+				.orElseThrow(() -> new RecursoNoEncontradoException("No existe el cliente " + clienteId));
+		String vin = vehiculo.vin() == null ? "" : vehiculo.vin().strip().toUpperCase(Locale.ROOT);
+		boolean yaEsSuyo = cliente.getVehiculos().stream().anyMatch(v -> v.getVin().equals(vin));
+		if (!yaEsSuyo && clienteRepository.existeVehiculoConVin(vin)) {
+			throw new ConflictoException("El vehículo con VIN " + vin + " ya es de otro cliente");
+		}
+		cliente.asignarVehiculo(vehiculo.vehiculoId(), vin, vehiculo.modelo(), vehiculo.anio());
+		clienteRepository.flush();
+		return ClienteDetalle.de(cliente);
 	}
 }
