@@ -12,7 +12,7 @@ class SolicitudCierreTest {
 	private static final Long VENDEDOR = 7L;
 	private static final Long ADMINISTRADOR = 1L;
 	private static final Instant AHORA = Instant.parse("2026-10-13T10:00:00Z");
-	private static final String MOTIVO = "El cliente canceló la compra";
+	private static final MotivoCierre MOTIVO = MotivoCierre.PERDIO_EL_INTERES;
 
 	private static Prospecto enPago() {
 		Prospecto prospecto = Prospecto.registrar("Ana López", "4771234567", null, VENDEDOR, AHORA);
@@ -24,7 +24,7 @@ class SolicitudCierreTest {
 	void elVendedorSolicitaElCierreYQuedaPendiente() {
 		Prospecto prospecto = enPago();
 
-		SolicitudCierre solicitud = SolicitudCierre.solicitar(prospecto, " " + MOTIVO + " ", VENDEDOR);
+		SolicitudCierre solicitud = SolicitudCierre.solicitar(prospecto, MOTIVO, VENDEDOR);
 
 		assertThat(solicitud.getEstado()).isEqualTo(EstadoSolicitud.PENDIENTE);
 		assertThat(solicitud.getMotivo()).isEqualTo(MOTIVO);
@@ -35,8 +35,17 @@ class SolicitudCierreTest {
 
 	@Test
 	void exigeMotivo() {
-		assertThatThrownBy(() -> SolicitudCierre.solicitar(enPago(), " ", VENDEDOR))
+		assertThatThrownBy(() -> SolicitudCierre.solicitar(enPago(), null, VENDEDOR))
 				.isInstanceOf(IllegalArgumentException.class).hasMessage("El motivo de cierre es obligatorio");
+	}
+
+	@Test
+	void noSeSolicitaSinCategoria() {
+		Prospecto prospecto = enPago();
+
+		assertThatThrownBy(() -> SolicitudCierre.solicitar(prospecto, MotivoCierre.SIN_CATEGORIA, VENDEDOR))
+				.isInstanceOf(IllegalArgumentException.class).hasMessageStartingWith("Elige uno de los motivos");
+		assertThat(prospecto.isCierrePendiente()).isFalse();
 	}
 
 	@Test
