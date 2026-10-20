@@ -70,8 +70,14 @@ class VentaAlFinalizarIntegrationTest extends AbstractIntegrationTest {
 	}
 
 	@AfterEach
-	void limpiar() {
+	void limpiar() throws InterruptedException {
+		// Clientes (CRM-1.3) también atiende el evento y registra al cliente con su
+		// vehículo: se espera a que termine para borrar en orden.
 		for (Long id : prospectos) {
+			esperarCliente(id);
+			jdbcTemplate.update("delete from vehiculo_cliente where cliente_id in "
+					+ "(select id from cliente where prospecto_id = ?)", id);
+			jdbcTemplate.update("delete from cliente where prospecto_id = ?", id);
 			jdbcTemplate.update("delete from venta where prospecto_id = ?", id);
 		}
 		for (Long id : vehiculos) {
@@ -159,6 +165,15 @@ class VentaAlFinalizarIntegrationTest extends AbstractIntegrationTest {
 		long id = ((Number) JsonPath.read(respuesta, "$.id")).longValue();
 		vehiculos.add(id);
 		return id;
+	}
+
+	/** Solo los prospectos que se finalizaron generan cliente. */
+	private void esperarCliente(long prospecto) throws InterruptedException {
+		String etapa = jdbcTemplate.queryForObject("select etapa from prospecto where id = ?", String.class, prospecto);
+		if ("FINALIZADO".equals(etapa)) {
+			esperar(() -> jdbcTemplate.queryForList("select id from cliente where prospecto_id = ?", prospecto).stream()
+					.findFirst().orElse(null));
+		}
 	}
 
 	/** Espera a que el listener del evento termine; falla si no pasa a tiempo. */
