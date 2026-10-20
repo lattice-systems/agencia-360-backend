@@ -139,9 +139,12 @@ Todos van bajo `/api/v1` y, salvo el login, piden el token en `Authorization: Be
 | `acceso` | `GET /roles`, `GET /usuarios`, `POST /usuarios`, `PUT /usuarios/{id}/rol` | Administrador (ERP) y Gerente de marketing (CRM) |
 | `ventascrm` | `POST /prospectos`, `GET /prospectos?etapa=`, `PATCH /prospectos/{id}/etapa` | Ventas (sus prospectos); el Gerente de marketing consulta todos |
 | `ventascrm` | `PUT /prospectos/{id}/vendedor` | Gerente de marketing |
+| `ventascrm` | `GET /prospectos/por-facturar` | Facturación |
 | `inventario` | `POST /vehiculos`, `PUT /vehiculos/{id}` | Inventario |
-| `inventario` | `GET /vehiculos?estatus=`, `GET /vehiculos/{id}` | Inventario y Administrador (todas); Ventas (solo Disponibles) |
-| `inventario` | `GET /vehiculos/eventos` (Server-Sent Events: avisa cuando cambia una unidad) | Inventario, Administrador y Ventas |
+| `inventario` | `GET /vehiculos?estatus=`, `GET /vehiculos/{id}` | Inventario y Administrador (todas); Ventas y Facturación (solo Disponibles) |
+| `inventario` | `GET /vehiculos/eventos` (Server-Sent Events: avisa cuando cambia una unidad) | Inventario, Administrador, Ventas y Facturación |
+| `inventario` | `PUT /ventas/{prospectoId}/unidad` (elige la unidad: pasa a Vendido) | Facturación |
+| `inventario` | `GET /ventas` | Facturación y Administrador |
 | `inventario` | `POST /refacciones`, `PUT /refacciones/{id}`, `POST /refacciones/{id}/recepciones` | Inventario |
 | `inventario` | `GET /refacciones?bajoMinimo=`, `GET /refacciones/{id}`, `GET /refacciones/{id}/recepciones` | Inventario, Refacciones y Administrador |
 | `clientes` | `GET /clientes?buscar=`, `GET /clientes/{id}`, `POST /clientes`, `POST /clientes/{id}/vehiculos` | Gerente de marketing |

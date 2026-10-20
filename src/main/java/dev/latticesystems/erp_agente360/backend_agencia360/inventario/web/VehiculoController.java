@@ -61,17 +61,17 @@ public class VehiculoController {
 	}
 
 	@GetMapping
-	@PreAuthorize("hasAnyRole('INVENTARIO', 'ADMINISTRADOR', 'VENTAS')")
+	@PreAuthorize("hasAnyRole('INVENTARIO', 'ADMINISTRADOR', 'VENTAS', 'FACTURACION')")
 	@Operation(summary = "Listar unidades, filtrable por estatus", description = "De la más reciente a la más "
-			+ "antigua. Estatus: DISPONIBLE, APARTADA, VENDIDO, ENTREGADO o NO_DISPONIBLE. Ventas solo recibe las "
-			+ "disponibles.")
+			+ "antigua. Estatus: DISPONIBLE, VENDIDO, ENTREGADO o NO_DISPONIBLE. Ventas y Facturación solo "
+			+ "reciben las disponibles.")
 	public List<VehiculoVista> listar(@RequestParam(required = false) String estatus,
 			@AuthenticationPrincipal UsuarioAutenticado actor) {
 		return consultaVehiculosService.listar(estatus == null ? null : EstatusVehiculo.desde(estatus), actor);
 	}
 
 	@GetMapping(path = "/eventos", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
-	@PreAuthorize("hasAnyRole('INVENTARIO', 'ADMINISTRADOR', 'VENTAS')")
+	@PreAuthorize("hasAnyRole('INVENTARIO', 'ADMINISTRADOR', 'VENTAS', 'FACTURACION')")
 	@Operation(summary = "Recibir los cambios del inventario en tiempo real", description = "Server-Sent Events "
 			+ "(ERP-2.1). Manda el evento \"vehiculos\" cada vez que se da de alta o se corrige una unidad; el cliente "
 			+ "vuelve a consultar la lista. Envía un comentario cada 25 s para mantener viva la conexión y la cierra a "
@@ -81,7 +81,7 @@ public class VehiculoController {
 	}
 
 	@GetMapping("/{id}")
-	@PreAuthorize("hasAnyRole('INVENTARIO', 'ADMINISTRADOR', 'VENTAS')")
+	@PreAuthorize("hasAnyRole('INVENTARIO', 'ADMINISTRADOR', 'VENTAS', 'FACTURACION')")
 	@Operation(summary = "Consultar una unidad", description = "Responde 404 si no existe o, para Ventas, si "
 			+ "no está disponible.")
 	public VehiculoVista obtener(@PathVariable Long id, @AuthenticationPrincipal UsuarioAutenticado actor) {
