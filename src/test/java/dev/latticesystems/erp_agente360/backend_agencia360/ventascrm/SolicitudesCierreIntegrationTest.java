@@ -146,7 +146,8 @@ class SolicitudesCierreIntegrationTest extends AbstractIntegrationTest {
 	private long prospectoEnPago(Usuario vendedor) throws Exception {
 		long id = crearProspecto(vendedor);
 		mockMvc.perform(conToken(patch(PROSPECTOS + "/{id}/etapa", id), token(vendedor))
-				.contentType(MediaType.APPLICATION_JSON).content("{\"etapa\":\"PAGO\"}")).andExpect(status().isOk());
+				.contentType(MediaType.APPLICATION_JSON).content("{\"etapa\":\"PAGO\",\"precioTotal\":489900}"))
+				.andExpect(status().isOk());
 		return id;
 	}
 

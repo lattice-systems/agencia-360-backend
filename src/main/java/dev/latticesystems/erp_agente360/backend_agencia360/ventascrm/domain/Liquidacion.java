@@ -167,12 +167,31 @@ public class Liquidacion extends Auditable {
 
 	/**
 	 * Contabilidad aprueba los pagos y el prospecto pasa de Pago a Facturación.
+	 * Antes revisa el precio total contra los catálogos y lo puede corregir
+	 * (decisión del PO del 19 de octubre); los pagos tienen que cubrirlo.
 	 *
+	 * @param precioCorregido
+	 *            el precio total que deja Contabilidad; {@code null} para dejar el
+	 *            que capturó el vendedor
+	 * @throws IllegalArgumentException
+	 *             si no hay precio total o el corregido no es válido
 	 * @throws ConflictoException
-	 *             si Caja no los ha enviado o el prospecto ya no está en Pago
+	 *             si Caja no los ha enviado, los pagos no cubren el precio o el
+	 *             prospecto ya no está en Pago
 	 */
-	public void validar(Long contadorId, Instant ahora) {
+	public void validar(BigDecimal precioCorregido, Long contadorId, Instant ahora) {
 		exigirEnviada();
+		BigDecimal precio = precioCorregido != null
+				? Prospecto.validarPrecioTotal(precioCorregido)
+				: prospecto.getPrecioTotal();
+		if (precio == null) {
+			throw new IllegalArgumentException("Captura el precio total de la venta para validar los pagos");
+		}
+		if (total().compareTo(precio) < 0) {
+			throw new ConflictoException("Los pagos suman " + total().setScale(2).toPlainString()
+					+ " y no cubren el precio total de " + precio.toPlainString());
+		}
+		prospecto.fijarPrecioTotal(precio);
 		prospecto.validarPago(contadorId, ahora);
 		resolver(EstadoLiquidacion.VALIDADA, contadorId, ahora);
 	}

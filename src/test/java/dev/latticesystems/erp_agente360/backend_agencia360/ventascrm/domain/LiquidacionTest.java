@@ -21,6 +21,7 @@ class LiquidacionTest {
 	private static Prospecto enPago() {
 		Prospecto prospecto = Prospecto.registrar("Ana López", "4771234567", null, VENDEDOR, AHORA);
 		prospecto.moverPorVendedor(Etapa.PAGO, null, VENDEDOR, AHORA);
+		prospecto.fijarPrecioTotal(new BigDecimal("150000.00"));
 		return prospecto;
 	}
 
@@ -163,7 +164,7 @@ class LiquidacionTest {
 		Liquidacion liquidacion = conUnPago();
 		liquidacion.enviar(CAJERA, AHORA);
 
-		liquidacion.validar(CONTADOR, AHORA);
+		liquidacion.validar(null, CONTADOR, AHORA);
 
 		assertThat(liquidacion.getEstado()).isEqualTo(EstadoLiquidacion.VALIDADA);
 		assertThat(liquidacion.getResueltaPorId()).isEqualTo(CONTADOR);
@@ -178,9 +179,46 @@ class LiquidacionTest {
 	void soloSeValidaLoQueCajaYaEnvio() {
 		Liquidacion liquidacion = conUnPago();
 
-		assertThatThrownBy(() -> liquidacion.validar(CONTADOR, AHORA)).isInstanceOf(ConflictoException.class)
+		assertThatThrownBy(() -> liquidacion.validar(null, CONTADOR, AHORA)).isInstanceOf(ConflictoException.class)
 				.hasMessage("Contabilidad solo revisa pagos que Caja ya envió");
 		assertThat(liquidacion.getProspecto().getEtapa()).isEqualTo(Etapa.PAGO);
+	}
+
+	@Test
+	void noSeValidaSiLosPagosNoCubrenElPrecioTotal() {
+		Liquidacion liquidacion = conUnPago();
+		liquidacion.getProspecto().fijarPrecioTotal(new BigDecimal("489900"));
+		liquidacion.enviar(CAJERA, AHORA);
+
+		assertThatThrownBy(() -> liquidacion.validar(null, CONTADOR, AHORA)).isInstanceOf(ConflictoException.class)
+				.hasMessage("Los pagos suman 150000.00 y no cubren el precio total de 489900.00");
+		assertThat(liquidacion.getEstado()).isEqualTo(EstadoLiquidacion.ENVIADA);
+		assertThat(liquidacion.getProspecto().getEtapa()).isEqualTo(Etapa.PAGO);
+	}
+
+	@Test
+	void contabilidadCorrigeElPrecioAlValidarSegunLosCatalogos() {
+		Liquidacion liquidacion = conUnPago();
+		liquidacion.getProspecto().fijarPrecioTotal(new BigDecimal("489900"));
+		liquidacion.enviar(CAJERA, AHORA);
+
+		liquidacion.validar(new BigDecimal("150000"), CONTADOR, AHORA);
+
+		assertThat(liquidacion.getEstado()).isEqualTo(EstadoLiquidacion.VALIDADA);
+		assertThat(liquidacion.getProspecto().getPrecioTotal()).isEqualByComparingTo("150000");
+	}
+
+	@Test
+	void sinPrecioTotalNoSeValida() {
+		Prospecto prospecto = Prospecto.registrar("Ana López", "4771234567", null, VENDEDOR, AHORA);
+		prospecto.moverPorVendedor(Etapa.PAGO, null, VENDEDOR, AHORA);
+		Liquidacion liquidacion = Liquidacion.abrir(prospecto);
+		liquidacion.registrarPago(BigDecimal.TEN, HOY, null, CAJERA, HOY);
+		liquidacion.enviar(CAJERA, AHORA);
+
+		assertThatThrownBy(() -> liquidacion.validar(null, CONTADOR, AHORA))
+				.isInstanceOf(IllegalArgumentException.class)
+				.hasMessage("Captura el precio total de la venta para validar los pagos");
 	}
 
 	@Test

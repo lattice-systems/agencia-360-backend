@@ -19,9 +19,14 @@ import java.util.List;
  *            cuándo Caja los envió a Contabilidad por última vez
  * @param motivoRechazo
  *            solo si Contabilidad los rechazó
+ * @param precioTotal
+ *            el que capturó el vendedor al pasar a Pago o el que corrigió
+ *            Contabilidad; los pagos tienen que cubrirlo. Nulo en prospectos
+ *            que ya estaban en Pago antes de que se pidiera
  */
 public record LiquidacionVista(Long prospectoId, String prospectoNombre, String vendedorNombre,
-		EstadoLiquidacion estado, BigDecimal total, List<PagoVista> pagos, Instant enviadaEn, String motivoRechazo) {
+		EstadoLiquidacion estado, BigDecimal total, List<PagoVista> pagos, Instant enviadaEn, String motivoRechazo,
+		BigDecimal precioTotal) {
 
 	/**
 	 * @param registradoPorNombre
