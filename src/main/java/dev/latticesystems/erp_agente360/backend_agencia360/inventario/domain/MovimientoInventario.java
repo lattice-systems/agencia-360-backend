@@ -99,6 +99,14 @@ public class MovimientoInventario {
 	}
 
 	/**
+	 * Salida de una unidad vendida: el vendedor la entregó al cliente (ERP-1.0).
+	 */
+	public static MovimientoInventario salidaDeVehiculo(Vehiculo vehiculo, Long responsableId, Instant fechaEntrega) {
+		return new MovimientoInventario(TipoMovimiento.SALIDA, Objects.requireNonNull(vehiculo, "vehiculo"), null, 1,
+				responsableId, fechaEntrega, fechaEntrega, null, null);
+	}
+
+	/**
 	 * Solo lo usa {@link Refaccion#recibir}, que también actualiza la existencia.
 	 *
 	 * @throws IllegalArgumentException
