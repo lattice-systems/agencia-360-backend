@@ -40,7 +40,6 @@ public class Prospecto extends Auditable {
 
 	private static final Pattern SEPARADORES_TELEFONO = Pattern.compile("[\\s().-]");
 	private static final Pattern DIEZ_DIGITOS = Pattern.compile("\\d{10}");
-	private static final int LARGO_MAXIMO_MOTIVO = 200;
 
 	@Id
 	@GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -62,9 +61,13 @@ public class Prospecto extends Auditable {
 	@Column(name = "vendedor_id", nullable = false)
 	private Long vendedorId;
 
-	/** Obligatorio al cerrar (decisión del PO del 12 de octubre). */
-	@Column(name = "motivo_cierre", length = 200)
-	private String motivoCierre;
+	/**
+	 * Obligatorio al cerrar (decisión del PO del 12 de octubre); uno de los tres
+	 * motivos fijos de CRM-1.2.
+	 */
+	@Enumerated(EnumType.STRING)
+	@Column(name = "motivo_cierre", length = 30)
+	private MotivoCierre motivoCierre;
 
 	@Enumerated(EnumType.STRING)
 	@Column(name = "ultima_etapa", length = 20)
@@ -136,9 +139,9 @@ public class Prospecto extends Auditable {
 	 * @throws ConflictoException
 	 *             si el cambio no le corresponde al vendedor
 	 * @throws IllegalArgumentException
-	 *             si cierra sin motivo o con un motivo de más de 200 caracteres
+	 *             si cierra sin motivo o con {@link MotivoCierre#SIN_CATEGORIA}
 	 */
-	public boolean moverPorVendedor(Etapa nueva, String motivoCierre, Long usuarioId, Instant ahora) {
+	public boolean moverPorVendedor(Etapa nueva, MotivoCierre motivoCierre, Long usuarioId, Instant ahora) {
 		Objects.requireNonNull(nueva, "nueva");
 		if (nueva == etapa) {
 			return false;
@@ -186,6 +189,21 @@ public class Prospecto extends Auditable {
 	}
 
 	/**
+	 * Guarda el correo del cliente al finalizar, si faltaba o venía mal (CRM-1.4:
+	 * sin correo no se crea su cuenta de la app).
+	 *
+	 * @throws IllegalArgumentException
+	 *             si viene vacío
+	 */
+	public void capturarCorreo(String correo) {
+		String correoLimpio = normalizarCorreo(correo);
+		if (correoLimpio == null) {
+			throw new IllegalArgumentException("El correo del cliente está vacío");
+		}
+		this.correo = correoLimpio;
+	}
+
+	/**
 	 * Pasa el prospecto a otro vendedor (CRM-0.1). Conserva la etapa y el
 	 * historial; solo cambia quién lo atiende.
 	 *
@@ -216,7 +234,7 @@ public class Prospecto extends Auditable {
 	}
 
 	/** Lo usa {@link SolicitudCierre} cuando el Administrador la aprueba. */
-	void cerrarPorAutorizacion(String motivo, Long administradorId, Instant ahora) {
+	void cerrarPorAutorizacion(MotivoCierre motivo, Long administradorId, Instant ahora) {
 		cierrePendiente = false;
 		cerrar(motivo, OrigenCambio.ERP, administradorId, ahora);
 	}
@@ -226,9 +244,8 @@ public class Prospecto extends Auditable {
 		cierrePendiente = false;
 	}
 
-	private void cerrar(String motivo, OrigenCambio origen, Long usuarioId, Instant ahora) {
-		String motivoLimpio = validarMotivo(motivo);
-		this.motivoCierre = motivoLimpio;
+	private void cerrar(MotivoCierre motivo, OrigenCambio origen, Long usuarioId, Instant ahora) {
+		this.motivoCierre = MotivoCierre.validarParaCerrar(motivo);
 		this.ultimaEtapa = etapa;
 		moverA(Etapa.CERRADO, origen, usuarioId, ahora);
 	}
@@ -262,23 +279,6 @@ public class Prospecto extends Auditable {
 		etapa = nueva;
 		etapaActualizadaEn = ahora;
 		historial.add(new HistorialEtapa(this, nueva, origen, usuarioId, ahora));
-	}
-
-	/**
-	 * Valida el motivo de un cierre.
-	 *
-	 * @throws IllegalArgumentException
-	 *             si falta o pasa de 200 caracteres
-	 */
-	static String validarMotivo(String motivo) {
-		String motivoLimpio = limpiar(motivo);
-		if (motivoLimpio == null) {
-			throw new IllegalArgumentException("El motivo de cierre es obligatorio");
-		}
-		if (motivoLimpio.length() > LARGO_MAXIMO_MOTIVO) {
-			throw new IllegalArgumentException("El motivo de cierre admite hasta 200 caracteres");
-		}
-		return motivoLimpio;
 	}
 
 	/**
@@ -349,7 +349,7 @@ public class Prospecto extends Auditable {
 		return vendedorId;
 	}
 
-	public String getMotivoCierre() {
+	public MotivoCierre getMotivoCierre() {
 		return motivoCierre;
 	}
 

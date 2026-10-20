@@ -1,11 +1,13 @@
 package dev.latticesystems.erp_agente360.backend_agencia360.ventascrm.application;
 
 import dev.latticesystems.erp_agente360.backend_agencia360.acceso.DirectorioUsuarios;
+import dev.latticesystems.erp_agente360.backend_agencia360.shared.eventos.ProspectoFinalizado;
 import dev.latticesystems.erp_agente360.backend_agencia360.shared.exception.RecursoNoEncontradoException;
 import dev.latticesystems.erp_agente360.backend_agencia360.shared.security.Role;
 import dev.latticesystems.erp_agente360.backend_agencia360.shared.security.UsuarioAutenticado;
 import dev.latticesystems.erp_agente360.backend_agencia360.ventascrm.domain.Etapa;
 import dev.latticesystems.erp_agente360.backend_agencia360.ventascrm.domain.HistorialEtapa;
+import dev.latticesystems.erp_agente360.backend_agencia360.ventascrm.domain.MotivoCierre;
 import dev.latticesystems.erp_agente360.backend_agencia360.ventascrm.domain.Prospecto;
 import dev.latticesystems.erp_agente360.backend_agencia360.ventascrm.infrastructure.ProspectoRepository;
 import java.time.Clock;
@@ -14,6 +16,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -32,27 +35,34 @@ import org.springframework.transaction.annotation.Transactional;
  *
  * <p>
  * Quién mueve cada etapa (decisión del PO del 12 de octubre): el vendedor las
- * iniciales, Pago y Finalizado; Contabilidad pasa de Pago a Facturación al
- * validar el pago, y Facturación pasa de Facturación a Entrega al emitir la
- * factura. Contabilidad y Facturación lo harán desde las pantallas del ERP.
+ * iniciales, Pago y Finalizado, y Facturación pasa de Facturación a Entrega al
+ * emitir la factura. De Pago a Facturación solo se pasa cuando Contabilidad
+ * valida los pagos en ERP-1.1 ({@link LiquidacionesService}); por aquí no, para
+ * que nadie se salte la validación (acordado con Ricardo en el Sprint 2).
+ *
+ * <p>
+ * Al finalizar publica {@link ProspectoFinalizado} (CRM-1.4) en la misma
+ * transacción, para que inventario registre la venta y clientes cree la cuenta.
  */
 @Service
 public class SeguimientoProspectosService {
 
 	private final ProspectoRepository prospectoRepository;
 	private final DirectorioUsuarios directorioUsuarios;
+	private final ApplicationEventPublisher eventos;
 	private final Clock reloj;
 
 	@Autowired
-	public SeguimientoProspectosService(ProspectoRepository prospectoRepository,
-			DirectorioUsuarios directorioUsuarios) {
-		this(prospectoRepository, directorioUsuarios, Clock.systemUTC());
+	public SeguimientoProspectosService(ProspectoRepository prospectoRepository, DirectorioUsuarios directorioUsuarios,
+			ApplicationEventPublisher eventos) {
+		this(prospectoRepository, directorioUsuarios, eventos, Clock.systemUTC());
 	}
 
 	SeguimientoProspectosService(ProspectoRepository prospectoRepository, DirectorioUsuarios directorioUsuarios,
-			Clock reloj) {
+			ApplicationEventPublisher eventos, Clock reloj) {
 		this.prospectoRepository = prospectoRepository;
 		this.directorioUsuarios = directorioUsuarios;
+		this.eventos = eventos;
 		this.reloj = reloj;
 	}
 
@@ -89,9 +99,8 @@ public class SeguimientoProspectosService {
 	}
 
 	/**
-	 * Cambia la etapa según quién la pide: el vendedor dueño del prospecto,
-	 * Contabilidad (de Pago a Facturación) o Facturación (de Facturación a
-	 * Entrega).
+	 * Cambia la etapa según quién la pide: el vendedor dueño del prospecto o
+	 * Facturación (de Facturación a Entrega).
 	 *
 	 * @param motivoCierre
 	 *            obligatorio cuando el vendedor pasa a {@link Etapa#CERRADO}
@@ -101,16 +110,46 @@ public class SeguimientoProspectosService {
 	 *             si el prospecto no existe o es de otro vendedor (404)
 	 */
 	@Transactional
-	public ProspectoVista cambiarEtapa(Long prospectoId, Etapa etapa, String motivoCierre, UsuarioAutenticado actor) {
+	public ProspectoVista cambiarEtapa(Long prospectoId, Etapa etapa, MotivoCierre motivoCierre,
+			UsuarioAutenticado actor) {
+		return cambiarEtapa(prospectoId, etapa, motivoCierre, false, null, actor);
+	}
+
+	/**
+	 * Igual que
+	 * {@link #cambiarEtapa(Long, Etapa, MotivoCierre, UsuarioAutenticado)}, con los
+	 * datos de la app CareCar al finalizar (decisión del PO, Sprint 2).
+	 *
+	 * <p>
+	 * Para finalizar hace falta el correo del cliente, salvo que no quiera la app:
+	 * así {@code correoCliente = null} en {@link ProspectoFinalizado} siempre
+	 * significa que no la quiere (acordado con Ricardo).
+	 *
+	 * @param clienteRechazaApp
+	 *            solo al pasar a {@link Etapa#FINALIZADO}: el evento sale sin
+	 *            correo y no se crea la cuenta. El prospecto conserva su correo
+	 * @param correoCliente
+	 *            solo al pasar a {@link Etapa#FINALIZADO}: el correo que faltaba (o
+	 *            uno corregido); se guarda en el prospecto
+	 * @throws IllegalArgumentException
+	 *             si se finaliza sin correo y el cliente sí quiere la app (400)
+	 */
+	@Transactional
+	public ProspectoVista cambiarEtapa(Long prospectoId, Etapa etapa, MotivoCierre motivoCierre,
+			boolean clienteRechazaApp, String correoCliente, UsuarioAutenticado actor) {
 		Instant ahora = Instant.now(reloj);
 		if (actor.tieneRol(Role.VENTAS)) {
 			Prospecto prospecto = buscarDelVendedor(prospectoId, actor);
+			boolean finaliza = etapa == Etapa.FINALIZADO && prospecto.getEtapa() == Etapa.ENTREGA;
+			if (finaliza) {
+				// Antes de mover la etapa, para que un error no deje nada a medias.
+				prepararCorreoParaLaApp(prospecto, clienteRechazaApp, correoCliente);
+			}
 			prospecto.moverPorVendedor(etapa, motivoCierre, actor.id(), ahora);
-			return ProspectoVista.de(prospecto);
-		}
-		if (actor.tieneRol(Role.CONTABILIDAD) && etapa == Etapa.FACTURACION) {
-			Prospecto prospecto = buscarCualquiera(prospectoId);
-			prospecto.validarPago(actor.id(), ahora);
+			if (finaliza) {
+				eventos.publishEvent(new ProspectoFinalizado(prospecto.getId(), prospecto.getVendedorId(),
+						prospecto.getNombre(), clienteRechazaApp ? null : prospecto.getCorreo(), ahora));
+			}
 			return ProspectoVista.de(prospecto);
 		}
 		if (actor.tieneRol(Role.FACTURACION) && etapa == Etapa.ENTREGA) {
@@ -119,6 +158,17 @@ public class SeguimientoProspectosService {
 			return ProspectoVista.de(prospecto);
 		}
 		throw new AccessDeniedException("Tu rol no puede pasar el prospecto a esa etapa");
+	}
+
+	private static void prepararCorreoParaLaApp(Prospecto prospecto, boolean clienteRechazaApp, String correoCliente) {
+		boolean traeCorreo = correoCliente != null && !correoCliente.isBlank();
+		if (!clienteRechazaApp && !traeCorreo && prospecto.getCorreo() == null) {
+			throw new IllegalArgumentException(
+					"Captura el correo del cliente para crear su cuenta de la app, o marca que no la quiere");
+		}
+		if (traeCorreo) {
+			prospecto.capturarCorreo(correoCliente);
+		}
 	}
 
 	private Prospecto buscarVisible(Long prospectoId, UsuarioAutenticado actor) {

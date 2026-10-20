@@ -17,7 +17,7 @@ class ProspectoTest {
 	private static final Long FACTURISTA = 40L;
 	private static final Instant AHORA = Instant.parse("2026-10-12T18:00:00Z");
 	private static final Instant DESPUES = Instant.parse("2026-10-13T10:30:00Z");
-	private static final String MOTIVO = "Compró en otra agencia";
+	private static final MotivoCierre MOTIVO = MotivoCierre.SE_FUE_POR_OTRA_MARCA;
 
 	private static Prospecto nuevo() {
 		return Prospecto.registrar("Ana López", "4771234567", null, VENDEDOR, AHORA);
@@ -183,7 +183,7 @@ class ProspectoTest {
 		void cierraConMotivoYGuardaLaUltimaEtapaAlcanzada() {
 			Prospecto prospecto = en(Etapa.COTIZACION);
 
-			prospecto.moverPorVendedor(Etapa.CERRADO, "  " + MOTIVO + " ", VENDEDOR, DESPUES);
+			prospecto.moverPorVendedor(Etapa.CERRADO, MOTIVO, VENDEDOR, DESPUES);
 
 			assertThat(prospecto.getEtapa()).isEqualTo(Etapa.CERRADO);
 			assertThat(prospecto.getMotivoCierre()).isEqualTo(MOTIVO);
@@ -194,17 +194,29 @@ class ProspectoTest {
 		void noPuedeCerrarSinMotivo() {
 			Prospecto prospecto = nuevo();
 
-			assertThatThrownBy(() -> prospecto.moverPorVendedor(Etapa.CERRADO, "  ", VENDEDOR, DESPUES))
+			assertThatThrownBy(() -> prospecto.moverPorVendedor(Etapa.CERRADO, null, VENDEDOR, DESPUES))
 					.isInstanceOf(IllegalArgumentException.class).hasMessage("El motivo de cierre es obligatorio");
 			assertThat(prospecto.getEtapa()).isEqualTo(Etapa.PRIMER_CONTACTO);
 			assertThat(prospecto.getHistorial()).hasSize(1);
 		}
 
 		@Test
+		void sinCategoriaNoSeEligeAlCerrarPorqueSoloEsDeLosCierresAnteriores() {
+			Prospecto prospecto = nuevo();
+
+			assertThatThrownBy(
+					() -> prospecto.moverPorVendedor(Etapa.CERRADO, MotivoCierre.SIN_CATEGORIA, VENDEDOR, DESPUES))
+					.isInstanceOf(IllegalArgumentException.class)
+					.hasMessage("Elige uno de los motivos de cierre: Se fue por otra marca, Perdió el interés o "
+							+ "Rechazo de financiamiento");
+			assertThat(prospecto.getEtapa()).isEqualTo(Etapa.PRIMER_CONTACTO);
+		}
+
+		@Test
 		void ignoraElMotivoCuandoNoSeCierra() {
 			Prospecto prospecto = nuevo();
 
-			prospecto.moverPorVendedor(Etapa.VISITA, "No aplica", VENDEDOR, DESPUES);
+			prospecto.moverPorVendedor(Etapa.VISITA, MOTIVO, VENDEDOR, DESPUES);
 
 			assertThat(prospecto.getMotivoCierre()).isNull();
 		}
@@ -296,6 +308,14 @@ class ProspectoTest {
 			assertThatThrownBy(() -> prospecto.moverPorVendedor(Etapa.PRIMER_CONTACTO, null, VENDEDOR, DESPUES))
 					.isInstanceOf(ConflictoException.class);
 		}
+	}
+
+	@Test
+	void cadaMotivoTieneElNombreQueDecidioElPo() {
+		assertThat(MotivoCierre.SE_FUE_POR_OTRA_MARCA.etiqueta()).isEqualTo("Se fue por otra marca");
+		assertThat(MotivoCierre.PERDIO_EL_INTERES.etiqueta()).isEqualTo("Perdió el interés");
+		assertThat(MotivoCierre.RECHAZO_DE_FINANCIAMIENTO.etiqueta()).isEqualTo("Rechazo de financiamiento");
+		assertThat(MotivoCierre.SIN_CATEGORIA.etiqueta()).isEqualTo("Sin categoría");
 	}
 
 	@Test

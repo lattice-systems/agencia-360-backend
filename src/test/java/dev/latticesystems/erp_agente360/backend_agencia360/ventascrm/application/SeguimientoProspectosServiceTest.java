@@ -2,15 +2,18 @@ package dev.latticesystems.erp_agente360.backend_agencia360.ventascrm.applicatio
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import dev.latticesystems.erp_agente360.backend_agencia360.acceso.DirectorioUsuarios;
+import dev.latticesystems.erp_agente360.backend_agencia360.shared.eventos.ProspectoFinalizado;
 import dev.latticesystems.erp_agente360.backend_agencia360.shared.exception.ConflictoException;
 import dev.latticesystems.erp_agente360.backend_agencia360.shared.exception.RecursoNoEncontradoException;
 import dev.latticesystems.erp_agente360.backend_agencia360.shared.security.Role;
 import dev.latticesystems.erp_agente360.backend_agencia360.shared.security.UsuarioAutenticado;
 import dev.latticesystems.erp_agente360.backend_agencia360.ventascrm.domain.Etapa;
+import dev.latticesystems.erp_agente360.backend_agencia360.ventascrm.domain.MotivoCierre;
 import dev.latticesystems.erp_agente360.backend_agencia360.ventascrm.domain.OrigenCambio;
 import dev.latticesystems.erp_agente360.backend_agencia360.ventascrm.domain.Prospecto;
 import dev.latticesystems.erp_agente360.backend_agencia360.ventascrm.infrastructure.ProspectoRepository;
@@ -26,7 +29,9 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.security.access.AccessDeniedException;
+import org.springframework.test.util.ReflectionTestUtils;
 
 @ExtendWith(MockitoExtension.class)
 class SeguimientoProspectosServiceTest {
@@ -51,11 +56,14 @@ class SeguimientoProspectosServiceTest {
 	@Mock
 	private DirectorioUsuarios directorioUsuarios;
 
+	@Mock
+	private ApplicationEventPublisher eventos;
+
 	private SeguimientoProspectosService service;
 
 	@BeforeEach
 	void setUp() {
-		service = new SeguimientoProspectosService(prospectoRepository, directorioUsuarios,
+		service = new SeguimientoProspectosService(prospectoRepository, directorioUsuarios, eventos,
 				Clock.fixed(AHORA, ZoneOffset.UTC));
 	}
 
@@ -111,6 +119,72 @@ class SeguimientoProspectosServiceTest {
 			assertThat(movimiento.getOrigen()).isEqualTo(OrigenCambio.CRM);
 			assertThat(movimiento.getFechaHora()).isEqualTo(AHORA);
 		});
+		verifyNoInteractions(eventos);
+	}
+
+	@Test
+	void alFinalizarSePublicaProspectoFinalizadoParaVentasYClientes() {
+		Prospecto ana = enEntrega("ana@ejemplo.com");
+		when(prospectoRepository.findByIdAndVendedorId(1L, 7L)).thenReturn(Optional.of(ana));
+
+		ProspectoVista finalizado = service.cambiarEtapa(1L, Etapa.FINALIZADO, null, VENDEDOR);
+
+		assertThat(finalizado.etapa()).isEqualTo(Etapa.FINALIZADO);
+		verify(eventos).publishEvent(new ProspectoFinalizado(1L, 7L, "Ana López", "ana@ejemplo.com", AHORA));
+	}
+
+	@Test
+	void noSeFinalizaSinCorreoSalvoQueElClienteNoQuieraLaApp() {
+		Prospecto ana = enEntrega(null);
+		when(prospectoRepository.findByIdAndVendedorId(1L, 7L)).thenReturn(Optional.of(ana));
+
+		assertThatThrownBy(() -> service.cambiarEtapa(1L, Etapa.FINALIZADO, null, VENDEDOR))
+				.isInstanceOf(IllegalArgumentException.class)
+				.hasMessage("Captura el correo del cliente para crear su cuenta de la app, o marca que no la quiere");
+		verifyNoInteractions(eventos);
+	}
+
+	@Test
+	void alFinalizarSeGuardaElCorreoQueFaltabaYSeMandaEnElEvento() {
+		Prospecto ana = enEntrega(null);
+		when(prospectoRepository.findByIdAndVendedorId(1L, 7L)).thenReturn(Optional.of(ana));
+
+		ProspectoVista finalizado = service.cambiarEtapa(1L, Etapa.FINALIZADO, null, false, " Ana@Ejemplo.com ",
+				VENDEDOR);
+
+		assertThat(finalizado.correo()).isEqualTo("ana@ejemplo.com");
+		verify(eventos).publishEvent(new ProspectoFinalizado(1L, 7L, "Ana López", "ana@ejemplo.com", AHORA));
+	}
+
+	@Test
+	void siElClienteNoQuiereLaAppElEventoSaleSinCorreoParaQueNoSeCreeLaCuenta() {
+		Prospecto ana = enEntrega("ana@ejemplo.com");
+		when(prospectoRepository.findByIdAndVendedorId(1L, 7L)).thenReturn(Optional.of(ana));
+
+		ProspectoVista finalizado = service.cambiarEtapa(1L, Etapa.FINALIZADO, null, true, null, VENDEDOR);
+
+		assertThat(finalizado.correo()).isEqualTo("ana@ejemplo.com");
+		verify(eventos).publishEvent(new ProspectoFinalizado(1L, 7L, "Ana López", null, AHORA));
+	}
+
+	@Test
+	void sinCorreoYSinAppTambienSeFinaliza() {
+		Prospecto ana = enEntrega(null);
+		when(prospectoRepository.findByIdAndVendedorId(1L, 7L)).thenReturn(Optional.of(ana));
+
+		service.cambiarEtapa(1L, Etapa.FINALIZADO, null, true, null, VENDEDOR);
+
+		verify(eventos).publishEvent(new ProspectoFinalizado(1L, 7L, "Ana López", null, AHORA));
+	}
+
+	@Test
+	void siFinalizarFallaNoSePublicaNada() {
+		Prospecto ana = prospecto("Ana López", 7L);
+		when(prospectoRepository.findByIdAndVendedorId(1L, 7L)).thenReturn(Optional.of(ana));
+
+		assertThatThrownBy(() -> service.cambiarEtapa(1L, Etapa.FINALIZADO, null, VENDEDOR))
+				.isInstanceOf(ConflictoException.class);
+		verifyNoInteractions(eventos);
 	}
 
 	@Test
@@ -126,10 +200,11 @@ class SeguimientoProspectosServiceTest {
 		Prospecto ana = prospecto("Ana López", 7L);
 		when(prospectoRepository.findByIdAndVendedorId(1L, 7L)).thenReturn(Optional.of(ana));
 
-		ProspectoVista cerrado = service.cambiarEtapa(1L, Etapa.CERRADO, "Compró en otra agencia", VENDEDOR);
+		ProspectoVista cerrado = service.cambiarEtapa(1L, Etapa.CERRADO, MotivoCierre.RECHAZO_DE_FINANCIAMIENTO,
+				VENDEDOR);
 
 		assertThat(cerrado.etapa()).isEqualTo(Etapa.CERRADO);
-		assertThat(cerrado.motivoCierre()).isEqualTo("Compró en otra agencia");
+		assertThat(cerrado.motivoCierre()).isEqualTo(MotivoCierre.RECHAZO_DE_FINANCIAMIENTO);
 		assertThat(cerrado.ultimaEtapa()).isEqualTo(Etapa.PRIMER_CONTACTO);
 	}
 
@@ -151,21 +226,11 @@ class SeguimientoProspectosServiceTest {
 	}
 
 	@Test
-	void contabilidadPasaDePagoAFacturacion() {
-		Prospecto ana = prospecto("Ana López", 7L);
-		ana.moverPorVendedor(Etapa.PAGO, null, 7L, REGISTRO);
-		when(prospectoRepository.findById(1L)).thenReturn(Optional.of(ana));
-
-		ProspectoVista actualizado = service.cambiarEtapa(1L, Etapa.FACTURACION, null, CONTADOR);
-
-		assertThat(actualizado.etapa()).isEqualTo(Etapa.FACTURACION);
-		assertThat(actualizado.ultimoCambio()).isEqualTo(AHORA);
-	}
-
-	@Test
-	void contabilidadSoloPuedePasarAFacturacion() {
-		assertThatThrownBy(() -> service.cambiarEtapa(1L, Etapa.ENTREGA, null, CONTADOR))
-				.isInstanceOf(AccessDeniedException.class);
+	void contabilidadYaNoCambiaEtapasPorAquiSinoValidandoLosPagos() {
+		for (Etapa etapa : new Etapa[]{Etapa.FACTURACION, Etapa.ENTREGA}) {
+			assertThatThrownBy(() -> service.cambiarEtapa(1L, etapa, null, CONTADOR))
+					.isInstanceOf(AccessDeniedException.class);
+		}
 		verifyNoInteractions(prospectoRepository);
 	}
 
@@ -177,6 +242,7 @@ class SeguimientoProspectosServiceTest {
 		when(prospectoRepository.findById(1L)).thenReturn(Optional.of(ana));
 
 		assertThat(service.cambiarEtapa(1L, Etapa.ENTREGA, null, FACTURISTA).etapa()).isEqualTo(Etapa.ENTREGA);
+		verifyNoInteractions(eventos);
 	}
 
 	@Test
@@ -197,6 +263,16 @@ class SeguimientoProspectosServiceTest {
 		when(prospectoRepository.findByIdAndVendedorId(1L, 7L)).thenReturn(Optional.empty());
 
 		assertThatThrownBy(() -> service.historial(1L, VENDEDOR)).isInstanceOf(RecursoNoEncontradoException.class);
+	}
+
+	/** Prospecto de Ana con id 1, listo para finalizar. */
+	private static Prospecto enEntrega(String correo) {
+		Prospecto ana = Prospecto.registrar("Ana López", "4771234567", correo, 7L, REGISTRO);
+		ReflectionTestUtils.setField(ana, "id", 1L);
+		ana.moverPorVendedor(Etapa.PAGO, null, 7L, REGISTRO);
+		ana.validarPago(30L, REGISTRO);
+		ana.confirmarFacturacion(40L, REGISTRO);
+		return ana;
 	}
 
 	private static Prospecto prospecto(String nombre, Long vendedorId) {
