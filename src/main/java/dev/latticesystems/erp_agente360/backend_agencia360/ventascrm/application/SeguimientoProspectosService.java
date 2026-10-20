@@ -10,6 +10,7 @@ import dev.latticesystems.erp_agente360.backend_agencia360.ventascrm.domain.Hist
 import dev.latticesystems.erp_agente360.backend_agencia360.ventascrm.domain.MotivoCierre;
 import dev.latticesystems.erp_agente360.backend_agencia360.ventascrm.domain.Prospecto;
 import dev.latticesystems.erp_agente360.backend_agencia360.ventascrm.infrastructure.ProspectoRepository;
+import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.List;
@@ -112,7 +113,7 @@ public class SeguimientoProspectosService {
 	@Transactional
 	public ProspectoVista cambiarEtapa(Long prospectoId, Etapa etapa, MotivoCierre motivoCierre,
 			UsuarioAutenticado actor) {
-		return cambiarEtapa(prospectoId, etapa, motivoCierre, false, null, actor);
+		return cambiarEtapa(prospectoId, etapa, motivoCierre, false, null, null, actor);
 	}
 
 	/**
@@ -131,12 +132,17 @@ public class SeguimientoProspectosService {
 	 * @param correoCliente
 	 *            solo al pasar a {@link Etapa#FINALIZADO}: el correo que faltaba (o
 	 *            uno corregido); se guarda en el prospecto
+	 * @param precioTotal
+	 *            obligatorio cuando el vendedor pasa a {@link Etapa#PAGO}: el
+	 *            precio total de la venta (ERP-1.1, decisión del PO del 19 de
+	 *            octubre)
 	 * @throws IllegalArgumentException
-	 *             si se finaliza sin correo y el cliente sí quiere la app (400)
+	 *             si se finaliza sin correo y el cliente sí quiere la app, o se
+	 *             pasa a Pago sin un precio total válido (400)
 	 */
 	@Transactional
 	public ProspectoVista cambiarEtapa(Long prospectoId, Etapa etapa, MotivoCierre motivoCierre,
-			boolean clienteRechazaApp, String correoCliente, UsuarioAutenticado actor) {
+			boolean clienteRechazaApp, String correoCliente, BigDecimal precioTotal, UsuarioAutenticado actor) {
 		Instant ahora = Instant.now(reloj);
 		if (actor.tieneRol(Role.VENTAS)) {
 			Prospecto prospecto = buscarDelVendedor(prospectoId, actor);
@@ -145,7 +151,12 @@ public class SeguimientoProspectosService {
 				// Antes de mover la etapa, para que un error no deje nada a medias.
 				prepararCorreoParaLaApp(prospecto, clienteRechazaApp, correoCliente);
 			}
+			boolean pasaAPago = etapa == Etapa.PAGO && prospecto.getEtapa() != Etapa.PAGO;
+			BigDecimal precio = pasaAPago ? Prospecto.validarPrecioTotal(precioTotal) : null;
 			prospecto.moverPorVendedor(etapa, motivoCierre, actor.id(), ahora);
+			if (pasaAPago) {
+				prospecto.fijarPrecioTotal(precio);
+			}
 			if (finaliza) {
 				eventos.publishEvent(new ProspectoFinalizado(prospecto.getId(), prospecto.getVendedorId(),
 						prospecto.getNombre(), clienteRechazaApp ? null : prospecto.getCorreo(), ahora));

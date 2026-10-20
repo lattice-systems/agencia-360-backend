@@ -177,6 +177,10 @@ avanzar_etapas() {
   local etapa
   for etapa in $3; do
     local cuerpo="{\"etapa\":\"$etapa\"}"
+    # Al pasar a Pago el vendedor captura el precio total de la venta (ERP-1.1).
+    if [ "$etapa" = PAGO ]; then
+      cuerpo="{\"etapa\":\"PAGO\",\"precioTotal\":489900}"
+    fi
     if [ "$etapa" = CERRADO ]; then
       cuerpo="{\"etapa\":\"CERRADO\",\"motivoCierre\":\"$4\"}"
     fi

@@ -77,10 +77,13 @@ public class LiquidacionController {
 
 	@PostMapping("/{prospectoId}/validar")
 	@PreAuthorize("hasRole('CONTABILIDAD')")
-	@Operation(summary = "Validar los pagos", description = "El prospecto pasa de Pago a Facturación. Responde 409 "
-			+ "si Caja aún no los envía.")
-	public LiquidacionVista validar(@PathVariable Long prospectoId, @AuthenticationPrincipal UsuarioAutenticado actor) {
-		return liquidacionesService.validar(prospectoId, actor);
+	@Operation(summary = "Validar los pagos", description = "El prospecto pasa de Pago a Facturación. Contabilidad "
+			+ "puede mandar precioTotal para corregir el que capturó el vendedor. Responde 409 si Caja aún no los "
+			+ "envía o si los pagos no cubren el precio total, y 400 si no hay precio total.")
+	public LiquidacionVista validar(@PathVariable Long prospectoId,
+			@RequestBody(required = false) ValidarPagosRequest request,
+			@AuthenticationPrincipal UsuarioAutenticado actor) {
+		return liquidacionesService.validar(prospectoId, request == null ? null : request.precioTotal(), actor);
 	}
 
 	@PostMapping("/{prospectoId}/rechazar")
@@ -94,6 +97,13 @@ public class LiquidacionController {
 
 	/** El monto, la fecha y el largo de la referencia los valida el dominio. */
 	public record RegistrarPagoRequest(BigDecimal monto, LocalDate fechaPago, String referencia) {
+	}
+
+	/**
+	 * @param precioTotal
+	 *            opcional: el precio que corrige Contabilidad según los catálogos
+	 */
+	public record ValidarPagosRequest(BigDecimal precioTotal) {
 	}
 
 	/** El motivo es obligatorio; esa regla la valida el dominio. */

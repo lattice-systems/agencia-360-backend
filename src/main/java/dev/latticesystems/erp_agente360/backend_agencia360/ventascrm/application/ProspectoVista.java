@@ -3,6 +3,7 @@ package dev.latticesystems.erp_agente360.backend_agencia360.ventascrm.applicatio
 import dev.latticesystems.erp_agente360.backend_agencia360.ventascrm.domain.Etapa;
 import dev.latticesystems.erp_agente360.backend_agencia360.ventascrm.domain.MotivoCierre;
 import dev.latticesystems.erp_agente360.backend_agencia360.ventascrm.domain.Prospecto;
+import java.math.BigDecimal;
 import java.time.Instant;
 
 /**
@@ -18,14 +19,17 @@ import java.time.Instant;
  *            etapa en la que estaba al cerrarse; solo si está cerrado
  * @param cierrePendiente
  *            hay una solicitud de cierre esperando al Administrador
+ * @param precioTotal
+ *            precio total de la venta; lo captura el vendedor al pasar a Pago
  */
 public record ProspectoVista(Long id, String nombre, String telefono, String correo, Etapa etapa, Long vendedorId,
-		Instant creadoEn, Instant ultimoCambio, MotivoCierre motivoCierre, Etapa ultimaEtapa, boolean cierrePendiente) {
+		Instant creadoEn, Instant ultimoCambio, MotivoCierre motivoCierre, Etapa ultimaEtapa, boolean cierrePendiente,
+		BigDecimal precioTotal) {
 
 	static ProspectoVista de(Prospecto prospecto) {
 		return new ProspectoVista(prospecto.getId(), prospecto.getNombre(), prospecto.getTelefono(),
 				prospecto.getCorreo(), prospecto.getEtapa(), prospecto.getVendedorId(), prospecto.getCreatedAt(),
 				prospecto.getEtapaActualizadaEn(), prospecto.getMotivoCierre(), prospecto.getUltimaEtapa(),
-				prospecto.isCierrePendiente());
+				prospecto.isCierrePendiente(), prospecto.getPrecioTotal());
 	}
 }

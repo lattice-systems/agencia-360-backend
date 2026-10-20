@@ -154,6 +154,36 @@ class LiquidacionesIntegrationTest extends AbstractIntegrationTest {
 	}
 
 	@Test
+	void cajaYContabilidadVenElPrecioTotalQueCapturoElVendedor() throws Exception {
+		long id = prospectoEnPago("Ana López");
+
+		mockMvc.perform(conToken(get(LIQUIDACIONES + "/{id}", id), token(cajera)))
+				.andExpect(jsonPath("$.precioTotal").value(489900));
+	}
+
+	@Test
+	void noSeValidaSiLosPagosNoCubrenElPrecio() throws Exception {
+		long id = prospectoEnPago("Ana López");
+		mockMvc.perform(pago(id, "1000", "2026-10-16", null)).andExpect(status().isCreated());
+		mockMvc.perform(conToken(post(LIQUIDACIONES + "/{id}/enviar", id), token(cajera))).andExpect(status().isOk());
+
+		mockMvc.perform(conToken(post(LIQUIDACIONES + "/{id}/validar", id), token(contador)))
+				.andExpect(status().isConflict()).andExpect(jsonPath("$.message")
+						.value("Los pagos suman 1000.00 y no cubren el precio total de 489900.00"));
+	}
+
+	@Test
+	void contabilidadCorrigeElPrecioAlValidar() throws Exception {
+		long id = prospectoEnPago("Ana López");
+		mockMvc.perform(pago(id, "479900", "2026-10-16", null)).andExpect(status().isCreated());
+		mockMvc.perform(conToken(post(LIQUIDACIONES + "/{id}/enviar", id), token(cajera))).andExpect(status().isOk());
+
+		mockMvc.perform(conToken(post(LIQUIDACIONES + "/{id}/validar", id), token(contador))
+				.contentType(MediaType.APPLICATION_JSON).content("{\"precioTotal\":479900}")).andExpect(status().isOk())
+				.andExpect(jsonPath("$.estado").value("VALIDADA")).andExpect(jsonPath("$.precioTotal").value(479900));
+	}
+
+	@Test
 	void contabilidadRechazaConMotivoYCajaVuelveAEnviar() throws Exception {
 		long id = prospectoEnPago("Ana López");
 		mockMvc.perform(pago(id, "1000", LocalDate.now().toString(), null)).andExpect(status().isCreated());
@@ -198,7 +228,8 @@ class LiquidacionesIntegrationTest extends AbstractIntegrationTest {
 	private long prospectoEnPago(String nombre) throws Exception {
 		long id = crearProspecto(nombre, "4771234567");
 		mockMvc.perform(conToken(patch(PROSPECTOS + "/{id}/etapa", id), token(vendedor))
-				.contentType(MediaType.APPLICATION_JSON).content("{\"etapa\":\"PAGO\"}")).andExpect(status().isOk());
+				.contentType(MediaType.APPLICATION_JSON).content("{\"etapa\":\"PAGO\",\"precioTotal\":489900}"))
+				.andExpect(status().isOk());
 		return id;
 	}
 
