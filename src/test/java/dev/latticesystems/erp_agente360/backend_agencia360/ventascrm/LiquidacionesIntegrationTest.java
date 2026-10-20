@@ -17,6 +17,7 @@ import dev.latticesystems.erp_agente360.backend_agencia360.shared.security.JwtSe
 import dev.latticesystems.erp_agente360.backend_agencia360.shared.security.Role;
 import jakarta.persistence.EntityManager;
 import java.time.LocalDate;
+import java.time.ZoneId;
 import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -40,6 +41,13 @@ class LiquidacionesIntegrationTest extends AbstractIntegrationTest {
 
 	private static final String PROSPECTOS = "/api/v1/prospectos";
 	private static final String LIQUIDACIONES = "/api/v1/liquidaciones";
+
+	/**
+	 * El backend valida la fecha del pago con el día de la agencia, no con el de
+	 * UTC. Si la prueba usara LocalDate.now(), de 6 p. m. a 12 a. m. en León el
+	 * pago parecería del día siguiente y se rechazaría por "fecha futura".
+	 */
+	private static final ZoneId ZONA_AGENCIA = ZoneId.of("America/Mexico_City");
 
 	@Autowired
 	private MockMvc mockMvc;
@@ -87,12 +95,12 @@ class LiquidacionesIntegrationTest extends AbstractIntegrationTest {
 	void cajaRegistraPagosYLosVeConElTotal() throws Exception {
 		long id = prospectoEnPago("Ana López");
 
-		mockMvc.perform(pago(id, "150000.00", LocalDate.now().toString(), "TRF-001")).andExpect(status().isCreated())
+		mockMvc.perform(pago(id, "150000.00", hoyEnLaAgencia().toString(), "TRF-001")).andExpect(status().isCreated())
 				.andExpect(jsonPath("$.total").value(150000.00))
 				.andExpect(jsonPath("$.pagos[0].monto").value(150000.00))
 				.andExpect(jsonPath("$.pagos[0].referencia").value("TRF-001"))
 				.andExpect(jsonPath("$.pagos[0].registradoPorNombre").value("Persona caja1"));
-		mockMvc.perform(pago(id, "339900.50", LocalDate.now().toString(), null)).andExpect(status().isCreated());
+		mockMvc.perform(pago(id, "339900.50", hoyEnLaAgencia().toString(), null)).andExpect(status().isCreated());
 
 		mockMvc.perform(conToken(get(LIQUIDACIONES + "/{id}", id), token(cajera))).andExpect(status().isOk())
 				.andExpect(jsonPath("$.total").value(489900.50)).andExpect(jsonPath("$.pagos.length()").value(2));
@@ -102,9 +110,9 @@ class LiquidacionesIntegrationTest extends AbstractIntegrationTest {
 	void rechazaUnMontoInvalidoOUnaFechaFutura() throws Exception {
 		long id = prospectoEnPago("Ana López");
 
-		mockMvc.perform(pago(id, "0", LocalDate.now().toString(), null)).andExpect(status().isBadRequest())
+		mockMvc.perform(pago(id, "0", hoyEnLaAgencia().toString(), null)).andExpect(status().isBadRequest())
 				.andExpect(jsonPath("$.message").value("El monto debe ser mayor a cero"));
-		mockMvc.perform(pago(id, "100", LocalDate.now().plusDays(1).toString(), null))
+		mockMvc.perform(pago(id, "100", hoyEnLaAgencia().plusDays(1).toString(), null))
 				.andExpect(status().isBadRequest())
 				.andExpect(jsonPath("$.message").value("La fecha del pago no puede ser futura"));
 	}
@@ -113,14 +121,14 @@ class LiquidacionesIntegrationTest extends AbstractIntegrationTest {
 	void soloSeRegistranPagosDeUnProspectoEnPago() throws Exception {
 		long id = crearProspecto("Luis Pérez", "4771234568");
 
-		mockMvc.perform(pago(id, "100", LocalDate.now().toString(), null)).andExpect(status().isConflict())
+		mockMvc.perform(pago(id, "100", hoyEnLaAgencia().toString(), null)).andExpect(status().isConflict())
 				.andExpect(jsonPath("$.message").value("Solo se registran pagos de un prospecto en Pago"));
 	}
 
 	@Test
 	void cajaAnulaUnPagoMalCapturadoYQuedaRegistrado() throws Exception {
 		long id = prospectoEnPago("Ana López");
-		String respuesta = mockMvc.perform(pago(id, "100", LocalDate.now().toString(), null)).andReturn().getResponse()
+		String respuesta = mockMvc.perform(pago(id, "100", hoyEnLaAgencia().toString(), null)).andReturn().getResponse()
 				.getContentAsString();
 		long pagoId = ((Number) JsonPath.read(respuesta, "$.pagos[0].id")).longValue();
 
@@ -136,7 +144,7 @@ class LiquidacionesIntegrationTest extends AbstractIntegrationTest {
 	@Test
 	void contabilidadValidaYElProspectoPasaAFacturacion() throws Exception {
 		long id = prospectoEnPago("Ana López");
-		mockMvc.perform(pago(id, "489900", LocalDate.now().toString(), null)).andExpect(status().isCreated());
+		mockMvc.perform(pago(id, "489900", hoyEnLaAgencia().toString(), null)).andExpect(status().isCreated());
 		mockMvc.perform(conToken(post(LIQUIDACIONES + "/{id}/enviar", id), token(cajera))).andExpect(status().isOk())
 				.andExpect(jsonPath("$.estado").value("ENVIADA"));
 
@@ -156,7 +164,7 @@ class LiquidacionesIntegrationTest extends AbstractIntegrationTest {
 	@Test
 	void contabilidadRechazaConMotivoYCajaVuelveAEnviar() throws Exception {
 		long id = prospectoEnPago("Ana López");
-		mockMvc.perform(pago(id, "1000", LocalDate.now().toString(), null)).andExpect(status().isCreated());
+		mockMvc.perform(pago(id, "1000", hoyEnLaAgencia().toString(), null)).andExpect(status().isCreated());
 		mockMvc.perform(conToken(post(LIQUIDACIONES + "/{id}/enviar", id), token(cajera))).andExpect(status().isOk());
 
 		mockMvc.perform(conToken(post(LIQUIDACIONES + "/{id}/rechazar", id), token(contador))
@@ -164,7 +172,7 @@ class LiquidacionesIntegrationTest extends AbstractIntegrationTest {
 				.andExpect(status().isOk()).andExpect(jsonPath("$.estado").value("RECHAZADA"))
 				.andExpect(jsonPath("$.motivoRechazo").value("Falta el comprobante"));
 
-		mockMvc.perform(pago(id, "500", LocalDate.now().toString(), null)).andExpect(status().isCreated())
+		mockMvc.perform(pago(id, "500", hoyEnLaAgencia().toString(), null)).andExpect(status().isCreated())
 				.andExpect(jsonPath("$.estado").value("ABIERTA"));
 		mockMvc.perform(conToken(post(LIQUIDACIONES + "/{id}/enviar", id), token(cajera))).andExpect(status().isOk())
 				.andExpect(jsonPath("$.estado").value("ENVIADA"));
@@ -186,6 +194,10 @@ class LiquidacionesIntegrationTest extends AbstractIntegrationTest {
 	void unProspectoQueNoExisteResponde404() throws Exception {
 		mockMvc.perform(conToken(get(LIQUIDACIONES + "/{id}", 999_999), token(cajera)))
 				.andExpect(status().isNotFound());
+	}
+
+	private static LocalDate hoyEnLaAgencia() {
+		return LocalDate.now(ZONA_AGENCIA);
 	}
 
 	private MockHttpServletRequestBuilder pago(long prospectoId, String monto, String fecha, String referencia) {
