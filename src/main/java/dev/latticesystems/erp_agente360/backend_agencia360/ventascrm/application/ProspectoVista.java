@@ -21,15 +21,29 @@ import java.time.Instant;
  *            hay una solicitud de cierre esperando al Administrador
  * @param precioTotal
  *            precio total de la venta; lo captura el vendedor al pasar a Pago
+ * @param vehiculo
+ *            solo en los finalizados: la unidad que eligió Facturación
+ *            (CRM-1.4); nulo si todavía no tiene
  */
 public record ProspectoVista(Long id, String nombre, String telefono, String correo, Etapa etapa, Long vendedorId,
 		Instant creadoEn, Instant ultimoCambio, MotivoCierre motivoCierre, Etapa ultimaEtapa, boolean cierrePendiente,
-		BigDecimal precioTotal) {
+		BigDecimal precioTotal, VehiculoVendido vehiculo) {
+
+	/**
+	 * Unidad vendida, como se muestra en Finalizados. En pantalla {@code modelo} es
+	 * el Tipo (Sentra) y {@code anio} el Modelo (2026), como en la factura.
+	 */
+	public record VehiculoVendido(String vin, String modelo, Integer anio) {
+	}
 
 	static ProspectoVista de(Prospecto prospecto) {
+		return de(prospecto, null);
+	}
+
+	static ProspectoVista de(Prospecto prospecto, VehiculoVendido vehiculo) {
 		return new ProspectoVista(prospecto.getId(), prospecto.getNombre(), prospecto.getTelefono(),
 				prospecto.getCorreo(), prospecto.getEtapa(), prospecto.getVendedorId(), prospecto.getCreatedAt(),
 				prospecto.getEtapaActualizadaEn(), prospecto.getMotivoCierre(), prospecto.getUltimaEtapa(),
-				prospecto.isCierrePendiente(), prospecto.getPrecioTotal());
+				prospecto.isCierrePendiente(), prospecto.getPrecioTotal(), vehiculo);
 	}
 }
