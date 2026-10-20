@@ -35,7 +35,7 @@ class SolicitudesCierreIntegrationTest extends AbstractIntegrationTest {
 
 	private static final String PROSPECTOS = "/api/v1/prospectos";
 	private static final String SOLICITUDES = "/api/v1/solicitudes-cierre";
-	private static final String MOTIVO = "El cliente canceló la compra";
+	private static final String MOTIVO = "PERDIO_EL_INTERES";
 
 	@Autowired
 	private MockMvc mockMvc;
@@ -114,8 +114,11 @@ class SolicitudesCierreIntegrationTest extends AbstractIntegrationTest {
 		Usuario vendedor = registrar("vendedor1", Role.VENTAS);
 		long prospecto = prospectoEnPago(vendedor);
 
-		mockMvc.perform(solicitud(token(vendedor), prospecto, " ")).andExpect(status().isBadRequest())
+		mockMvc.perform(conToken(post(PROSPECTOS + "/" + prospecto + "/solicitudes-cierre"), token(vendedor))
+				.contentType(MediaType.APPLICATION_JSON).content("{}")).andExpect(status().isBadRequest())
 				.andExpect(jsonPath("$.message").value("El motivo de cierre es obligatorio"));
+		mockMvc.perform(solicitud(token(vendedor), prospecto, "El cliente canceló la compra"))
+				.andExpect(status().isBadRequest());
 	}
 
 	@Test

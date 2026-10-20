@@ -3,10 +3,10 @@ package dev.latticesystems.erp_agente360.backend_agencia360.ventascrm.web;
 import dev.latticesystems.erp_agente360.backend_agencia360.shared.security.UsuarioAutenticado;
 import dev.latticesystems.erp_agente360.backend_agencia360.ventascrm.application.SolicitudCierreVista;
 import dev.latticesystems.erp_agente360.backend_agencia360.ventascrm.application.SolicitudesCierreService;
+import dev.latticesystems.erp_agente360.backend_agencia360.ventascrm.domain.MotivoCierre;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
-import jakarta.validation.constraints.Size;
 import java.net.URI;
 import java.util.List;
 import org.springframework.http.ResponseEntity;
@@ -69,7 +69,10 @@ public class SolicitudCierreController {
 		return solicitudesCierreService.rechazar(id, actor);
 	}
 
-	/** El motivo es obligatorio; esa regla la valida el dominio. */
-	public record SolicitarCierreRequest(@Size(max = 200) String motivo) {
+	/**
+	 * El motivo es obligatorio y es uno de los tres de CRM-1.2; esa regla la valida
+	 * el dominio.
+	 */
+	public record SolicitarCierreRequest(MotivoCierre motivo) {
 	}
 }
