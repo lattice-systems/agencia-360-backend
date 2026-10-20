@@ -237,17 +237,24 @@ pedir GET /api/v1/prospectos "$TOKEN_GERENTE"
 PROSPECTOS_EXISTENTES="$RESPUESTA"
 TOKEN_VENDEDOR1=$(iniciar_sesion vendedor1 Vendedor123 CRM)
 TOKEN_VENDEDOR2=$(iniciar_sesion vendedor2 Vendedor123 CRM)
-# Desde Pago el proceso lo avanzan Contabilidad (valida el pago) y Facturación
-# (emite la factura) desde el ERP; el vendedor no mueve esas etapas.
+# Desde Pago el proceso se avanza desde el ERP: Caja registra y envía los pagos,
+# Contabilidad los valida (ERP-1.1) y Facturación emite la factura. El vendedor
+# no mueve esas etapas.
+TOKEN_CAJA=$(iniciar_sesion caja1 Caja12345 ERP)
 TOKEN_CONTABILIDAD=$(iniciar_sesion contabilidad1 Contabilidad123 ERP)
 TOKEN_FACTURACION=$(iniciar_sesion facturacion1 Facturacion123 ERP)
 
 # Lleva un prospecto que ya está en Pago hasta la etapa indicada (FACTURACION o
-# ENTREGA), como lo harían Contabilidad y Facturación.
+# ENTREGA), como lo harían Caja, Contabilidad y Facturación.
 # $1 id del prospecto, $2 etapa final.
 avanzar_desde_erp() {
   [ -n "$1" ] || return 0
-  avanzar_etapas "$TOKEN_CONTABILIDAD" "$1" "FACTURACION" ""
+  pedir POST "/api/v1/liquidaciones/$1/pagos" "$TOKEN_CAJA"     '{"monto":489900,"fechaPago":"2026-10-15","referencia":"Pago de ejemplo"}'
+  [ "$CODIGO" = 201 ] || fallar "registrar el pago del prospecto $1"
+  pedir POST "/api/v1/liquidaciones/$1/enviar" "$TOKEN_CAJA"
+  [ "$CODIGO" = 200 ] || fallar "enviar los pagos del prospecto $1"
+  pedir POST "/api/v1/liquidaciones/$1/validar" "$TOKEN_CONTABILIDAD"
+  [ "$CODIGO" = 200 ] || fallar "validar los pagos del prospecto $1"
   if [ "$2" = ENTREGA ]; then
     avanzar_etapas "$TOKEN_FACTURACION" "$1" "ENTREGA" ""
   fi
@@ -260,7 +267,7 @@ crear_prospecto "$TOKEN_VENDEDOR1" "Valeria Díaz" "477 555 0105" "valeria.d@exa
   "VISITA COTIZACION PAGO"
 avanzar_desde_erp "$PROSPECTO_ID" ENTREGA
 crear_prospecto "$TOKEN_VENDEDOR1" "Jorge Medina" "477 555 0106" "" "VISITA COTIZACION CERRADO" \
-  "Compró en otra agencia"
+  "SE_FUE_POR_OTRA_MARCA"
 
 echo "Prospecto reasignado por el Gerente de marketing:"
 crear_prospecto "$TOKEN_VENDEDOR1" "Ricardo Fuentes" "477 555 0107" "" "PRIMER_CONTACTO"
@@ -280,13 +287,13 @@ crear_prospecto "$TOKEN_VENDEDOR2" "Carlos Núñez" "477 555 0109" "" "VISITA CO
 avanzar_desde_erp "$PROSPECTO_ID" FACTURACION
 if [ -n "$PROSPECTO_ID" ]; then
   pedir POST "/api/v1/prospectos/$PROSPECTO_ID/solicitudes-cierre" "$TOKEN_VENDEDOR2" \
-    '{"motivo":"El cliente pidió cancelar la compra"}'
+    '{"motivo":"PERDIO_EL_INTERES"}'
   [ "$CODIGO" = 201 ] || fallar "solicitar el cierre de Carlos Núñez"
   echo "              con una solicitud de cierre pendiente para el Administrador"
 fi
 crear_prospecto "$TOKEN_VENDEDOR2" "Paola Vega" "" "paola.vega@example.com" "VISITA"
 crear_prospecto "$TOKEN_VENDEDOR2" "Ana Lucía López" "477 555 0101" "" "PRIMER_CONTACTO"
-crear_prospecto "$TOKEN_VENDEDOR2" "Óscar Ramos" "477 555 0111" "" "CERRADO" "No calificó para el crédito"
+crear_prospecto "$TOKEN_VENDEDOR2" "Óscar Ramos" "477 555 0111" "" "CERRADO" "RECHAZO_DE_FINANCIAMIENTO"
 crear_prospecto "$TOKEN_VENDEDOR2" "Roberto Salas" "477 555 0112" "roberto.s@example.com" "COTIZACION PAGO"
 if [ -n "$PROSPECTO_ID" ]; then
   avanzar_desde_erp "$PROSPECTO_ID" ENTREGA

@@ -66,6 +66,43 @@ class ReasignacionProspectosIntegrationTest extends AbstractIntegrationTest {
 	}
 
 	@Test
+	void elGerenteReasignaVariosALaVez() throws Exception {
+		Usuario vendedor1 = registrar("vendedor1", Role.VENTAS);
+		Usuario vendedor2 = registrar("vendedor2", Role.VENTAS);
+		Usuario gerente = registrar("gerente1", Role.GERENTE_MARKETING);
+		long ana = crearProspecto(vendedor1, "Ana López", "4771234567");
+		long luis = crearProspecto(vendedor1, "Luis Pérez", "4771234568");
+
+		mockMvc.perform(reasignacionMasiva(token(gerente), "[" + ana + "," + luis + "]", vendedor2.getId()))
+				.andExpect(status().isOk()).andExpect(jsonPath("$.length()").value(2))
+				.andExpect(jsonPath("$[0].vendedorId").value(vendedor2.getId()))
+				.andExpect(jsonPath("$[1].vendedorId").value(vendedor2.getId()));
+
+		mockMvc.perform(conToken(get(URL), token(vendedor2))).andExpect(jsonPath("$.length()").value(2));
+	}
+
+	@Test
+	void siUnProspectoNoExisteNoSeReasignaNinguno() throws Exception {
+		Usuario vendedor1 = registrar("vendedor1", Role.VENTAS);
+		Usuario vendedor2 = registrar("vendedor2", Role.VENTAS);
+		Usuario gerente = registrar("gerente1", Role.GERENTE_MARKETING);
+		long ana = crearProspecto(vendedor1, "Ana López", "4771234567");
+
+		mockMvc.perform(reasignacionMasiva(token(gerente), "[" + ana + ",999999]", vendedor2.getId()))
+				.andExpect(status().isNotFound());
+		mockMvc.perform(conToken(get(URL), token(vendedor1))).andExpect(jsonPath("$.length()").value(1));
+	}
+
+	@Test
+	void unVendedorNoReasignaVarios() throws Exception {
+		Usuario vendedor1 = registrar("vendedor1", Role.VENTAS);
+		long ana = crearProspecto(vendedor1, "Ana López", "4771234567");
+
+		mockMvc.perform(reasignacionMasiva(token(vendedor1), "[" + ana + "]", vendedor1.getId()))
+				.andExpect(status().isForbidden());
+	}
+
+	@Test
 	void unVendedorNoPuedeReasignar() throws Exception {
 		Usuario vendedor1 = registrar("vendedor1", Role.VENTAS);
 		Usuario vendedor2 = registrar("vendedor2", Role.VENTAS);
@@ -133,6 +170,11 @@ class ReasignacionProspectosIntegrationTest extends AbstractIntegrationTest {
 	private static MockHttpServletRequestBuilder reasignacion(String token, long prospectoId, long vendedorId) {
 		return conToken(put(URL + "/{id}/vendedor", prospectoId), token).contentType(MediaType.APPLICATION_JSON)
 				.content("{\"vendedorId\":" + vendedorId + "}");
+	}
+
+	private static MockHttpServletRequestBuilder reasignacionMasiva(String token, String ids, long vendedorId) {
+		return conToken(post(URL + "/reasignaciones"), token).contentType(MediaType.APPLICATION_JSON)
+				.content("{\"prospectoIds\":" + ids + ",\"vendedorId\":" + vendedorId + "}");
 	}
 
 	private static MockHttpServletRequestBuilder conToken(MockHttpServletRequestBuilder peticion, String token) {
