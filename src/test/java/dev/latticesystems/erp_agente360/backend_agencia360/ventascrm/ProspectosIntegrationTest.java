@@ -14,6 +14,7 @@ import dev.latticesystems.erp_agente360.backend_agencia360.acceso.domain.Usuario
 import dev.latticesystems.erp_agente360.backend_agencia360.acceso.infrastructure.RolRepository;
 import dev.latticesystems.erp_agente360.backend_agencia360.acceso.infrastructure.UsuarioRepository;
 import dev.latticesystems.erp_agente360.backend_agencia360.shared.AbstractIntegrationTest;
+import dev.latticesystems.erp_agente360.backend_agencia360.shared.eventos.ProspectoFinalizado;
 import dev.latticesystems.erp_agente360.backend_agencia360.shared.security.JwtService;
 import dev.latticesystems.erp_agente360.backend_agencia360.shared.security.Role;
 import jakarta.persistence.EntityManager;
@@ -25,6 +26,8 @@ import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMock
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.test.context.event.ApplicationEvents;
+import org.springframework.test.context.event.RecordApplicationEvents;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
 import org.springframework.transaction.annotation.Transactional;
@@ -36,6 +39,7 @@ import org.springframework.transaction.annotation.Transactional;
  */
 @AutoConfigureMockMvc
 @Transactional
+@RecordApplicationEvents
 class ProspectosIntegrationTest extends AbstractIntegrationTest {
 
 	private static final String URL = "/api/v1/prospectos";
@@ -57,6 +61,9 @@ class ProspectosIntegrationTest extends AbstractIntegrationTest {
 
 	@Autowired
 	private EntityManager entityManager;
+
+	@Autowired
+	private ApplicationEvents eventos;
 
 	@Test
 	void unVendedorRegistraUnProspectoEnPrimerContacto() throws Exception {
@@ -232,14 +239,26 @@ class ProspectosIntegrationTest extends AbstractIntegrationTest {
 		long id = crearProspecto(vendedor, "Ana López", "4771234567", null);
 		mockMvc.perform(cambioDeEtapa(token(vendedor), id, "COTIZACION")).andExpect(status().isOk());
 
-		mockMvc.perform(cierre(token(vendedor), id, "Compró en otra agencia")).andExpect(status().isOk())
+		mockMvc.perform(cierre(token(vendedor), id, "SE_FUE_POR_OTRA_MARCA")).andExpect(status().isOk())
 				.andExpect(jsonPath("$.etapa").value("CERRADO"))
-				.andExpect(jsonPath("$.motivoCierre").value("Compró en otra agencia"))
+				.andExpect(jsonPath("$.motivoCierre").value("SE_FUE_POR_OTRA_MARCA"))
 				.andExpect(jsonPath("$.ultimaEtapa").value("COTIZACION"));
 
 		entityManager.flush();
 		assertThat(jdbcTemplate.queryForMap("select ultima_etapa, motivo_cierre from prospecto where id = ?", id))
-				.containsEntry("ultima_etapa", "COTIZACION").containsEntry("motivo_cierre", "Compró en otra agencia");
+				.containsEntry("ultima_etapa", "COTIZACION").containsEntry("motivo_cierre", "SE_FUE_POR_OTRA_MARCA");
+	}
+
+	@Test
+	void soloSeCierraConUnoDeLosTresMotivosDelPo() throws Exception {
+		Usuario vendedor = registrar("vendedor1", Role.VENTAS);
+		long id = crearProspecto(vendedor, "Ana López", "4771234567", null);
+
+		mockMvc.perform(cierre(token(vendedor), id, "Compró en otra agencia")).andExpect(status().isBadRequest());
+		mockMvc.perform(cierre(token(vendedor), id, "SIN_CATEGORIA")).andExpect(status().isBadRequest())
+				.andExpect(jsonPath("$.message").value("Elige uno de los motivos de cierre: Se fue por otra marca, "
+						+ "Perdió el interés o Rechazo de financiamiento"));
+		assertThat(historialDe(id)).hasSize(1);
 	}
 
 	@Test
@@ -288,21 +307,15 @@ class ProspectosIntegrationTest extends AbstractIntegrationTest {
 
 		mockMvc.perform(cambioDeEtapa(token(vendedor), id, "FACTURACION")).andExpect(status().isConflict()).andExpect(
 				jsonPath("$.message").value("En Pago el prospecto avanza cuando Contabilidad valida el pago"));
-		mockMvc.perform(cierre(token(vendedor), id, "Ya no quiere")).andExpect(status().isConflict());
+		mockMvc.perform(cierre(token(vendedor), id, "PERDIO_EL_INTERES")).andExpect(status().isConflict());
 	}
 
 	@Test
-	void contabilidadYFacturacionAvanzanElProcesoYElVendedorFinaliza() throws Exception {
+	void contabilidadValidaLosPagosFacturacionFacturaYElVendedorFinaliza() throws Exception {
 		Usuario vendedor = registrar("vendedor1", Role.VENTAS);
-		Usuario contador = registrar("contabilidad1", Role.CONTABILIDAD);
-		Usuario facturista = registrar("facturacion1", Role.FACTURACION);
-		long id = crearProspecto(vendedor, "Ana López", "4771234567", null);
-		mockMvc.perform(cambioDeEtapa(token(vendedor), id, "PAGO")).andExpect(status().isOk());
+		long id = crearProspecto(vendedor, "Ana López", "4771234567", "ana@ejemplo.com");
 
-		mockMvc.perform(cambioDeEtapa(token(contador), id, "FACTURACION")).andExpect(status().isOk())
-				.andExpect(jsonPath("$.etapa").value("FACTURACION"));
-		mockMvc.perform(cambioDeEtapa(token(facturista), id, "ENTREGA")).andExpect(status().isOk())
-				.andExpect(jsonPath("$.etapa").value("ENTREGA"));
+		llevarAEntrega(vendedor, id);
 		mockMvc.perform(cambioDeEtapa(token(vendedor), id, "FINALIZADO")).andExpect(status().isOk())
 				.andExpect(jsonPath("$.etapa").value("FINALIZADO"));
 
@@ -311,13 +324,120 @@ class ProspectosIntegrationTest extends AbstractIntegrationTest {
 	}
 
 	@Test
-	void contabilidadSoloPasaDePagoAFacturacion() throws Exception {
+	void contabilidadYaNoPasaDePagoAFacturacionSinValidarLosPagos() throws Exception {
+		Usuario vendedor = registrar("vendedor1", Role.VENTAS);
+		Usuario contador = registrar("contabilidad1", Role.CONTABILIDAD);
+		long id = crearProspecto(vendedor, "Ana López", "4771234567", null);
+		mockMvc.perform(cambioDeEtapa(token(vendedor), id, "PAGO")).andExpect(status().isOk());
+
+		mockMvc.perform(cambioDeEtapa(token(contador), id, "FACTURACION")).andExpect(status().isForbidden());
+		assertThat(historialDe(id)).hasSize(2);
+	}
+
+	@Test
+	void noSeFinalizaSinCorreoSalvoQueElClienteNoQuieraLaApp() throws Exception {
+		Usuario vendedor = registrar("vendedor1", Role.VENTAS);
+		long id = crearProspecto(vendedor, "Ana López", "4771234567", null);
+		llevarAEntrega(vendedor, id);
+
+		mockMvc.perform(cambioDeEtapa(token(vendedor), id, "FINALIZADO")).andExpect(status().isBadRequest())
+				.andExpect(jsonPath("$.message").value(
+						"Captura el correo del cliente para crear su cuenta de la app, o marca que no la quiere"));
+		assertThat(eventos.stream(ProspectoFinalizado.class)).isEmpty();
+
+		mockMvc.perform(finalizar(token(vendedor), id, "{\"etapa\":\"FINALIZADO\",\"clienteRechazaApp\":true}"))
+				.andExpect(status().isOk()).andExpect(jsonPath("$.correo").isEmpty());
+		assertThat(eventos.stream(ProspectoFinalizado.class)).singleElement()
+				.satisfies(evento -> assertThat(evento.correoCliente()).isNull());
+	}
+
+	@Test
+	void alFinalizarSePuedeCapturarElCorreoQueFaltaba() throws Exception {
+		Usuario vendedor = registrar("vendedor1", Role.VENTAS);
+		long id = crearProspecto(vendedor, "Ana López", "4771234567", null);
+		llevarAEntrega(vendedor, id);
+
+		mockMvc.perform(
+				finalizar(token(vendedor), id, "{\"etapa\":\"FINALIZADO\",\"correoCliente\":\"Ana@Ejemplo.com\"}"))
+				.andExpect(status().isOk()).andExpect(jsonPath("$.correo").value("ana@ejemplo.com"));
+		assertThat(eventos.stream(ProspectoFinalizado.class)).singleElement()
+				.satisfies(evento -> assertThat(evento.correoCliente()).isEqualTo("ana@ejemplo.com"));
+	}
+
+	@Test
+	void rechazaUnCorreoMalEscritoAlFinalizar() throws Exception {
+		Usuario vendedor = registrar("vendedor1", Role.VENTAS);
+		long id = crearProspecto(vendedor, "Ana López", "4771234567", null);
+		llevarAEntrega(vendedor, id);
+
+		mockMvc.perform(finalizar(token(vendedor), id, "{\"etapa\":\"FINALIZADO\",\"correoCliente\":\"ana@\"}"))
+				.andExpect(status().isBadRequest());
+	}
+
+	@Test
+	void siElClienteNoQuiereLaAppElEventoSaleSinCorreoAunqueLoTenga() throws Exception {
+		Usuario vendedor = registrar("vendedor1", Role.VENTAS);
+		long id = crearProspecto(vendedor, "Ana López", "4771234567", "ana@ejemplo.com");
+		llevarAEntrega(vendedor, id);
+
+		mockMvc.perform(finalizar(token(vendedor), id, "{\"etapa\":\"FINALIZADO\",\"clienteRechazaApp\":true}"))
+				.andExpect(status().isOk()).andExpect(jsonPath("$.correo").value("ana@ejemplo.com"));
+
+		assertThat(eventos.stream(ProspectoFinalizado.class)).singleElement()
+				.satisfies(evento -> assertThat(evento.correoCliente()).isNull());
+	}
+
+	@Test
+	void alFinalizarSePublicaUnSoloProspectoFinalizado() throws Exception {
+		Usuario vendedor = registrar("vendedor1", Role.VENTAS);
+		long id = crearProspecto(vendedor, "Ana López", "4771234567", "Ana@Ejemplo.com");
+		llevarAEntrega(vendedor, id);
+		assertThat(eventos.stream(ProspectoFinalizado.class)).isEmpty();
+
+		mockMvc.perform(cambioDeEtapa(token(vendedor), id, "FINALIZADO")).andExpect(status().isOk());
+
+		assertThat(eventos.stream(ProspectoFinalizado.class)).singleElement().satisfies(evento -> {
+			assertThat(evento.prospectoId()).isEqualTo(id);
+			assertThat(evento.vendedorId()).isEqualTo(vendedor.getId());
+			assertThat(evento.nombre()).isEqualTo("Ana López");
+			assertThat(evento.correoCliente()).isEqualTo("ana@ejemplo.com");
+			assertThat(evento.fechaEntrega()).isNotNull();
+		});
+	}
+
+	@Test
+	void contabilidadNoCambiaEtapasPorElPatch() throws Exception {
 		Usuario vendedor = registrar("vendedor1", Role.VENTAS);
 		Usuario contador = registrar("contabilidad1", Role.CONTABILIDAD);
 		long id = crearProspecto(vendedor, "Ana López", "4771234567", null);
 
 		mockMvc.perform(cambioDeEtapa(token(contador), id, "VISITA")).andExpect(status().isForbidden());
-		mockMvc.perform(cambioDeEtapa(token(contador), id, "FACTURACION")).andExpect(status().isConflict());
+		mockMvc.perform(cambioDeEtapa(token(contador), id, "FACTURACION")).andExpect(status().isForbidden());
+	}
+
+	/**
+	 * Lleva el prospecto a Entrega por el camino real: el vendedor lo pasa a Pago,
+	 * Caja registra y envía un pago, Contabilidad lo valida (ERP-1.1) y Facturación
+	 * lo pasa a Entrega.
+	 */
+	private void llevarAEntrega(Usuario vendedor, long id) throws Exception {
+		Usuario cajera = registrar("caja-" + id, Role.CAJA);
+		Usuario contador = registrar("conta-" + id, Role.CONTABILIDAD);
+		Usuario facturista = registrar("factura-" + id, Role.FACTURACION);
+		mockMvc.perform(cambioDeEtapa(token(vendedor), id, "PAGO")).andExpect(status().isOk());
+		mockMvc.perform(conToken(post("/api/v1/liquidaciones/{id}/pagos", id), token(cajera))
+				.contentType(MediaType.APPLICATION_JSON).content("{\"monto\":489900,\"fechaPago\":\"2026-10-16\"}"))
+				.andExpect(status().isCreated());
+		mockMvc.perform(conToken(post("/api/v1/liquidaciones/{id}/enviar", id), token(cajera)))
+				.andExpect(status().isOk());
+		mockMvc.perform(conToken(post("/api/v1/liquidaciones/{id}/validar", id), token(contador)))
+				.andExpect(status().isOk());
+		mockMvc.perform(cambioDeEtapa(token(facturista), id, "ENTREGA")).andExpect(status().isOk());
+	}
+
+	private static MockHttpServletRequestBuilder finalizar(String token, long id, String cuerpo) {
+		return conToken(patch(URL + "/" + id + "/etapa"), token).contentType(MediaType.APPLICATION_JSON)
+				.content(cuerpo);
 	}
 
 	@Test

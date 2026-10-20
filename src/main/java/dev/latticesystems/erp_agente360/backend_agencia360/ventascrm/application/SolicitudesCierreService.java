@@ -5,6 +5,7 @@ import dev.latticesystems.erp_agente360.backend_agencia360.shared.exception.Recu
 import dev.latticesystems.erp_agente360.backend_agencia360.shared.security.Role;
 import dev.latticesystems.erp_agente360.backend_agencia360.shared.security.UsuarioAutenticado;
 import dev.latticesystems.erp_agente360.backend_agencia360.ventascrm.domain.EstadoSolicitud;
+import dev.latticesystems.erp_agente360.backend_agencia360.ventascrm.domain.MotivoCierre;
 import dev.latticesystems.erp_agente360.backend_agencia360.ventascrm.domain.Prospecto;
 import dev.latticesystems.erp_agente360.backend_agencia360.ventascrm.domain.SolicitudCierre;
 import dev.latticesystems.erp_agente360.backend_agencia360.ventascrm.infrastructure.ProspectoRepository;
@@ -52,7 +53,7 @@ public class SolicitudesCierreService {
 	 *             si el prospecto no existe o es de otro vendedor (404)
 	 */
 	@Transactional
-	public SolicitudCierreVista solicitar(Long prospectoId, String motivo, UsuarioAutenticado vendedor) {
+	public SolicitudCierreVista solicitar(Long prospectoId, MotivoCierre motivo, UsuarioAutenticado vendedor) {
 		exigirRol(vendedor, Role.VENTAS, "Solo el vendedor solicita el cierre de sus prospectos");
 		Prospecto prospecto = prospectoRepository.findByIdAndVendedorId(prospectoId, vendedor.id())
 				.orElseThrow(() -> new RecursoNoEncontradoException("No existe el prospecto " + prospectoId));
