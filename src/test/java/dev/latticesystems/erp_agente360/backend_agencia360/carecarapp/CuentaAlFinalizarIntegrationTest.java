@@ -165,9 +165,10 @@ class CuentaAlFinalizarIntegrationTest extends AbstractIntegrationTest {
 	}
 
 	private long prospectoEn(String nombre, String correo, String etapa) throws Exception {
+		String cuerpo = "{\"nombre\":\"%s\",\"telefono\":null,\"correo\":\"%s\"}".formatted(nombre, correo);
 		String respuesta = mockMvc
 				.perform(conToken(post("/api/v1/prospectos"), token(vendedor)).contentType(MediaType.APPLICATION_JSON)
-						.content("{\"nombre\":\"%s\",\"telefono\":null,\"correo\":\"%s\"}".formatted(nombre, correo)))
+						.content(cuerpo))
 				.andExpect(status().isCreated()).andReturn().getResponse().getContentAsString();
 		long id = ((Number) JsonPath.read(respuesta, "$.id")).longValue();
 		prospectos.add(id);
