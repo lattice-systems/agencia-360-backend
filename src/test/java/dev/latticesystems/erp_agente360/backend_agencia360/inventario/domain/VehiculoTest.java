@@ -3,9 +3,9 @@ package dev.latticesystems.erp_agente360.backend_agencia360.inventario.domain;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import dev.latticesystems.erp_agente360.backend_agencia360.shared.exception.ConflictoException;
 import java.math.BigDecimal;
 import org.junit.jupiter.api.Test;
-import org.springframework.test.util.ReflectionTestUtils;
 
 class VehiculoTest {
 
@@ -36,8 +36,7 @@ class VehiculoTest {
 
 	@Test
 	void noPuedeEntrarConUnEstatusDeVenta() {
-		for (EstatusVehiculo estatus : new EstatusVehiculo[]{EstatusVehiculo.APARTADA, EstatusVehiculo.VENDIDO,
-				EstatusVehiculo.ENTREGADO}) {
+		for (EstatusVehiculo estatus : new EstatusVehiculo[]{EstatusVehiculo.VENDIDO, EstatusVehiculo.ENTREGADO}) {
 			assertThatThrownBy(() -> Vehiculo.registrar(VIN, "Jetta", "Comfortline", 2026, "Blanco", PRECIO, estatus))
 					.isInstanceOf(IllegalArgumentException.class)
 					.hasMessage("Una unidad solo puede entrar como Disponible o No disponible");
@@ -161,26 +160,64 @@ class VehiculoTest {
 	}
 
 	@Test
-	void inventarioNoSacaDeApartadaAUnaUnidad() {
+	void inventarioNoSacaDeVendidoAUnaUnidad() {
 		Vehiculo vehiculo = Vehiculo.registrar(VIN, "Jetta", "Comfortline", 2026, "Blanco", PRECIO, null);
-		// Apartada la pone la venta, que todavía no existe en el dominio.
-		ReflectionTestUtils.setField(vehiculo, "estatus", EstatusVehiculo.APARTADA);
+		vehiculo.vender();
 
 		assertThatThrownBy(
 				() -> vehiculo.editar(VIN, "Jetta", "Comfortline", 2026, "Blanco", PRECIO, EstatusVehiculo.DISPONIBLE))
 				.isInstanceOf(IllegalArgumentException.class)
 				.hasMessage("Inventario solo cambia el estatus entre Disponible y No disponible");
-		assertThat(vehiculo.getEstatus()).isEqualTo(EstatusVehiculo.APARTADA);
+		assertThat(vehiculo.getEstatus()).isEqualTo(EstatusVehiculo.VENDIDO);
 	}
 
 	@Test
-	void unaUnidadApartadaSeCorrigeSinTocarSuEstatus() {
+	void unaUnidadVendidaSeCorrigeSinTocarSuEstatus() {
 		Vehiculo vehiculo = Vehiculo.registrar(VIN, "Jetta", "Comfortline", 2026, "Blanco", PRECIO, null);
-		ReflectionTestUtils.setField(vehiculo, "estatus", EstatusVehiculo.APARTADA);
+		vehiculo.vender();
 
-		vehiculo.editar(VIN, "Jetta", "Comfortline", 2026, "Rojo", PRECIO, EstatusVehiculo.APARTADA);
+		vehiculo.editar(VIN, "Jetta", "Comfortline", 2026, "Rojo", PRECIO, EstatusVehiculo.VENDIDO);
 
 		assertThat(vehiculo.getColor()).isEqualTo("Rojo");
-		assertThat(vehiculo.getEstatus()).isEqualTo(EstatusVehiculo.APARTADA);
+		assertThat(vehiculo.getEstatus()).isEqualTo(EstatusVehiculo.VENDIDO);
+	}
+
+	@Test
+	void seVendeUnaUnidadDisponible() {
+		Vehiculo vehiculo = Vehiculo.registrar(VIN, "Jetta", "Comfortline", 2026, "Blanco", PRECIO, null);
+
+		vehiculo.vender();
+
+		assertThat(vehiculo.getEstatus()).isEqualTo(EstatusVehiculo.VENDIDO);
+	}
+
+	@Test
+	void noSeVendeUnaUnidadQueNoEstaDisponible() {
+		Vehiculo vendida = Vehiculo.registrar(VIN, "Jetta", "Comfortline", 2026, "Blanco", PRECIO, null);
+		vendida.vender();
+		Vehiculo danada = Vehiculo.registrar(VIN, "Jetta", "Comfortline", 2026, "Blanco", PRECIO,
+				EstatusVehiculo.NO_DISPONIBLE);
+
+		assertThatThrownBy(vendida::vender).isInstanceOf(ConflictoException.class)
+				.hasMessage("La unidad 3VWFE21C04M000001 ya no está disponible");
+		assertThatThrownBy(danada::vender).isInstanceOf(ConflictoException.class);
+		assertThat(danada.getEstatus()).isEqualTo(EstatusVehiculo.NO_DISPONIBLE);
+	}
+
+	@Test
+	void unaUnidadVendidaRegresaADisponibleSiFacturacionCambiaDeUnidad() {
+		Vehiculo vehiculo = Vehiculo.registrar(VIN, "Jetta", "Comfortline", 2026, "Blanco", PRECIO, null);
+		vehiculo.vender();
+
+		vehiculo.liberar();
+
+		assertThat(vehiculo.getEstatus()).isEqualTo(EstatusVehiculo.DISPONIBLE);
+	}
+
+	@Test
+	void soloSeLiberaUnaUnidadVendida() {
+		Vehiculo vehiculo = Vehiculo.registrar(VIN, "Jetta", "Comfortline", 2026, "Blanco", PRECIO, null);
+
+		assertThatThrownBy(vehiculo::liberar).isInstanceOf(IllegalStateException.class);
 	}
 }

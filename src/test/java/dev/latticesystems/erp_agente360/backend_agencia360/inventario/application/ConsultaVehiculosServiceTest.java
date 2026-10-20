@@ -71,7 +71,7 @@ class ConsultaVehiculosServiceTest {
 
 	@Test
 	void ventasNoVeOtrosEstatusAunqueLosPida() {
-		assertThat(service.listar(EstatusVehiculo.APARTADA, VENDEDOR)).isEmpty();
+		assertThat(service.listar(EstatusVehiculo.VENDIDO, VENDEDOR)).isEmpty();
 		verifyNoInteractions(vehiculoRepository);
 	}
 
