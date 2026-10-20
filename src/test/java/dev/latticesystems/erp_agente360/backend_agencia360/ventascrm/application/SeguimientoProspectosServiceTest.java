@@ -4,14 +4,18 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 
 import dev.latticesystems.erp_agente360.backend_agencia360.acceso.DirectorioUsuarios;
+import dev.latticesystems.erp_agente360.backend_agencia360.inventario.ConsultaUnidades;
+import dev.latticesystems.erp_agente360.backend_agencia360.inventario.ConsultaUnidades.UnidadDelProspecto;
 import dev.latticesystems.erp_agente360.backend_agencia360.shared.eventos.ProspectoFinalizado;
 import dev.latticesystems.erp_agente360.backend_agencia360.shared.exception.ConflictoException;
 import dev.latticesystems.erp_agente360.backend_agencia360.shared.exception.RecursoNoEncontradoException;
 import dev.latticesystems.erp_agente360.backend_agencia360.shared.security.Role;
 import dev.latticesystems.erp_agente360.backend_agencia360.shared.security.UsuarioAutenticado;
+import dev.latticesystems.erp_agente360.backend_agencia360.ventascrm.application.ProspectoVista.VehiculoVendido;
 import dev.latticesystems.erp_agente360.backend_agencia360.ventascrm.domain.Etapa;
 import dev.latticesystems.erp_agente360.backend_agencia360.ventascrm.domain.MotivoCierre;
 import dev.latticesystems.erp_agente360.backend_agencia360.ventascrm.domain.OrigenCambio;
@@ -60,12 +64,43 @@ class SeguimientoProspectosServiceTest {
 	@Mock
 	private ApplicationEventPublisher eventos;
 
+	@Mock
+	private ConsultaUnidades consultaUnidades;
+
 	private SeguimientoProspectosService service;
 
 	@BeforeEach
 	void setUp() {
-		service = new SeguimientoProspectosService(prospectoRepository, directorioUsuarios, eventos,
+		service = new SeguimientoProspectosService(prospectoRepository, directorioUsuarios, eventos, consultaUnidades,
 				Clock.fixed(AHORA, ZoneOffset.UTC));
+	}
+
+	@Test
+	void unFinalizadoMuestraLaUnidadQueEligioFacturacion() {
+		Prospecto ana = enEntrega("ana@ejemplo.com");
+		ana.moverPorVendedor(Etapa.FINALIZADO, null, 7L, AHORA);
+		Prospecto luis = prospecto("Luis Pérez", 7L);
+		when(prospectoRepository.findByVendedorIdOrderByCreatedAtDescIdDesc(7L)).thenReturn(List.of(ana, luis));
+		when(consultaUnidades.unidadDelProspecto(1L))
+				.thenReturn(Optional.of(new UnidadDelProspecto(30L, "3N1AB8CV5PY123456", "Sentra", 2026)));
+
+		List<ProspectoVista> lista = service.listar(null, VENDEDOR);
+
+		assertThat(lista.getFirst().vehiculo()).isEqualTo(new VehiculoVendido("3N1AB8CV5PY123456", "Sentra", 2026));
+		// Solo se consulta la unidad de los finalizados.
+		assertThat(lista.get(1).vehiculo()).isNull();
+		verify(consultaUnidades).unidadDelProspecto(1L);
+		verifyNoMoreInteractions(consultaUnidades);
+	}
+
+	@Test
+	void unFinalizadoSinUnidadElegidaQuedaSinVehiculo() {
+		Prospecto ana = enEntrega("ana@ejemplo.com");
+		ana.moverPorVendedor(Etapa.FINALIZADO, null, 7L, AHORA);
+		when(prospectoRepository.findByVendedorIdOrderByCreatedAtDescIdDesc(7L)).thenReturn(List.of(ana));
+		when(consultaUnidades.unidadDelProspecto(1L)).thenReturn(Optional.empty());
+
+		assertThat(service.listar(null, VENDEDOR).getFirst().vehiculo()).isNull();
 	}
 
 	@Test
