@@ -34,8 +34,9 @@ public class SolicitudCierre extends Auditable {
 	@JoinColumn(name = "prospecto_id", nullable = false)
 	private Prospecto prospecto;
 
-	@Column(nullable = false, length = 200)
-	private String motivo;
+	@Enumerated(EnumType.STRING)
+	@Column(nullable = false, length = 30)
+	private MotivoCierre motivo;
 
 	@Column(name = "solicitante_id", nullable = false)
 	private Long solicitanteId;
@@ -54,7 +55,7 @@ public class SolicitudCierre extends Auditable {
 		// Requerido por JPA
 	}
 
-	private SolicitudCierre(Prospecto prospecto, String motivo, Long solicitanteId) {
+	private SolicitudCierre(Prospecto prospecto, MotivoCierre motivo, Long solicitanteId) {
 		this.prospecto = prospecto;
 		this.motivo = motivo;
 		this.solicitanteId = solicitanteId;
@@ -63,16 +64,16 @@ public class SolicitudCierre extends Auditable {
 
 	/**
 	 * @throws IllegalArgumentException
-	 *             si falta el motivo o pasa de 200 caracteres
+	 *             si falta el motivo o es {@link MotivoCierre#SIN_CATEGORIA}
 	 * @throws ConflictoException
 	 *             si el prospecto no está en Pago, Facturación o Entrega, o ya
 	 *             tiene una solicitud pendiente
 	 */
-	public static SolicitudCierre solicitar(Prospecto prospecto, String motivo, Long solicitanteId) {
+	public static SolicitudCierre solicitar(Prospecto prospecto, MotivoCierre motivo, Long solicitanteId) {
 		Objects.requireNonNull(solicitanteId, "solicitanteId");
-		String motivoLimpio = Prospecto.validarMotivo(motivo);
+		MotivoCierre motivoValido = MotivoCierre.validarParaCerrar(motivo);
 		prospecto.marcarCierreSolicitado();
-		return new SolicitudCierre(prospecto, motivoLimpio, solicitanteId);
+		return new SolicitudCierre(prospecto, motivoValido, solicitanteId);
 	}
 
 	/**
@@ -107,7 +108,7 @@ public class SolicitudCierre extends Auditable {
 		return prospecto;
 	}
 
-	public String getMotivo() {
+	public MotivoCierre getMotivo() {
 		return motivo;
 	}
 
