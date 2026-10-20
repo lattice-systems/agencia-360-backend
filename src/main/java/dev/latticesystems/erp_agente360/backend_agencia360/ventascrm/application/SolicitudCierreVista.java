@@ -2,6 +2,7 @@ package dev.latticesystems.erp_agente360.backend_agencia360.ventascrm.applicatio
 
 import dev.latticesystems.erp_agente360.backend_agencia360.ventascrm.domain.EstadoSolicitud;
 import dev.latticesystems.erp_agente360.backend_agencia360.ventascrm.domain.Etapa;
+import dev.latticesystems.erp_agente360.backend_agencia360.ventascrm.domain.MotivoCierre;
 import java.time.Instant;
 
 /**
@@ -12,6 +13,6 @@ import java.time.Instant;
  * @param solicitanteNombre
  *            vendedor que la envió; nulo si ya no existe
  */
-public record SolicitudCierreVista(Long id, Long prospectoId, String prospectoNombre, Etapa etapa, String motivo,
+public record SolicitudCierreVista(Long id, Long prospectoId, String prospectoNombre, Etapa etapa, MotivoCierre motivo,
 		Long solicitanteId, String solicitanteNombre, Instant solicitadaEn, EstadoSolicitud estado) {
 }
