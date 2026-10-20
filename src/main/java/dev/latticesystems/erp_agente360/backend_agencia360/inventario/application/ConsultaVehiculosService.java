@@ -17,10 +17,11 @@ import org.springframework.transaction.annotation.Transactional;
  * decidió el PO el 13 de octubre:
  * <ul>
  * <li>Inventario y Administrador ven todas las unidades.</li>
- * <li>Ventas ve solo las disponibles.</li>
+ * <li>Ventas y Facturación ven solo las disponibles: Facturación elige entre
+ * ellas la unidad de una venta (ERP-1.0).</li>
  * <li>Los demás roles no ven unidades.</li>
  * </ul>
- * Para Ventas, una unidad que no está disponible se trata como inexistente
+ * Para ellos, una unidad que no está disponible se trata como inexistente
  * (404).
  */
 @Service
@@ -69,7 +70,7 @@ public class ConsultaVehiculosService {
 		if (actor.tieneRol(Role.INVENTARIO) || actor.tieneRol(Role.ADMINISTRADOR)) {
 			return true;
 		}
-		if (actor.tieneRol(Role.VENTAS)) {
+		if (actor.tieneRol(Role.VENTAS) || actor.tieneRol(Role.FACTURACION)) {
 			return false;
 		}
 		throw new AccessDeniedException("Tu rol no tiene acceso a las unidades");
