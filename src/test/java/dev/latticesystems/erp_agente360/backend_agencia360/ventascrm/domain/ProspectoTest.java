@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import dev.latticesystems.erp_agente360.backend_agencia360.shared.exception.ConflictoException;
+import java.math.BigDecimal;
 import java.time.Instant;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -308,6 +309,21 @@ class ProspectoTest {
 			assertThatThrownBy(() -> prospecto.moverPorVendedor(Etapa.PRIMER_CONTACTO, null, VENDEDOR, DESPUES))
 					.isInstanceOf(ConflictoException.class);
 		}
+	}
+
+	@Test
+	void elPrecioTotalEsMayorACeroYConHastaDosDecimales() {
+		Prospecto prospecto = en(Etapa.PAGO);
+
+		prospecto.fijarPrecioTotal(new BigDecimal("489900.5"));
+		assertThat(prospecto.getPrecioTotal()).isEqualByComparingTo("489900.50");
+
+		for (String precio : new String[]{"0", "-1", "10.555"}) {
+			assertThatThrownBy(() -> prospecto.fijarPrecioTotal(new BigDecimal(precio)))
+					.isInstanceOf(IllegalArgumentException.class);
+		}
+		assertThatThrownBy(() -> prospecto.fijarPrecioTotal(null)).isInstanceOf(IllegalArgumentException.class)
+				.hasMessage("Captura el precio total de la venta");
 	}
 
 	@Test

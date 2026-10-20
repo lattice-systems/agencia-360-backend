@@ -13,6 +13,7 @@ import jakarta.persistence.Id;
 import jakarta.persistence.OneToMany;
 import jakarta.persistence.OrderBy;
 import jakarta.persistence.Table;
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -40,6 +41,7 @@ public class Prospecto extends Auditable {
 
 	private static final Pattern SEPARADORES_TELEFONO = Pattern.compile("[\\s().-]");
 	private static final Pattern DIEZ_DIGITOS = Pattern.compile("\\d{10}");
+	private static final BigDecimal PRECIO_MAXIMO = new BigDecimal("9999999999.99");
 
 	@Id
 	@GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -76,6 +78,13 @@ public class Prospecto extends Auditable {
 	/** Fecha y hora del último cambio de etapa ("Último cambio" en el CRM). */
 	@Column(name = "etapa_actualizada_en", nullable = false)
 	private Instant etapaActualizadaEn;
+
+	/**
+	 * Precio total de la venta (ERP-1.1): lo captura el vendedor al pasar a Pago y
+	 * Contabilidad lo puede corregir al validar los pagos.
+	 */
+	@Column(name = "precio_total", precision = 12, scale = 2)
+	private BigDecimal precioTotal;
 
 	/** Hay una solicitud de cierre esperando al Administrador. */
 	@Column(name = "cierre_pendiente", nullable = false)
@@ -186,6 +195,38 @@ public class Prospecto extends Auditable {
 	public void confirmarFacturacion(Long usuarioId, Instant ahora) {
 		exigirEtapa(Etapa.FACTURACION, "Solo se factura un prospecto en Facturación");
 		moverA(Etapa.ENTREGA, OrigenCambio.ERP, usuarioId, ahora);
+	}
+
+	/**
+	 * Guarda el precio total de la venta (ERP-1.1).
+	 *
+	 * @throws IllegalArgumentException
+	 *             si falta, no es mayor a cero o tiene más de dos decimales
+	 */
+	public void fijarPrecioTotal(BigDecimal precio) {
+		this.precioTotal = validarPrecioTotal(precio);
+	}
+
+	/**
+	 * @return el precio con dos decimales
+	 * @throws IllegalArgumentException
+	 *             si falta, no es mayor a cero, tiene más de dos decimales o es
+	 *             demasiado grande
+	 */
+	public static BigDecimal validarPrecioTotal(BigDecimal precio) {
+		if (precio == null) {
+			throw new IllegalArgumentException("Captura el precio total de la venta");
+		}
+		if (precio.signum() <= 0) {
+			throw new IllegalArgumentException("El precio total debe ser mayor a cero");
+		}
+		if (precio.stripTrailingZeros().scale() > 2) {
+			throw new IllegalArgumentException("El precio total admite hasta dos decimales");
+		}
+		if (precio.compareTo(PRECIO_MAXIMO) > 0) {
+			throw new IllegalArgumentException("El precio total es demasiado grande");
+		}
+		return precio.setScale(2);
 	}
 
 	/**
@@ -359,6 +400,10 @@ public class Prospecto extends Auditable {
 
 	public Instant getEtapaActualizadaEn() {
 		return etapaActualizadaEn;
+	}
+
+	public BigDecimal getPrecioTotal() {
+		return precioTotal;
 	}
 
 	public boolean isCierrePendiente() {
