@@ -1,6 +1,7 @@
 package dev.latticesystems.erp_agente360.backend_agencia360.inventario.domain;
 
 import dev.latticesystems.erp_agente360.backend_agencia360.shared.domain.Auditable;
+import dev.latticesystems.erp_agente360.backend_agencia360.shared.exception.ConflictoException;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -104,8 +105,8 @@ public class Vehiculo extends Auditable {
 	 * no se elimina). Aplica las mismas reglas que el alta.
 	 *
 	 * <p>
-	 * Inventario solo cambia el estatus entre Disponible y No disponible; Apartada,
-	 * Vendido y Entregado los pone la venta.
+	 * Inventario solo cambia el estatus entre Disponible y No disponible; Vendido y
+	 * Entregado los pone la venta.
 	 *
 	 * @param estatus
 	 *            nuevo estatus; {@code null} para conservar el actual
@@ -133,6 +134,34 @@ public class Vehiculo extends Auditable {
 		this.color = colorLimpio;
 		this.precio = precioValido;
 		this.estatus = nuevoEstatus;
+	}
+
+	/**
+	 * Facturación eligió la unidad para una venta (ERP-1.0): pasa de Disponible a
+	 * Vendido.
+	 *
+	 * @throws ConflictoException
+	 *             si la unidad ya no está disponible (409)
+	 */
+	public void vender() {
+		if (estatus != EstatusVehiculo.DISPONIBLE) {
+			throw new ConflictoException("La unidad " + vin + " ya no está disponible");
+		}
+		estatus = EstatusVehiculo.VENDIDO;
+	}
+
+	/**
+	 * Facturación cambió la unidad de una venta que todavía no se registra: la
+	 * unidad regresa a Disponible.
+	 *
+	 * @throws IllegalStateException
+	 *             si la unidad no estaba vendida
+	 */
+	public void liberar() {
+		if (estatus != EstatusVehiculo.VENDIDO) {
+			throw new IllegalStateException("Solo se libera una unidad vendida");
+		}
+		estatus = EstatusVehiculo.DISPONIBLE;
 	}
 
 	/**

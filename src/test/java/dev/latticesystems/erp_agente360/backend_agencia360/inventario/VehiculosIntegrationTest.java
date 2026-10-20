@@ -210,16 +210,19 @@ class VehiculosIntegrationTest extends AbstractIntegrationTest {
 	@Test
 	void filtraLasUnidadesPorEstatus() throws Exception {
 		Usuario almacen = registrar("almacen1", Role.INVENTARIO);
-		long apartada = altaDe(almacen, "3VWFE21C04M000001");
+		long vendida = altaDe(almacen, "3VWFE21C04M000001");
 		altaDe(almacen, "3VWFE21C04M000002");
 		entityManager.flush();
-		jdbcTemplate.update("update vehiculo set estatus = 'APARTADA' where id = ?", apartada);
+		jdbcTemplate.update("update vehiculo set estatus = 'VENDIDO' where id = ?", vendida);
 		entityManager.clear();
 
 		mockMvc.perform(conToken(get(URL).param("estatus", "DISPONIBLE"), token(almacen))).andExpect(status().isOk())
 				.andExpect(jsonPath("$.length()").value(1)).andExpect(jsonPath("$[0].vin").value("3VWFE21C04M000002"));
-		mockMvc.perform(conToken(get(URL).param("estatus", "APARTADA"), token(almacen))).andExpect(status().isOk())
-				.andExpect(jsonPath("$.length()").value(1)).andExpect(jsonPath("$[0].id").value(apartada));
+		mockMvc.perform(conToken(get(URL).param("estatus", "VENDIDO"), token(almacen))).andExpect(status().isOk())
+				.andExpect(jsonPath("$.length()").value(1)).andExpect(jsonPath("$[0].id").value(vendida));
+		// Ya no existe el apartado (decisión del PO del 19 de octubre).
+		mockMvc.perform(conToken(get(URL).param("estatus", "APARTADA"), token(almacen)))
+				.andExpect(status().isBadRequest());
 	}
 
 	@Test
@@ -293,18 +296,18 @@ class VehiculosIntegrationTest extends AbstractIntegrationTest {
 	}
 
 	@Test
-	void unaUnidadApartadaSeCorrigePeroSuEstatusLoCambiaVentas() throws Exception {
+	void unaUnidadVendidaSeCorrigePeroSuEstatusLoPoneLaVenta() throws Exception {
 		Usuario almacen = registrar("almacen1", Role.INVENTARIO);
 		long id = altaDe(almacen, "3VWFE21C04M000001");
 		entityManager.flush();
-		jdbcTemplate.update("update vehiculo set estatus = 'APARTADA' where id = ?", id);
+		jdbcTemplate.update("update vehiculo set estatus = 'VENDIDO' where id = ?", id);
 		entityManager.clear();
 
 		mockMvc.perform(edicion(token(almacen), id, cuerpoConEstatus("3VWFE21C04M000001", "DISPONIBLE")))
 				.andExpect(status().isBadRequest()).andExpect(jsonPath("$.message")
 						.value("Inventario solo cambia el estatus entre Disponible y No disponible"));
 		mockMvc.perform(edicion(token(almacen), id, cuerpo("3VWFE21C04M000001"))).andExpect(status().isOk())
-				.andExpect(jsonPath("$.estatus").value("APARTADA"));
+				.andExpect(jsonPath("$.estatus").value("VENDIDO"));
 	}
 
 	@Test

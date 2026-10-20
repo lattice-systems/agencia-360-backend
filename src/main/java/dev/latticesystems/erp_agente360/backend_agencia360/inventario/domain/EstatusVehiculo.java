@@ -2,10 +2,12 @@ package dev.latticesystems.erp_agente360.backend_agencia360.inventario.domain;
 
 /**
  * Estatus de una unidad del inventario (decisión del PO del 9 de octubre). Una
- * unidad recién recibida queda {@link #DISPONIBLE}.
+ * unidad recién recibida queda {@link #DISPONIBLE}. Ya no existe Apartada: la
+ * unidad pasa a {@link #VENDIDO} cuando Facturación la elige (decisión del PO
+ * del 19 de octubre).
  */
 public enum EstatusVehiculo {
-	DISPONIBLE, APARTADA, VENDIDO, ENTREGADO, NO_DISPONIBLE;
+	DISPONIBLE, VENDIDO, ENTREGADO, NO_DISPONIBLE;
 
 	/**
 	 * Convierte el valor recibido en una petición.
