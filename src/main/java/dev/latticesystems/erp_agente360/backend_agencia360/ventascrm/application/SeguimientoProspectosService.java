@@ -1,10 +1,12 @@
 package dev.latticesystems.erp_agente360.backend_agencia360.ventascrm.application;
 
 import dev.latticesystems.erp_agente360.backend_agencia360.acceso.DirectorioUsuarios;
+import dev.latticesystems.erp_agente360.backend_agencia360.inventario.ConsultaUnidades;
 import dev.latticesystems.erp_agente360.backend_agencia360.shared.eventos.ProspectoFinalizado;
 import dev.latticesystems.erp_agente360.backend_agencia360.shared.exception.RecursoNoEncontradoException;
 import dev.latticesystems.erp_agente360.backend_agencia360.shared.security.Role;
 import dev.latticesystems.erp_agente360.backend_agencia360.shared.security.UsuarioAutenticado;
+import dev.latticesystems.erp_agente360.backend_agencia360.ventascrm.application.ProspectoVista.VehiculoVendido;
 import dev.latticesystems.erp_agente360.backend_agencia360.ventascrm.domain.Etapa;
 import dev.latticesystems.erp_agente360.backend_agencia360.ventascrm.domain.HistorialEtapa;
 import dev.latticesystems.erp_agente360.backend_agencia360.ventascrm.domain.MotivoCierre;
@@ -51,19 +53,21 @@ public class SeguimientoProspectosService {
 	private final ProspectoRepository prospectoRepository;
 	private final DirectorioUsuarios directorioUsuarios;
 	private final ApplicationEventPublisher eventos;
+	private final ConsultaUnidades consultaUnidades;
 	private final Clock reloj;
 
 	@Autowired
 	public SeguimientoProspectosService(ProspectoRepository prospectoRepository, DirectorioUsuarios directorioUsuarios,
-			ApplicationEventPublisher eventos) {
-		this(prospectoRepository, directorioUsuarios, eventos, Clock.systemUTC());
+			ApplicationEventPublisher eventos, ConsultaUnidades consultaUnidades) {
+		this(prospectoRepository, directorioUsuarios, eventos, consultaUnidades, Clock.systemUTC());
 	}
 
 	SeguimientoProspectosService(ProspectoRepository prospectoRepository, DirectorioUsuarios directorioUsuarios,
-			ApplicationEventPublisher eventos, Clock reloj) {
+			ApplicationEventPublisher eventos, ConsultaUnidades consultaUnidades, Clock reloj) {
 		this.prospectoRepository = prospectoRepository;
 		this.directorioUsuarios = directorioUsuarios;
 		this.eventos = eventos;
+		this.consultaUnidades = consultaUnidades;
 		this.reloj = reloj;
 	}
 
@@ -83,7 +87,20 @@ public class SeguimientoProspectosService {
 					? prospectoRepository.findByVendedorIdOrderByCreatedAtDescIdDesc(actor.id())
 					: prospectoRepository.findByVendedorIdAndEtapaOrderByCreatedAtDescIdDesc(actor.id(), etapa);
 		}
-		return prospectos.stream().map(ProspectoVista::de).toList();
+		return prospectos.stream().map(this::vista).toList();
+	}
+
+	/**
+	 * A los finalizados se les agrega la unidad que eligió Facturación (CRM-1.4),
+	 * con la consulta que publica inventario para eso.
+	 */
+	private ProspectoVista vista(Prospecto prospecto) {
+		if (prospecto.getEtapa() != Etapa.FINALIZADO) {
+			return ProspectoVista.de(prospecto);
+		}
+		VehiculoVendido vehiculo = consultaUnidades.unidadDelProspecto(prospecto.getId())
+				.map(unidad -> new VehiculoVendido(unidad.vin(), unidad.modelo(), unidad.anio())).orElse(null);
+		return ProspectoVista.de(prospecto, vehiculo);
 	}
 
 	/**

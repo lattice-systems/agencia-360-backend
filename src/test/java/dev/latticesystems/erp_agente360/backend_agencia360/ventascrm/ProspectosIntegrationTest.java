@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -432,6 +433,12 @@ class ProspectosIntegrationTest extends AbstractIntegrationTest {
 	 * lo pasa a Entrega.
 	 */
 	private void llevarAEntrega(Usuario vendedor, long id) throws Exception {
+		Usuario facturista = llevarAFacturacion(vendedor, id);
+		mockMvc.perform(cambioDeEtapa(token(facturista), id, "ENTREGA")).andExpect(status().isOk());
+	}
+
+	/** Hasta Facturación por el camino real; regresa a quien factura. */
+	private Usuario llevarAFacturacion(Usuario vendedor, long id) throws Exception {
 		Usuario cajera = registrar("caja-" + id, Role.CAJA);
 		Usuario contador = registrar("conta-" + id, Role.CONTABILIDAD);
 		Usuario facturista = registrar("factura-" + id, Role.FACTURACION);
@@ -443,7 +450,32 @@ class ProspectosIntegrationTest extends AbstractIntegrationTest {
 				.andExpect(status().isOk());
 		mockMvc.perform(conToken(post("/api/v1/liquidaciones/{id}/validar", id), token(contador)))
 				.andExpect(status().isOk());
+		return facturista;
+	}
+
+	@Test
+	void unFinalizadoMuestraElVehiculoQueEligioFacturacion() throws Exception {
+		Usuario vendedor = registrar("vendedor1", Role.VENTAS);
+		Usuario almacen = registrar("inventario1", Role.INVENTARIO);
+		String alta = mockMvc
+				.perform(conToken(post("/api/v1/vehiculos"), token(almacen)).contentType(MediaType.APPLICATION_JSON)
+						.content("{\"vin\":\"3N1AB8CV5PY177777\",\"modelo\":\"Sentra\",\"version\":\"Advance\","
+								+ "\"anio\":2026,\"color\":\"Blanco\",\"precio\":489900.00}"))
+				.andExpect(status().isCreated()).andReturn().getResponse().getContentAsString();
+		long sentra = idDe(alta);
+		long id = crearProspecto(vendedor, "Ana López", "4771234567", "ana@ejemplo.com");
+		Usuario facturista = llevarAFacturacion(vendedor, id);
+		mockMvc.perform(conToken(put("/api/v1/ventas/{id}/unidad", id), token(facturista))
+				.contentType(MediaType.APPLICATION_JSON).content("{\"vehiculoId\":" + sentra + "}"))
+				.andExpect(status().isOk());
 		mockMvc.perform(cambioDeEtapa(token(facturista), id, "ENTREGA")).andExpect(status().isOk());
+		mockMvc.perform(cambioDeEtapa(token(vendedor), id, "FINALIZADO")).andExpect(status().isOk());
+
+		mockMvc.perform(conToken(get(URL), token(vendedor))).andExpect(status().isOk())
+				.andExpect(jsonPath("$[0].etapa").value("FINALIZADO"))
+				.andExpect(jsonPath("$[0].vehiculo.vin").value("3N1AB8CV5PY177777"))
+				.andExpect(jsonPath("$[0].vehiculo.modelo").value("Sentra"))
+				.andExpect(jsonPath("$[0].vehiculo.anio").value(2026));
 	}
 
 	private static MockHttpServletRequestBuilder finalizar(String token, long id, String cuerpo) {
