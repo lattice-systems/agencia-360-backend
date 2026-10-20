@@ -324,6 +324,17 @@ class ProspectosIntegrationTest extends AbstractIntegrationTest {
 	}
 
 	@Test
+	void alPasarAPagoSePideElPrecioTotal() throws Exception {
+		Usuario vendedor = registrar("vendedor1", Role.VENTAS);
+		long id = crearProspecto(vendedor, "Ana López", "4771234567", null);
+
+		mockMvc.perform(cambioDeEtapaSinPrecio(token(vendedor), id, "PAGO")).andExpect(status().isBadRequest())
+				.andExpect(jsonPath("$.message").value("Captura el precio total de la venta"));
+		mockMvc.perform(cambioDeEtapa(token(vendedor), id, "PAGO")).andExpect(status().isOk())
+				.andExpect(jsonPath("$.precioTotal").value(489900));
+	}
+
+	@Test
 	void contabilidadYaNoPasaDePagoAFacturacionSinValidarLosPagos() throws Exception {
 		Usuario vendedor = registrar("vendedor1", Role.VENTAS);
 		Usuario contador = registrar("contabilidad1", Role.CONTABILIDAD);
@@ -516,7 +527,19 @@ class ProspectosIntegrationTest extends AbstractIntegrationTest {
 		return conToken(post(URL), token).contentType(MediaType.APPLICATION_JSON).content(cuerpo);
 	}
 
+	/**
+	 * Al pasar a Pago el vendedor manda el precio total (decisión del PO, 19 de
+	 * octubre).
+	 */
 	private static MockHttpServletRequestBuilder cambioDeEtapa(String token, long id, String etapa) {
+		if ("PAGO".equals(etapa)) {
+			return conToken(patch(URL + "/" + id + "/etapa"), token).contentType(MediaType.APPLICATION_JSON)
+					.content("{\"etapa\":\"PAGO\",\"precioTotal\":489900}");
+		}
+		return cambioDeEtapaSinPrecio(token, id, etapa);
+	}
+
+	private static MockHttpServletRequestBuilder cambioDeEtapaSinPrecio(String token, long id, String etapa) {
 		return conToken(patch(URL + "/{id}/etapa", id), token).contentType(MediaType.APPLICATION_JSON)
 				.content("{\"etapa\":\"" + etapa + "\"}");
 	}

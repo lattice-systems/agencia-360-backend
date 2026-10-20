@@ -17,6 +17,7 @@ import dev.latticesystems.erp_agente360.backend_agencia360.ventascrm.domain.Moti
 import dev.latticesystems.erp_agente360.backend_agencia360.ventascrm.domain.OrigenCambio;
 import dev.latticesystems.erp_agente360.backend_agencia360.ventascrm.domain.Prospecto;
 import dev.latticesystems.erp_agente360.backend_agencia360.ventascrm.infrastructure.ProspectoRepository;
+import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
@@ -123,6 +124,28 @@ class SeguimientoProspectosServiceTest {
 	}
 
 	@Test
+	void alPasarAPagoElVendedorCapturaElPrecioTotal() {
+		Prospecto ana = prospecto("Ana López", 7L);
+		when(prospectoRepository.findByIdAndVendedorId(1L, 7L)).thenReturn(Optional.of(ana));
+
+		ProspectoVista enPago = service.cambiarEtapa(1L, Etapa.PAGO, null, false, null, new BigDecimal("489900"),
+				VENDEDOR);
+
+		assertThat(enPago.etapa()).isEqualTo(Etapa.PAGO);
+		assertThat(enPago.precioTotal()).isEqualByComparingTo("489900");
+	}
+
+	@Test
+	void sinPrecioTotalNoSePasaAPago() {
+		Prospecto ana = prospecto("Ana López", 7L);
+		when(prospectoRepository.findByIdAndVendedorId(1L, 7L)).thenReturn(Optional.of(ana));
+
+		assertThatThrownBy(() -> service.cambiarEtapa(1L, Etapa.PAGO, null, VENDEDOR))
+				.isInstanceOf(IllegalArgumentException.class).hasMessage("Captura el precio total de la venta");
+		assertThat(ana.getEtapa()).isEqualTo(Etapa.PRIMER_CONTACTO);
+	}
+
+	@Test
 	void alFinalizarSePublicaProspectoFinalizadoParaVentasYClientes() {
 		Prospecto ana = enEntrega("ana@ejemplo.com");
 		when(prospectoRepository.findByIdAndVendedorId(1L, 7L)).thenReturn(Optional.of(ana));
@@ -149,7 +172,7 @@ class SeguimientoProspectosServiceTest {
 		Prospecto ana = enEntrega(null);
 		when(prospectoRepository.findByIdAndVendedorId(1L, 7L)).thenReturn(Optional.of(ana));
 
-		ProspectoVista finalizado = service.cambiarEtapa(1L, Etapa.FINALIZADO, null, false, " Ana@Ejemplo.com ",
+		ProspectoVista finalizado = service.cambiarEtapa(1L, Etapa.FINALIZADO, null, false, " Ana@Ejemplo.com ", null,
 				VENDEDOR);
 
 		assertThat(finalizado.correo()).isEqualTo("ana@ejemplo.com");
@@ -161,7 +184,7 @@ class SeguimientoProspectosServiceTest {
 		Prospecto ana = enEntrega("ana@ejemplo.com");
 		when(prospectoRepository.findByIdAndVendedorId(1L, 7L)).thenReturn(Optional.of(ana));
 
-		ProspectoVista finalizado = service.cambiarEtapa(1L, Etapa.FINALIZADO, null, true, null, VENDEDOR);
+		ProspectoVista finalizado = service.cambiarEtapa(1L, Etapa.FINALIZADO, null, true, null, null, VENDEDOR);
 
 		assertThat(finalizado.correo()).isEqualTo("ana@ejemplo.com");
 		verify(eventos).publishEvent(new ProspectoFinalizado(1L, 7L, "Ana López", null, AHORA));
@@ -172,7 +195,7 @@ class SeguimientoProspectosServiceTest {
 		Prospecto ana = enEntrega(null);
 		when(prospectoRepository.findByIdAndVendedorId(1L, 7L)).thenReturn(Optional.of(ana));
 
-		service.cambiarEtapa(1L, Etapa.FINALIZADO, null, true, null, VENDEDOR);
+		service.cambiarEtapa(1L, Etapa.FINALIZADO, null, true, null, null, VENDEDOR);
 
 		verify(eventos).publishEvent(new ProspectoFinalizado(1L, 7L, "Ana López", null, AHORA));
 	}

@@ -101,10 +101,10 @@ public class LiquidacionesService {
 	}
 
 	@Transactional
-	public LiquidacionVista validar(Long prospectoId, UsuarioAutenticado actor) {
+	public LiquidacionVista validar(Long prospectoId, BigDecimal precioCorregido, UsuarioAutenticado actor) {
 		exigirRol(actor, Role.CONTABILIDAD, "Solo Contabilidad valida los pagos");
 		Liquidacion liquidacion = buscarLiquidacion(prospectoId);
-		liquidacion.validar(actor.id(), Instant.now(reloj));
+		liquidacion.validar(precioCorregido, actor.id(), Instant.now(reloj));
 		return vista(liquidacion.getProspecto(), liquidacion);
 	}
 
@@ -136,7 +136,7 @@ public class LiquidacionesService {
 		String vendedor = nombres.get(prospecto.getVendedorId());
 		if (liquidacion == null) {
 			return new LiquidacionVista(prospecto.getId(), prospecto.getNombre(), vendedor, EstadoLiquidacion.ABIERTA,
-					BigDecimal.ZERO.setScale(2), List.of(), null, null);
+					BigDecimal.ZERO.setScale(2), List.of(), null, null, prospecto.getPrecioTotal());
 		}
 		List<PagoVista> pagos = liquidacion.getPagos().stream()
 				.map(p -> new PagoVista(p.getId(), p.getMonto(), p.getFechaPago(), p.getReferencia(),
@@ -144,7 +144,8 @@ public class LiquidacionesService {
 						p.getAnuladoPorId() == null ? null : nombres.get(p.getAnuladoPorId())))
 				.toList();
 		return new LiquidacionVista(prospecto.getId(), prospecto.getNombre(), vendedor, liquidacion.getEstado(),
-				liquidacion.total().setScale(2), pagos, liquidacion.getEnviadaEn(), liquidacion.getMotivoRechazo());
+				liquidacion.total().setScale(2), pagos, liquidacion.getEnviadaEn(), liquidacion.getMotivoRechazo(),
+				prospecto.getPrecioTotal());
 	}
 
 	private Map<Long, String> nombresDe(List<Prospecto> prospectos, List<Liquidacion> liquidaciones) {
