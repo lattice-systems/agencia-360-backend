@@ -45,7 +45,7 @@ Qué se puede probar:
 - La edición de una unidad, por ejemplo pasar la Frontier LE de No disponible a Disponible.
 - Que el Administrador ve todas las unidades, pero no puede dar de alta ni editar.
 
-**No incluye unidades Apartadas, Vendidas ni Entregadas:** esos estatus los pone la venta (ERP-1.x), que todavía no existe. Cuando exista, se agregan aquí.
+**No incluye unidades Vendidas ni Entregadas:** una unidad pasa a Vendido solo cuando Facturación emite su factura (ERP-1.3). Como los datos fiscales del cliente llegan con la V17 (Coper), el script todavía no emite facturas; cuando exista la captura, se agregan aquí.
 
 ## Refacciones
 
