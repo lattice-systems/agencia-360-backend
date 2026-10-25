@@ -137,7 +137,7 @@ public class Vehiculo extends Auditable {
 	}
 
 	/**
-	 * Facturación eligió la unidad para una venta (ERP-1.0): pasa de Disponible a
+	 * Facturación emitió la factura con esta unidad (ERP-1.3): pasa de Disponible a
 	 * Vendido.
 	 *
 	 * @throws ConflictoException
@@ -148,20 +148,6 @@ public class Vehiculo extends Auditable {
 			throw new ConflictoException("La unidad " + vin + " ya no está disponible");
 		}
 		estatus = EstatusVehiculo.VENDIDO;
-	}
-
-	/**
-	 * Facturación cambió la unidad de una venta que todavía no se registra: la
-	 * unidad regresa a Disponible.
-	 *
-	 * @throws IllegalStateException
-	 *             si la unidad no estaba vendida
-	 */
-	public void liberar() {
-		if (estatus != EstatusVehiculo.VENDIDO) {
-			throw new IllegalStateException("Solo se libera una unidad vendida");
-		}
-		estatus = EstatusVehiculo.DISPONIBLE;
 	}
 
 	/**
