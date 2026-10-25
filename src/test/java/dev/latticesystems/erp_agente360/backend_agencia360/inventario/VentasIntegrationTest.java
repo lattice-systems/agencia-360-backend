@@ -179,8 +179,8 @@ class VentasIntegrationTest extends AbstractIntegrationTest {
 		long sinUnidad = prospectoEnFacturacion("Carlos Núñez", "4775550109");
 		mockMvc.perform(asignar(token(facturacion), prospecto, sentra)).andExpect(status().isOk());
 
-		assertThat(consultaUnidades.unidadDelProspecto(prospecto))
-				.contains(new ConsultaUnidades.UnidadDelProspecto(sentra, "3N1AB8CV5PY123456", "Sentra", 2026));
+		assertThat(consultaUnidades.unidadDelProspecto(prospecto)).contains(new ConsultaUnidades.UnidadDelProspecto(
+				sentra, "3N1AB8CV5PY123456", "Sentra", 2026, "Advance", "Nissan"));
 		assertThat(consultaUnidades.unidadDelProspecto(sinUnidad)).isEmpty();
 	}
 
