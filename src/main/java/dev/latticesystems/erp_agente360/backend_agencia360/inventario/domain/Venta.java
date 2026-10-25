@@ -18,14 +18,16 @@ import java.time.Instant;
 import java.util.Objects;
 
 /**
- * Venta de una unidad (ERP-1.0). Ya no existe el apartado (decisión del PO del
- * 19 de octubre): Facturación elige la unidad de un prospecto en Facturación y
- * la unidad pasa a Vendido. Es venta cuando el vendedor lleva el prospecto
- * hasta Finalizado; entonces queda {@link EstatusVenta#REGISTRADA}.
+ * Venta de una unidad (ERP-1.3). Es venta cuando Facturación emite la factura:
+ * en esa misma transacción la unidad pasa de Disponible a Vendido y la venta
+ * queda {@link EstatusVenta#REGISTRADA}. Cuando el vendedor lleva el prospecto
+ * hasta Finalizado, la unidad sale del inventario y la venta queda
+ * {@link EstatusVenta#ENTREGADA}.
  *
  * <p>
  * El prospecto se guarda solo como id para no cruzar módulos; la llave foránea
- * vive en la base.
+ * vive en la base. Las ventas del Sprint 2 que se finalizaron sin unidad quedan
+ * entregadas y sin vehículo.
  */
 @Entity
 @Table(name = "venta")
@@ -42,7 +44,7 @@ public class Venta extends Auditable {
 	@JoinColumn(name = "vehiculo_id", unique = true)
 	private Vehiculo vehiculo;
 
-	/** Precio de la unidad cuando se eligió. */
+	/** Precio de lista de la unidad cuando se vendió. */
 	@Column(precision = 12, scale = 2)
 	private BigDecimal precio;
 
@@ -50,82 +52,58 @@ public class Venta extends Auditable {
 	@Column(nullable = false, length = 20)
 	private EstatusVenta estatus;
 
+	/** Quién de Facturación emitió la factura con esta unidad. */
 	@Column(name = "asignada_por")
 	private Long asignadaPor;
 
 	@Column(name = "asignada_en")
 	private Instant asignadaEn;
 
+	/** Cuando se emitió la factura. */
 	@Column(name = "registrada_en")
 	private Instant registradaEn;
+
+	/** Cuando el prospecto llegó a Finalizado; vacío mientras tanto. */
+	@Column(name = "entregada_en")
+	private Instant entregadaEn;
 
 	protected Venta() {
 		// Requerido por JPA
 	}
 
-	private Venta(Long prospectoId, EstatusVenta estatus) {
-		this.prospectoId = Objects.requireNonNull(prospectoId, "prospectoId");
-		this.estatus = estatus;
-	}
-
 	/**
-	 * Facturación elige la unidad para el prospecto: la unidad pasa a Vendido.
+	 * Facturación emite la factura con esta unidad: la unidad pasa a Vendido y es
+	 * venta.
 	 *
 	 * @throws ConflictoException
 	 *             si la unidad ya no está disponible (409)
 	 */
-	public static Venta asignar(Long prospectoId, Vehiculo vehiculo, Long usuarioId, Instant ahora) {
-		Venta venta = new Venta(prospectoId, EstatusVenta.POR_ENTREGAR);
+	public static Venta registrar(Long prospectoId, Vehiculo vehiculo, Long usuarioId, Instant ahora) {
+		Objects.requireNonNull(ahora, "ahora");
 		vehiculo.vender();
-		venta.ponerUnidad(vehiculo, usuarioId, ahora);
+		Venta venta = new Venta();
+		venta.prospectoId = Objects.requireNonNull(prospectoId, "prospectoId");
+		venta.estatus = EstatusVenta.REGISTRADA;
+		venta.vehiculo = vehiculo;
+		venta.precio = vehiculo.getPrecio();
+		venta.asignadaPor = usuarioId;
+		venta.asignadaEn = ahora;
+		venta.registradaEn = ahora;
 		return venta;
 	}
 
 	/**
-	 * El prospecto llegó a Finalizado sin que Facturación eligiera su unidad. La
-	 * venta se registra igual para no perderla; la unidad se liga después.
-	 */
-	public static Venta registrarSinUnidad(Long prospectoId, Instant fechaEntrega) {
-		Venta venta = new Venta(prospectoId, EstatusVenta.REGISTRADA);
-		venta.registradaEn = fechaEntrega;
-		return venta;
-	}
-
-	/**
-	 * Facturación se equivocó de unidad: la nueva pasa a Vendido y la anterior
-	 * regresa a Disponible.
+	 * El vendedor pasó el prospecto a Finalizado: la unidad ya se entregó.
 	 *
-	 * @return {@code false} si ya era la unidad de la venta
-	 * @throws ConflictoException
-	 *             si la venta ya se registró o la nueva unidad no está disponible
-	 *             (409); en ese caso no cambia nada
+	 * @return {@code false} si ya estaba entregada (el evento llegó dos veces)
 	 */
-	public boolean cambiarUnidad(Vehiculo nueva, Long usuarioId, Instant ahora) {
-		if (estatus == EstatusVenta.REGISTRADA) {
-			throw new ConflictoException("La venta ya se registró: su unidad no se cambia");
-		}
-		if (nueva == vehiculo) {
+	public boolean entregar(Instant fechaEntrega) {
+		if (estatus == EstatusVenta.ENTREGADA) {
 			return false;
 		}
-		nueva.vender();
-		vehiculo.liberar();
-		ponerUnidad(nueva, usuarioId, ahora);
+		estatus = EstatusVenta.ENTREGADA;
+		entregadaEn = Objects.requireNonNull(fechaEntrega, "fechaEntrega");
 		return true;
-	}
-
-	/**
-	 * El vendedor pasó el prospecto a Finalizado: es venta.
-	 */
-	public void registrar(Instant fechaEntrega) {
-		estatus = EstatusVenta.REGISTRADA;
-		registradaEn = fechaEntrega;
-	}
-
-	private void ponerUnidad(Vehiculo unidad, Long usuarioId, Instant ahora) {
-		this.vehiculo = unidad;
-		this.precio = unidad.getPrecio();
-		this.asignadaPor = usuarioId;
-		this.asignadaEn = ahora;
 	}
 
 	public Long getId() {
@@ -158,5 +136,9 @@ public class Venta extends Auditable {
 
 	public Instant getRegistradaEn() {
 		return registradaEn;
+	}
+
+	public Instant getEntregadaEn() {
+		return entregadaEn;
 	}
 }
