@@ -4,7 +4,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -14,11 +13,13 @@ import dev.latticesystems.erp_agente360.backend_agencia360.acceso.domain.Rol;
 import dev.latticesystems.erp_agente360.backend_agencia360.acceso.domain.Usuario;
 import dev.latticesystems.erp_agente360.backend_agencia360.acceso.infrastructure.RolRepository;
 import dev.latticesystems.erp_agente360.backend_agencia360.acceso.infrastructure.UsuarioRepository;
+import dev.latticesystems.erp_agente360.backend_agencia360.inventario.VentaDeUnidades;
 import dev.latticesystems.erp_agente360.backend_agencia360.shared.AbstractIntegrationTest;
 import dev.latticesystems.erp_agente360.backend_agencia360.shared.eventos.ProspectoFinalizado;
 import dev.latticesystems.erp_agente360.backend_agencia360.shared.security.JwtService;
 import dev.latticesystems.erp_agente360.backend_agencia360.shared.security.Role;
 import jakarta.persistence.EntityManager;
+import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
@@ -47,6 +48,9 @@ class ProspectosIntegrationTest extends AbstractIntegrationTest {
 
 	@Autowired
 	private MockMvc mockMvc;
+
+	@Autowired
+	private VentaDeUnidades ventaDeUnidades;
 
 	@Autowired
 	private UsuarioRepository usuarioRepository;
@@ -465,9 +469,8 @@ class ProspectosIntegrationTest extends AbstractIntegrationTest {
 		long sentra = idDe(alta);
 		long id = crearProspecto(vendedor, "Ana López", "4771234567", "ana@ejemplo.com");
 		Usuario facturista = llevarAFacturacion(vendedor, id);
-		mockMvc.perform(conToken(put("/api/v1/ventas/{id}/unidad", id), token(facturista))
-				.contentType(MediaType.APPLICATION_JSON).content("{\"vehiculoId\":" + sentra + "}"))
-				.andExpect(status().isOk());
+		// Desde ERP-1.3 la unidad se vende al emitir la factura.
+		ventaDeUnidades.vender(id, sentra, facturista.getId(), Instant.now());
 		mockMvc.perform(cambioDeEtapa(token(facturista), id, "ENTREGA")).andExpect(status().isOk());
 		mockMvc.perform(cambioDeEtapa(token(vendedor), id, "FINALIZADO")).andExpect(status().isOk());
 

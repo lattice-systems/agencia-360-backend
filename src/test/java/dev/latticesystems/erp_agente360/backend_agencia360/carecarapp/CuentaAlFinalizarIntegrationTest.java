@@ -8,7 +8,6 @@ import static org.mockito.Mockito.timeout;
 import static org.mockito.Mockito.verify;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -17,6 +16,7 @@ import dev.latticesystems.erp_agente360.backend_agencia360.acceso.domain.Usuario
 import dev.latticesystems.erp_agente360.backend_agencia360.acceso.infrastructure.RolRepository;
 import dev.latticesystems.erp_agente360.backend_agencia360.acceso.infrastructure.UsuarioRepository;
 import dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.application.EnvioCorreos;
+import dev.latticesystems.erp_agente360.backend_agencia360.inventario.VentaDeUnidades;
 import dev.latticesystems.erp_agente360.backend_agencia360.shared.AbstractIntegrationTest;
 import dev.latticesystems.erp_agente360.backend_agencia360.shared.security.JwtService;
 import java.time.Duration;
@@ -37,6 +37,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
+import org.springframework.transaction.support.TransactionTemplate;
 
 /**
  * CRM-1.3 de punta a punta: Facturación elige la unidad, el vendedor finaliza
@@ -67,6 +68,12 @@ class CuentaAlFinalizarIntegrationTest extends AbstractIntegrationTest {
 
 	@MockitoBean
 	private EnvioCorreos envioCorreos;
+
+	@Autowired
+	private VentaDeUnidades ventaDeUnidades;
+
+	@Autowired
+	private TransactionTemplate transaccion;
 
 	private Usuario almacen;
 	private Usuario facturacion;
@@ -113,9 +120,9 @@ class CuentaAlFinalizarIntegrationTest extends AbstractIntegrationTest {
 	void alFinalizarSeRegistraElClienteConSuVehiculoYSeAbreSuCuenta() throws Exception {
 		long unidad = altaDeVehiculo("3N1AB8CV5PY177777");
 		long prospecto = prospectoEn("Marta Gil", "marta.gil@correo.com", "FACTURACION");
-		mockMvc.perform(conToken(put("/api/v1/ventas/{id}/unidad", prospecto), token(facturacion))
-				.contentType(MediaType.APPLICATION_JSON).content("{\"vehiculoId\":%d}".formatted(unidad)))
-				.andExpect(status().isOk());
+		// Desde ERP-1.3 la unidad se vende al emitir la factura.
+		transaccion.executeWithoutResult(
+				estado -> ventaDeUnidades.vender(prospecto, unidad, facturacion.getId(), Instant.now()));
 		jdbcTemplate.update("update prospecto set etapa = 'ENTREGA' where id = ?", prospecto);
 
 		finalizar(prospecto, false);

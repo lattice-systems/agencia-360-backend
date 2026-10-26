@@ -81,8 +81,8 @@ class SeguimientoProspectosServiceTest {
 		ana.moverPorVendedor(Etapa.FINALIZADO, null, 7L, AHORA);
 		Prospecto luis = prospecto("Luis Pérez", 7L);
 		when(prospectoRepository.findByVendedorIdOrderByCreatedAtDescIdDesc(7L)).thenReturn(List.of(ana, luis));
-		when(consultaUnidades.unidadDelProspecto(1L))
-				.thenReturn(Optional.of(new UnidadDelProspecto(30L, "3N1AB8CV5PY123456", "Sentra", 2026)));
+		when(consultaUnidades.unidadDelProspecto(1L)).thenReturn(
+				Optional.of(new UnidadDelProspecto(30L, "3N1AB8CV5PY123456", "Sentra", 2026, "Advance", "Nissan")));
 
 		List<ProspectoVista> lista = service.listar(null, VENDEDOR);
 

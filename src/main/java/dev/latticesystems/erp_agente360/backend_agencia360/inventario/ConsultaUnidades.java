@@ -23,7 +23,15 @@ public interface ConsultaUnidades {
 	/**
 	 * Datos de la unidad. En pantalla, {@code modelo} se muestra como Tipo (Sentra)
 	 * y {@code anio} como Modelo (2026), como en la factura (ERP-2.2).
+	 *
+	 * <p>
+	 * {@code version} y {@code marca} se agregaron al final en el Sprint 3 para el
+	 * expediente del vehículo (ERP-3.0), sin cambiar el orden de los demás.
+	 *
+	 * @param marca
+	 *            la marca de la agencia ({@code app.agencia.marca}): el inventario
+	 *            no la guarda por unidad porque la agencia vende una sola marca
 	 */
-	record UnidadDelProspecto(Long vehiculoId, String vin, String modelo, Integer anio) {
+	record UnidadDelProspecto(Long vehiculoId, String vin, String modelo, Integer anio, String version, String marca) {
 	}
 }

@@ -5,6 +5,7 @@ import dev.latticesystems.erp_agente360.backend_agencia360.inventario.domain.Veh
 import dev.latticesystems.erp_agente360.backend_agencia360.inventario.infrastructure.VentaRepository;
 import java.util.List;
 import java.util.Optional;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -16,9 +17,11 @@ import org.springframework.transaction.annotation.Transactional;
 public class ConsultaVentasService implements ConsultaUnidades {
 
 	private final VentaRepository ventaRepository;
+	private final String marca;
 
-	public ConsultaVentasService(VentaRepository ventaRepository) {
+	public ConsultaVentasService(VentaRepository ventaRepository, @Value("${app.agencia.marca}") String marca) {
 		this.ventaRepository = ventaRepository;
+		this.marca = marca;
 	}
 
 	@Transactional(readOnly = true)
@@ -29,11 +32,11 @@ public class ConsultaVentasService implements ConsultaUnidades {
 	@Override
 	@Transactional(readOnly = true)
 	public Optional<UnidadDelProspecto> unidadDelProspecto(Long prospectoId) {
-		return ventaRepository.findByProspectoId(prospectoId).map(venta -> venta.getVehiculo())
-				.map(ConsultaVentasService::unidad);
+		return ventaRepository.findByProspectoId(prospectoId).map(venta -> venta.getVehiculo()).map(this::unidad);
 	}
 
-	private static UnidadDelProspecto unidad(Vehiculo vehiculo) {
-		return new UnidadDelProspecto(vehiculo.getId(), vehiculo.getVin(), vehiculo.getModelo(), vehiculo.getAnio());
+	private UnidadDelProspecto unidad(Vehiculo vehiculo) {
+		return new UnidadDelProspecto(vehiculo.getId(), vehiculo.getVin(), vehiculo.getModelo(), vehiculo.getAnio(),
+				vehiculo.getVersion(), marca);
 	}
 }

@@ -203,21 +203,4 @@ class VehiculoTest {
 		assertThatThrownBy(danada::vender).isInstanceOf(ConflictoException.class);
 		assertThat(danada.getEstatus()).isEqualTo(EstatusVehiculo.NO_DISPONIBLE);
 	}
-
-	@Test
-	void unaUnidadVendidaRegresaADisponibleSiFacturacionCambiaDeUnidad() {
-		Vehiculo vehiculo = Vehiculo.registrar(VIN, "Jetta", "Comfortline", 2026, "Blanco", PRECIO, null);
-		vehiculo.vender();
-
-		vehiculo.liberar();
-
-		assertThat(vehiculo.getEstatus()).isEqualTo(EstatusVehiculo.DISPONIBLE);
-	}
-
-	@Test
-	void soloSeLiberaUnaUnidadVendida() {
-		Vehiculo vehiculo = Vehiculo.registrar(VIN, "Jetta", "Comfortline", 2026, "Blanco", PRECIO, null);
-
-		assertThatThrownBy(vehiculo::liberar).isInstanceOf(IllegalStateException.class);
-	}
 }
