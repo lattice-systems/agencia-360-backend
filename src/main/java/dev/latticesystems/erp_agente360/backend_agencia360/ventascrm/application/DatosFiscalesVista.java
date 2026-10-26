@@ -9,7 +9,7 @@ import dev.latticesystems.erp_agente360.backend_agencia360.ventascrm.domain.Dato
  * @param regimenFiscal
  *            clave del catálogo del SAT
  */
-public record DatosFiscalesVista(String rfc, String nombre, String domicilio, String regimenFiscal,
+public record DatosFiscalesVista(String rfc, String nombre, DomicilioFiscalDatos domicilio, String regimenFiscal,
 		String regimenFiscalDescripcion) {
 
 	/** @return {@code null} si el prospecto todavía no tiene datos fiscales */
@@ -17,7 +17,7 @@ public record DatosFiscalesVista(String rfc, String nombre, String domicilio, St
 		if (datos == null) {
 			return null;
 		}
-		return new DatosFiscalesVista(datos.getRfc(), datos.getNombre(), datos.getDomicilio(),
+		return new DatosFiscalesVista(datos.getRfc(), datos.getNombre(), DomicilioFiscalDatos.de(datos.getDomicilio()),
 				datos.getRegimen().getClave(), datos.getRegimen().getDescripcion());
 	}
 }
