@@ -18,6 +18,7 @@ import dev.latticesystems.erp_agente360.backend_agencia360.shared.AbstractIntegr
 import dev.latticesystems.erp_agente360.backend_agencia360.shared.eventos.ProspectoFinalizado;
 import dev.latticesystems.erp_agente360.backend_agencia360.shared.security.JwtService;
 import dev.latticesystems.erp_agente360.backend_agencia360.shared.security.Role;
+import dev.latticesystems.erp_agente360.backend_agencia360.ventascrm.domain.DatosFiscalesDePrueba;
 import jakarta.persistence.EntityManager;
 import java.time.Instant;
 import java.util.List;
@@ -340,6 +341,41 @@ class ProspectosIntegrationTest extends AbstractIntegrationTest {
 	}
 
 	@Test
+	void alPasarAPagoSePidenLosDatosFiscalesDelCliente() throws Exception {
+		Usuario vendedor = registrar("vendedor1", Role.VENTAS);
+		long id = crearProspecto(vendedor, "Ana López", "4771234567", null);
+
+		mockMvc.perform(conToken(patch(URL + "/{id}/etapa", id), token(vendedor))
+				.contentType(MediaType.APPLICATION_JSON).content("{\"etapa\":\"PAGO\",\"precioTotal\":489900}"))
+				.andExpect(status().isBadRequest())
+				.andExpect(jsonPath("$.message").value("Captura los datos fiscales del cliente para la factura"));
+		mockMvc.perform(conToken(patch(URL + "/{id}/etapa", id), token(vendedor))
+				.contentType(MediaType.APPLICATION_JSON)
+				.content("{\"etapa\":\"PAGO\",\"precioTotal\":489900,\"datosFiscales\":{\"rfc\":\"LOHA851301AB1\","
+						+ "\"nombre\":\"Ana\",\"domicilio\":" + DatosFiscalesDePrueba.DOMICILIO_JSON
+						+ ",\"regimenFiscal\":\"612\"}}"))
+				.andExpect(status().isBadRequest())
+				.andExpect(jsonPath("$.message").value("El RFC no tiene un formato válido"));
+		mockMvc.perform(conToken(patch(URL + "/{id}/etapa", id), token(vendedor))
+				.contentType(MediaType.APPLICATION_JSON)
+				.content("{\"etapa\":\"PAGO\",\"precioTotal\":489900,\"datosFiscales\":{\"rfc\":\"LOHA850101AB1\","
+						+ "\"nombre\":\"Ana\",\"domicilio\":" + DatosFiscalesDePrueba.DOMICILIO_JSON
+						+ ",\"regimenFiscal\":\"999\"}}"))
+				.andExpect(status().isBadRequest())
+				.andExpect(jsonPath("$.message").value("El régimen fiscal 999 no está en el catálogo del SAT"));
+
+		mockMvc.perform(cambioDeEtapa(token(vendedor), id, "PAGO")).andExpect(status().isOk())
+				.andExpect(jsonPath("$.datosFiscales.rfc").value("LOHA850101AB1"))
+				.andExpect(jsonPath("$.datosFiscales.nombre").value("Ana López Hernández"))
+				.andExpect(jsonPath("$.datosFiscales.regimenFiscal").value("612"))
+				.andExpect(jsonPath("$.datosFiscales.regimenFiscalDescripcion")
+						.value("Personas Físicas con Actividades Empresariales y Profesionales"));
+		entityManager.flush();
+		assertThat(jdbcTemplate.queryForObject("select rfc from prospecto where id = ?", String.class, id))
+				.isEqualTo("LOHA850101AB1");
+	}
+
+	@Test
 	void contabilidadYaNoPasaDePagoAFacturacionSinValidarLosPagos() throws Exception {
 		Usuario vendedor = registrar("vendedor1", Role.VENTAS);
 		Usuario contador = registrar("contabilidad1", Role.CONTABILIDAD);
@@ -564,12 +600,12 @@ class ProspectosIntegrationTest extends AbstractIntegrationTest {
 
 	/**
 	 * Al pasar a Pago el vendedor manda el precio total (decisión del PO, 19 de
-	 * octubre).
+	 * octubre) y los datos fiscales del cliente (21 de octubre).
 	 */
 	private static MockHttpServletRequestBuilder cambioDeEtapa(String token, long id, String etapa) {
 		if ("PAGO".equals(etapa)) {
-			return conToken(patch(URL + "/" + id + "/etapa"), token).contentType(MediaType.APPLICATION_JSON)
-					.content("{\"etapa\":\"PAGO\",\"precioTotal\":489900}");
+			return conToken(patch(URL + "/" + id + "/etapa"), token).contentType(MediaType.APPLICATION_JSON).content(
+					"{\"etapa\":\"PAGO\",\"precioTotal\":489900,\"datosFiscales\":" + DatosFiscalesDePrueba.JSON + "}");
 		}
 		return cambioDeEtapaSinPrecio(token, id, etapa);
 	}

@@ -30,18 +30,19 @@ class ProspectoTest {
 		switch (etapa) {
 			case PRIMER_CONTACTO -> {
 			}
-			case VISITA, COTIZACION, PAGO -> prospecto.moverPorVendedor(etapa, null, VENDEDOR, AHORA);
+			case VISITA, COTIZACION -> prospecto.moverPorVendedor(etapa, null, VENDEDOR, AHORA);
+			case PAGO -> DatosFiscalesDePrueba.pasarAPago(prospecto, VENDEDOR, AHORA);
 			case FACTURACION -> {
-				prospecto.moverPorVendedor(Etapa.PAGO, null, VENDEDOR, AHORA);
+				DatosFiscalesDePrueba.pasarAPago(prospecto, VENDEDOR, AHORA);
 				prospecto.validarPago(CONTADOR, AHORA);
 			}
 			case ENTREGA -> {
-				prospecto.moverPorVendedor(Etapa.PAGO, null, VENDEDOR, AHORA);
+				DatosFiscalesDePrueba.pasarAPago(prospecto, VENDEDOR, AHORA);
 				prospecto.validarPago(CONTADOR, AHORA);
 				prospecto.confirmarFacturacion(FACTURISTA, AHORA);
 			}
 			case FINALIZADO -> {
-				prospecto.moverPorVendedor(Etapa.PAGO, null, VENDEDOR, AHORA);
+				DatosFiscalesDePrueba.pasarAPago(prospecto, VENDEDOR, AHORA);
 				prospecto.validarPago(CONTADOR, AHORA);
 				prospecto.confirmarFacturacion(FACTURISTA, AHORA);
 				prospecto.moverPorVendedor(Etapa.FINALIZADO, null, VENDEDOR, AHORA);
@@ -251,6 +252,26 @@ class ProspectoTest {
 				assertThat(movimiento.getOrigen()).isEqualTo(OrigenCambio.ERP);
 				assertThat(movimiento.getUsuarioId()).isEqualTo(CONTADOR);
 			});
+		}
+
+		@Test
+		void elVendedorCapturaYCorrigeLosDatosFiscalesEnPago() {
+			Prospecto prospecto = en(Etapa.PAGO);
+
+			prospecto.capturarDatosFiscales(DatosFiscales.de("ABC010203XY9", "Autopartes del Bajío SA de CV",
+					DatosFiscalesDePrueba.domicilioDeAna(), "601"));
+
+			assertThat(prospecto.getDatosFiscales().getRfc()).isEqualTo("ABC010203XY9");
+			assertThat(prospecto.getDatosFiscales().getRegimen()).isEqualTo(RegimenFiscal.GENERAL_PERSONAS_MORALES);
+		}
+
+		@ParameterizedTest
+		@EnumSource(value = Etapa.class, names = {"COTIZACION", "FACTURACION", "ENTREGA"})
+		void losDatosFiscalesSoloSeCapturanEnPago(Etapa etapa) {
+			Prospecto prospecto = en(etapa);
+
+			assertThatThrownBy(() -> prospecto.capturarDatosFiscales(DatosFiscalesDePrueba.deAna()))
+					.isInstanceOf(ConflictoException.class);
 		}
 
 		@Test

@@ -65,7 +65,8 @@ public class RegistroAlFinalizarService {
 			LOG.warn("La unidad {} ya está asignada a otro cliente; no se reasigna", unidad.vehiculoId());
 			return;
 		}
-		cliente.asignarVehiculo(unidad.vehiculoId(), unidad.vin(), unidad.modelo(), unidad.anio());
+		cliente.asignarVehiculo(unidad.vehiculoId(), unidad.vin(), unidad.marca(), unidad.modelo(), unidad.anio(),
+				unidad.version());
 	}
 
 	/**

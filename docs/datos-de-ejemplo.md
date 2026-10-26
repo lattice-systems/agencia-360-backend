@@ -45,7 +45,7 @@ Qué se puede probar:
 - La edición de una unidad, por ejemplo pasar la Frontier LE de No disponible a Disponible.
 - Que el Administrador ve todas las unidades, pero no puede dar de alta ni editar.
 
-**No incluye unidades Vendidas ni Entregadas:** una unidad pasa a Vendido solo cuando Facturación emite su factura (ERP-1.3). Como los datos fiscales del cliente llegan con la V17 (Coper), el script todavía no emite facturas; cuando exista la captura, se agregan aquí.
+**No incluye unidades Vendidas ni Entregadas:** una unidad pasa a Vendido solo cuando Facturación emite su factura (ERP-1.3). Como los datos fiscales del cliente llegan con la V20 (Coper), el script todavía no emite facturas; cuando exista la captura, se agregan aquí.
 
 ## Refacciones
 
@@ -72,7 +72,7 @@ Qué se puede probar:
 
 ## Prospectos
 
-Los registran los vendedores desde el CRM; cada cambio de etapa queda en el historial. El script avanza cada prospecto etapa por etapa, con el usuario al que le corresponde cada una (decisión del PO del 12 de octubre): el vendedor hasta Pago; Caja registra y envía un pago de ejemplo y Contabilidad lo valida, con lo que pasa a Facturación (ERP-1.1); Facturación lo pasa a Entrega y otra vez el vendedor lo finaliza.
+Los registran los vendedores desde el CRM; cada cambio de etapa queda en el historial. El script avanza cada prospecto etapa por etapa, con el usuario al que le corresponde cada una (decisión del PO del 12 de octubre): el vendedor hasta Pago, donde captura el precio total y los datos fiscales del cliente (RFC de ejemplo `EJEM850101AB1`, ERP-1.3); Caja registra y envía un pago de ejemplo y Contabilidad lo valida, con lo que pasa a Facturación (ERP-1.1); Facturación lo pasa a Entrega y otra vez el vendedor lo finaliza.
 
 | Prospecto | Teléfono | Correo | Vendedor | Etapa | Notas |
 |---|---|---|---|---|---|
@@ -96,6 +96,20 @@ Qué se puede probar:
 - El filtro por etapa: hay al menos un prospecto en cada una de las 8.
 - Con `admin`, la solicitud de cierre pendiente de Carlos Núñez (`GET /api/v1/solicitudes-cierre`).
 - Los cerrados guardan su motivo y la última etapa a la que llegaron.
+
+## Clienta de la app CareCar y su expediente
+
+La registra el Gerente de marketing desde el CRM con sus dos vehículos y le abre la cuenta de la app; la contraseña temporal llega a Mailpit (`http://localhost:8025`). Servicio corrige placas y kilometraje del March y registra sus servicios; el Gerente sube el manual del March 2026.
+
+| Vehículo | VIN | Placas y kilometraje | Servicios | Manual |
+|---|---|---|---|---|
+| Nissan March 2026 Advance | `3N1CK3CD7RL900001` | GTO-123-A, 10,250 km | Servicio de 5,000 km (hace 150 días) y de 10,000 km (hace 10 días) | Sí, uno de ejemplo de una página (o el real con `MANUAL_MARCH_PDF`) |
+| Nissan Sentra 2025 Sense | `3N1AB8CV9RY900002` | Sin capturar | Cambio de balatas (hace 30 días) | No |
+
+Qué se puede probar:
+- Con `servicio1`, buscar `900001` en Expediente, abrir los detalles de cada servicio y corregir placas y kilometraje.
+- Con `admin`, que el expediente se puede consultar pero no corregir.
+- En la app, con `laura.mendez@example.com`: el primer ingreso con cambio de contraseña, los 2 vehículos y el manual del March, que se abre con su URL temporal. El Sentra regresa una lista de manuales vacía.
 
 ## Lo que no incluye todavía
 
