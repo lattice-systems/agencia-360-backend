@@ -139,6 +139,7 @@ Todos van bajo `/api/v1` y, salvo el login, piden el token en `Authorization: Be
 | `acceso` | `GET /roles`, `GET /usuarios`, `POST /usuarios`, `PUT /usuarios/{id}/rol` | Administrador (ERP) y Gerente de marketing (CRM) |
 | `ventascrm` | `POST /prospectos`, `GET /prospectos?etapa=`, `PATCH /prospectos/{id}/etapa` | Ventas (sus prospectos); el Gerente de marketing consulta todos |
 | `ventascrm` | `PUT /prospectos/{id}/vendedor` | Gerente de marketing |
+| `ventascrm` | `PUT /prospectos/{id}/datos-fiscales` | Ventas en Pago y Facturación en Facturación (RFC, nombre, domicilio y régimen fiscal del cliente para la factura) |
 | `inventario` | `POST /vehiculos`, `PUT /vehiculos/{id}` | Inventario |
 | `inventario` | `GET /vehiculos?estatus=`, `GET /vehiculos/{id}` | Inventario y Administrador (todas); Ventas y Facturación (solo Disponibles) |
 | `inventario` | `GET /vehiculos/eventos` (Server-Sent Events: avisa cuando cambia una unidad) | Inventario, Administrador, Ventas y Facturación |
