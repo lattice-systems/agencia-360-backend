@@ -164,6 +164,27 @@ class LiquidacionesIntegrationTest extends AbstractIntegrationTest {
 	}
 
 	@Test
+	void sinDatosFiscalesContabilidadNoValidaYElProspectoSigueEnPago() throws Exception {
+		long id = prospectoEnPago("Ana López");
+		// Como un prospecto que llegó a Pago antes de la V17.
+		entityManager.flush();
+		jdbcTemplate.update("update prospecto set rfc = null, nombre_fiscal = null, domicilio_fiscal = null, "
+				+ "regimen_fiscal = null where id = ?", id);
+		entityManager.clear();
+		mockMvc.perform(pago(id, "489900", hoy().toString(), null)).andExpect(status().isCreated());
+		mockMvc.perform(conToken(post(LIQUIDACIONES + "/{id}/enviar", id), token(cajera))).andExpect(status().isOk());
+
+		mockMvc.perform(conToken(post(LIQUIDACIONES + "/{id}/validar", id), token(contador)))
+				.andExpect(status().isConflict())
+				.andExpect(jsonPath("$.message")
+						.value("Faltan los datos fiscales del cliente; el vendedor los captura antes de validar "
+								+ "los pagos"));
+		entityManager.flush();
+		assertThat(jdbcTemplate.queryForObject("select etapa from prospecto where id = ?", String.class, id))
+				.isEqualTo("PAGO");
+	}
+
+	@Test
 	void cajaYContabilidadVenElPrecioTotalQueCapturoElVendedor() throws Exception {
 		long id = prospectoEnPago("Ana López");
 

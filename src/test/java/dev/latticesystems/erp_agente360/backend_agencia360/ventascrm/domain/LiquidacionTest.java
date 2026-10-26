@@ -209,6 +209,21 @@ class LiquidacionTest {
 	}
 
 	@Test
+	void sinDatosFiscalesNoSeValidaYElProspectoSigueEnPago() {
+		Prospecto prospecto = Prospecto.registrar("Ana López", "4771234567", null, VENDEDOR, AHORA);
+		prospecto.moverPorVendedor(Etapa.PAGO, null, VENDEDOR, AHORA);
+		prospecto.fijarPrecioTotal(new BigDecimal("150000.00"));
+		Liquidacion liquidacion = Liquidacion.abrir(prospecto);
+		liquidacion.registrarPago(new BigDecimal("150000.00"), HOY, null, CAJERA, HOY);
+		liquidacion.enviar(CAJERA, AHORA);
+
+		assertThatThrownBy(() -> liquidacion.validar(null, CONTADOR, AHORA)).isInstanceOf(ConflictoException.class)
+				.hasMessageContaining("datos fiscales");
+		assertThat(liquidacion.getEstado()).isEqualTo(EstadoLiquidacion.ENVIADA);
+		assertThat(prospecto.getEtapa()).isEqualTo(Etapa.PAGO);
+	}
+
+	@Test
 	void sinPrecioTotalNoSeValida() {
 		Prospecto prospecto = Prospecto.registrar("Ana López", "4771234567", null, VENDEDOR, AHORA);
 		prospecto.moverPorVendedor(Etapa.PAGO, null, VENDEDOR, AHORA);
