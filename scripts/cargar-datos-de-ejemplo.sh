@@ -254,9 +254,43 @@ TOKEN_CAJA=$(iniciar_sesion caja1 Caja12345 ERP)
 TOKEN_CONTABILIDAD=$(iniciar_sesion contabilidad1 Contabilidad123 ERP)
 TOKEN_FACTURACION=$(iniciar_sesion facturacion1 Facturacion123 ERP)
 
+# Id de la unidad Disponible con ese VIN, como la ve Facturación. $1 VIN.
+unidad_disponible() {
+  pedir GET "/api/v1/vehiculos?estatus=DISPONIBLE" "$TOKEN_FACTURACION"
+  [ "$CODIGO" = 200 ] || fallar "listar las unidades disponibles"
+  printf '%s' "$RESPUESTA" | sed -n "s/.*{\"id\":\([0-9][0-9]*\),\"vin\":\"$1\".*/\1/p"
+}
+
+# Espera a que el prospecto llegue a la etapa: ventascrm lo mueve al recibir un
+# evento, después de que termina la petición que lo publicó. $1 id, $2 etapa.
+esperar_etapa() {
+  local intento
+  for intento in 1 2 3 4 5 6 7 8 9 10; do
+    pedir GET "/api/v1/prospectos?etapa=$2" "$TOKEN_GERENTE"
+    [ "$CODIGO" = 200 ] || fallar "listar los prospectos en $2"
+    grep -q "{\"id\":$1," <<<"$RESPUESTA" && return 0
+    sleep 0.5
+  done
+  echo "El prospecto $1 no llegó a $2" >&2
+  exit 1
+}
+
+# Facturación emite la factura con una unidad Disponible (ERP-1.3): la unidad
+# pasa a Vendido y el prospecto pasa solo a Entrega (ERP-1.2).
+# $1 id del prospecto, $2 VIN de la unidad.
+emitir_factura() {
+  local unidad
+  unidad=$(unidad_disponible "$2")
+  [ -n "$unidad" ] || fallar "encontrar la unidad disponible $2"
+  pedir POST /api/v1/facturas "$TOKEN_FACTURACION" "{\"prospectoId\":$1,\"vehiculoId\":$unidad}"
+  [ "$CODIGO" = 201 ] || fallar "emitir la factura del prospecto $1"
+  esperar_etapa "$1" ENTREGA
+}
+
 # Lleva un prospecto que ya está en Pago hasta la etapa indicada (FACTURACION o
 # ENTREGA), como lo harían Caja, Contabilidad y Facturación.
-# $1 id del prospecto, $2 etapa final.
+# $1 id del prospecto, $2 etapa final, $3 VIN de la unidad que se factura (solo
+# para ENTREGA).
 avanzar_desde_erp() {
   [ -n "$1" ] || return 0
   pedir POST "/api/v1/liquidaciones/$1/pagos" "$TOKEN_CAJA"     '{"monto":489900,"fechaPago":"2026-10-15","referencia":"Pago de ejemplo"}'
@@ -266,7 +300,7 @@ avanzar_desde_erp() {
   pedir POST "/api/v1/liquidaciones/$1/validar" "$TOKEN_CONTABILIDAD"
   [ "$CODIGO" = 200 ] || fallar "validar los pagos del prospecto $1"
   if [ "$2" = ENTREGA ]; then
-    avanzar_etapas "$TOKEN_FACTURACION" "$1" "ENTREGA" ""
+    emitir_factura "$1" "$3"
   fi
 }
 crear_prospecto "$TOKEN_VENDEDOR1" "Ana López" "477 555 0101" "ana.lopez@example.com" "PRIMER_CONTACTO"
@@ -275,7 +309,7 @@ crear_prospecto "$TOKEN_VENDEDOR1" "Fernanda Soto" "" "fernanda.soto@example.com
 crear_prospecto "$TOKEN_VENDEDOR1" "Luis Herrera" "477 555 0104" "luis.h@example.com" "VISITA COTIZACION PAGO"
 crear_prospecto "$TOKEN_VENDEDOR1" "Valeria Díaz" "477 555 0105" "valeria.d@example.com" \
   "VISITA COTIZACION PAGO"
-avanzar_desde_erp "$PROSPECTO_ID" ENTREGA
+avanzar_desde_erp "$PROSPECTO_ID" ENTREGA 3N1AB8CV5PY123456
 crear_prospecto "$TOKEN_VENDEDOR1" "Jorge Medina" "477 555 0106" "" "VISITA COTIZACION CERRADO" \
   "SE_FUE_POR_OTRA_MARCA"
 
@@ -306,7 +340,7 @@ crear_prospecto "$TOKEN_VENDEDOR2" "Ana Lucía López" "477 555 0101" "" "PRIMER
 crear_prospecto "$TOKEN_VENDEDOR2" "Óscar Ramos" "477 555 0111" "" "CERRADO" "RECHAZO_DE_FINANCIAMIENTO"
 crear_prospecto "$TOKEN_VENDEDOR2" "Roberto Salas" "477 555 0112" "roberto.s@example.com" "COTIZACION PAGO"
 if [ -n "$PROSPECTO_ID" ]; then
-  avanzar_desde_erp "$PROSPECTO_ID" ENTREGA
+  avanzar_desde_erp "$PROSPECTO_ID" ENTREGA 3N1CP5CV6RL123458
   avanzar_etapas "$TOKEN_VENDEDOR2" "$PROSPECTO_ID" "FINALIZADO" ""
 fi
 
