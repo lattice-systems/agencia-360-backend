@@ -33,7 +33,7 @@ public class SecurityConfig {
 	private static final String[] PUBLIC_ENDPOINTS = {"/actuator/health", "/v3/api-docs/**", "/swagger-ui/**",
 			"/swagger-ui.html", "/api/v1/auth/login", "/api/v1/app/auth/login", "/api/v1/app/auth/refrescar",
 			"/api/v1/app/auth/cerrar-sesion", "/api/v1/app/auth/recuperar-contrasena",
-			"/api/v1/app/auth/restablecer-contrasena"};
+			"/api/v1/app/auth/restablecer-contrasena", "/api/v1/app/manuales/*/archivo"};
 
 	private final JwtService jwtService;
 	private final ObjectMapper objectMapper;
