@@ -31,9 +31,9 @@ Los da de alta `inventario1`. Cada alta deja su movimiento de entrada.
 
 | VIN | Modelo | Versión | Año | Color | Precio (MXN) | Estatus |
 |---|---|---|---|---|---|---|
-| `3N1AB8CV5PY123456` | Sentra | Advance | 2026 | Blanco | 489,900.00 | Disponible |
+| `3N1AB8CV5PY123456` | Sentra | Advance | 2026 | Blanco | 489,900.00 | Vendido (factura de Valeria Díaz) |
 | `3N1CN8AE4RL123457` | Versa | Sense | 2026 | Plata | 329,900.00 | Disponible |
-| `3N1CP5CV6RL123458` | Kicks | Exclusive | 2026 | Azul | 529,900.00 | Disponible |
+| `3N1CP5CV6RL123458` | Kicks | Exclusive | 2026 | Azul | 529,900.00 | Vendido (factura de Roberto Salas, ya entregada) |
 | `3N6AD33A2RK123459` | Frontier | LE | 2025 | Gris | 689,900.00 | No disponible |
 | `3N1CK3CD0RL123460` | March | Advance | 2025 | Rojo | 279,900.00 | Disponible |
 | `5N1DR3MN4RC123461` | Pathfinder | Exclusive | 2026 | Negro | 1,049,900.00 | Disponible |
@@ -41,11 +41,11 @@ Los da de alta `inventario1`. Cada alta deja su movimiento de entrada.
 | `1N6ED1EJ8RN123463` | Frontier | PRO-4X | 2026 | Azul | 899,900.00 | No disponible |
 
 Qué se puede probar:
-- En Vehículos, los indicadores (8 registradas, 6 disponibles, 2 no disponibles), la búsqueda por VIN, modelo o versión, y el filtro por estatus.
+- En Vehículos, los indicadores (8 registradas, 4 disponibles, 2 no disponibles y 2 vendidas), la búsqueda por VIN, modelo o versión, y el filtro por estatus.
 - La edición de una unidad, por ejemplo pasar la Frontier LE de No disponible a Disponible.
 - Que el Administrador ve todas las unidades, pero no puede dar de alta ni editar.
 
-**No incluye unidades Vendidas ni Entregadas:** una unidad pasa a Vendido solo cuando Facturación emite su factura (ERP-1.3). Como los datos fiscales del cliente llegan con la V20 (Coper), el script todavía no emite facturas; cuando exista la captura, se agregan aquí.
+**Unidades vendidas:** una unidad pasa a Vendido solo cuando Facturación emite su factura (ERP-1.3). El script le factura la Sentra a Valeria Díaz y la Kicks a Roberto Salas; la venta de Roberto queda Entregada porque su vendedor ya lo finalizó.
 
 ## Refacciones
 
@@ -72,7 +72,7 @@ Qué se puede probar:
 
 ## Prospectos
 
-Los registran los vendedores desde el CRM; cada cambio de etapa queda en el historial. El script avanza cada prospecto etapa por etapa, con el usuario al que le corresponde cada una (decisión del PO del 12 de octubre): el vendedor hasta Pago, donde captura el precio total y los datos fiscales del cliente (RFC de ejemplo `EJEM850101AB1`, ERP-1.3); Caja registra y envía un pago de ejemplo y Contabilidad lo valida, con lo que pasa a Facturación (ERP-1.1); Facturación lo pasa a Entrega y otra vez el vendedor lo finaliza.
+Los registran los vendedores desde el CRM; cada cambio de etapa queda en el historial. El script avanza cada prospecto etapa por etapa, con el usuario al que le corresponde cada una (decisión del PO del 12 de octubre): el vendedor hasta Pago, donde captura el precio total y los datos fiscales del cliente (RFC de ejemplo `EJEM850101AB1`, ERP-1.3); Caja registra y envía un pago de ejemplo y Contabilidad lo valida, con lo que pasa a Facturación (ERP-1.1); Facturación emite la factura con una unidad Disponible y el prospecto pasa solo a Entrega (ERP-1.2); otra vez el vendedor lo finaliza.
 
 | Prospecto | Teléfono | Correo | Vendedor | Etapa | Notas |
 |---|---|---|---|---|---|
@@ -84,7 +84,7 @@ Los registran los vendedores desde el CRM; cada cambio de etapa queda en el hist
 | Jorge Medina | 477 555 0106 | | Sergio Luna | Cerrado | Desde Cotización; motivo: "Se fue por otra marca" |
 | Ricardo Fuentes | 477 555 0107 | | Elena Ríos | Visita | Lo registró Sergio Luna y el Gerente lo **reasignó** a Elena Ríos |
 | Mariana Torres | 477 555 0108 | mariana.t@example.com | Elena Ríos | Primer contacto | |
-| Carlos Núñez | 477 555 0109 | | Elena Ríos | Facturación | Tiene una **solicitud de cierre pendiente** para el Administrador |
+| Carlos Núñez | 477 555 0109 | | Elena Ríos | Facturación | Tiene una **solicitud de cierre pendiente** para el Administrador, así que no se le puede facturar hasta que la rechace |
 | Paola Vega | | paola.vega@example.com | Elena Ríos | Visita | Solo correo |
 | Ana Lucía López | 477 555 0101 | | Elena Ríos | Primer contacto | **Mismo teléfono** que Ana López: al registrarla, el CRM avisa del contacto repetido |
 | Óscar Ramos | 477 555 0111 | | Elena Ríos | Cerrado | Desde Primer contacto; motivo: "Rechazo de financiamiento" |
