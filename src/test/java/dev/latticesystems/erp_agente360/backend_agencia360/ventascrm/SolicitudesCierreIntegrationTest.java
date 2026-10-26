@@ -14,6 +14,7 @@ import dev.latticesystems.erp_agente360.backend_agencia360.acceso.infrastructure
 import dev.latticesystems.erp_agente360.backend_agencia360.shared.AbstractIntegrationTest;
 import dev.latticesystems.erp_agente360.backend_agencia360.shared.security.JwtService;
 import dev.latticesystems.erp_agente360.backend_agencia360.shared.security.Role;
+import dev.latticesystems.erp_agente360.backend_agencia360.ventascrm.domain.DatosFiscalesDePrueba;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -145,8 +146,10 @@ class SolicitudesCierreIntegrationTest extends AbstractIntegrationTest {
 
 	private long prospectoEnPago(Usuario vendedor) throws Exception {
 		long id = crearProspecto(vendedor);
-		mockMvc.perform(conToken(patch(PROSPECTOS + "/{id}/etapa", id), token(vendedor))
-				.contentType(MediaType.APPLICATION_JSON).content("{\"etapa\":\"PAGO\",\"precioTotal\":489900}"))
+		mockMvc.perform(
+				conToken(patch(PROSPECTOS + "/{id}/etapa", id), token(vendedor)).contentType(MediaType.APPLICATION_JSON)
+						.content("{\"etapa\":\"PAGO\",\"precioTotal\":489900,\"datosFiscales\":"
+								+ DatosFiscalesDePrueba.JSON + "}"))
 				.andExpect(status().isOk());
 		return id;
 	}

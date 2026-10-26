@@ -20,7 +20,7 @@ class LiquidacionTest {
 
 	private static Prospecto enPago() {
 		Prospecto prospecto = Prospecto.registrar("Ana López", "4771234567", null, VENDEDOR, AHORA);
-		prospecto.moverPorVendedor(Etapa.PAGO, null, VENDEDOR, AHORA);
+		DatosFiscalesDePrueba.pasarAPago(prospecto, VENDEDOR, AHORA);
 		prospecto.fijarPrecioTotal(new BigDecimal("150000.00"));
 		return prospecto;
 	}
