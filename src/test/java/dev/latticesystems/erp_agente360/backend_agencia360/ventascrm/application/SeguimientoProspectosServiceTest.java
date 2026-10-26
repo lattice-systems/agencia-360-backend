@@ -200,7 +200,7 @@ class SeguimientoProspectosServiceTest {
 		when(prospectoRepository.findByIdAndVendedorId(1L, 7L)).thenReturn(Optional.of(ana));
 
 		ProspectoVista vista = service.capturarDatosFiscales(1L,
-				new DatosFiscalesCapturados("ABC010203XY9", "Autopartes del Bajío SA de CV", "León, Gto.", "601"),
+				new DatosFiscalesCapturados("ABC010203XY9", "Autopartes del Bajío SA de CV", DOMICILIO_ANA, "601"),
 				VENDEDOR);
 
 		assertThat(vista.datosFiscales().rfc()).isEqualTo("ABC010203XY9");
@@ -208,7 +208,20 @@ class SeguimientoProspectosServiceTest {
 	}
 
 	@Test
-	void soloElVendedorCapturaLosDatosFiscales() {
+	void facturacionCorrigeLosDatosFiscalesDeCualquierProspectoEnFacturacion() {
+		Prospecto ana = prospecto("Ana López", 7L);
+		DatosFiscalesDePrueba.pasarAPago(ana, 7L, REGISTRO);
+		ana.validarPago(30L, REGISTRO);
+		when(prospectoRepository.findById(1L)).thenReturn(Optional.of(ana));
+
+		ProspectoVista vista = service.capturarDatosFiscales(1L,
+				new DatosFiscalesCapturados("LOHA850101AB2", "Ana López Hernández", DOMICILIO_ANA, "612"), FACTURISTA);
+
+		assertThat(vista.datosFiscales().rfc()).isEqualTo("LOHA850101AB2");
+	}
+
+	@Test
+	void soloElVendedorOFacturacionCapturanLosDatosFiscales() {
 		assertThatThrownBy(() -> service.capturarDatosFiscales(1L, DATOS_ANA, GERENTE))
 				.isInstanceOf(AccessDeniedException.class);
 		verifyNoInteractions(prospectoRepository);

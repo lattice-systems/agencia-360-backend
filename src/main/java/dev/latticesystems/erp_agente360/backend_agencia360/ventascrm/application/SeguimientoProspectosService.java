@@ -199,28 +199,36 @@ public class SeguimientoProspectosService {
 	}
 
 	/**
-	 * El vendedor captura o corrige los datos fiscales de su prospecto en Pago
-	 * (ERP-1.3). Sirve para los prospectos que llegaron a Pago antes de que se
+	 * Captura o corrige los datos fiscales del cliente (ERP-1.3). El vendedor, en
+	 * su prospecto en Pago: sirve para los que llegaron a Pago antes de que se
 	 * pidieran y para corregir un error antes de que Contabilidad valide.
+	 * Facturación, en cualquier prospecto en Facturación, si encuentra un error
+	 * antes de emitir (decisión del PO del 26 de octubre).
 	 *
 	 * @throws AccessDeniedException
-	 *             si no es Ventas (403)
+	 *             si no es Ventas ni Facturación (403)
 	 * @throws RecursoNoEncontradoException
-	 *             si el prospecto no existe o es de otro vendedor (404)
+	 *             si el prospecto no existe o, para el vendedor, es de otro
+	 *             vendedor (404)
 	 * @throws IllegalArgumentException
 	 *             si algún dato no es válido (400)
 	 * @throws ConflictoException
-	 *             si el prospecto no está en Pago (409)
+	 *             si el prospecto no está en la etapa de quien corrige (409)
 	 */
 	@Transactional
 	public ProspectoVista capturarDatosFiscales(Long prospectoId, DatosFiscalesCapturados datosFiscales,
 			UsuarioAutenticado actor) {
-		if (!actor.tieneRol(Role.VENTAS)) {
-			throw new AccessDeniedException("Solo el vendedor captura los datos fiscales");
+		if (actor.tieneRol(Role.VENTAS)) {
+			Prospecto prospecto = buscarDelVendedor(prospectoId, actor);
+			prospecto.capturarDatosFiscales(exigirDatosFiscales(datosFiscales));
+			return ProspectoVista.de(prospecto);
 		}
-		Prospecto prospecto = buscarDelVendedor(prospectoId, actor);
-		prospecto.capturarDatosFiscales(exigirDatosFiscales(datosFiscales));
-		return ProspectoVista.de(prospecto);
+		if (actor.tieneRol(Role.FACTURACION)) {
+			Prospecto prospecto = buscarCualquiera(prospectoId);
+			prospecto.corregirDatosFiscalesEnFacturacion(exigirDatosFiscales(datosFiscales));
+			return ProspectoVista.de(prospecto);
+		}
+		throw new AccessDeniedException("Solo el vendedor o Facturación corrigen los datos fiscales");
 	}
 
 	private static DatosFiscales exigirDatosFiscales(DatosFiscalesCapturados datosFiscales) {
