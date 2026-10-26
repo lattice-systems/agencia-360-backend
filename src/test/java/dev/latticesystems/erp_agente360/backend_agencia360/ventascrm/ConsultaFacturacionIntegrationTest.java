@@ -1,46 +1,38 @@
 package dev.latticesystems.erp_agente360.backend_agencia360.ventascrm;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-import com.jayway.jsonpath.JsonPath;
 import dev.latticesystems.erp_agente360.backend_agencia360.acceso.domain.Rol;
 import dev.latticesystems.erp_agente360.backend_agencia360.acceso.domain.Usuario;
 import dev.latticesystems.erp_agente360.backend_agencia360.acceso.infrastructure.RolRepository;
 import dev.latticesystems.erp_agente360.backend_agencia360.acceso.infrastructure.UsuarioRepository;
 import dev.latticesystems.erp_agente360.backend_agencia360.shared.AbstractIntegrationTest;
-import dev.latticesystems.erp_agente360.backend_agencia360.shared.security.JwtService;
 import dev.latticesystems.erp_agente360.backend_agencia360.shared.security.Role;
 import dev.latticesystems.erp_agente360.backend_agencia360.ventascrm.ConsultaFacturacion.ProspectoParaFacturar;
+import dev.latticesystems.erp_agente360.backend_agencia360.ventascrm.domain.Prospecto;
+import dev.latticesystems.erp_agente360.backend_agencia360.ventascrm.infrastructure.ProspectoRepository;
 import jakarta.persistence.EntityManager;
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
-import org.springframework.http.HttpHeaders;
-import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.test.web.servlet.MockMvc;
-import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * Lista de trabajo de Facturación (ERP-1.0) y la consulta que usa facturacion
- * para emitir (ERP-1.3): los prospectos que ya pasaron Pago y esperan su
- * factura.
+ * La consulta que ventascrm ofrece a facturacion (ERP-1.3): los prospectos en
+ * Facturación con su total, su saldo y el vendedor. Cada prueba se revierte al
+ * terminar.
  */
-@AutoConfigureMockMvc
 @Transactional
-class ProspectosPorFacturarIntegrationTest extends AbstractIntegrationTest {
-
-	private static final String URL = "/api/v1/prospectos/por-facturar";
+class ConsultaFacturacionIntegrationTest extends AbstractIntegrationTest {
 
 	@Autowired
-	private MockMvc mockMvc;
+	private ConsultaFacturacion consultaFacturacion;
+
+	@Autowired
+	private ProspectoRepository prospectoRepository;
 
 	@Autowired
 	private UsuarioRepository usuarioRepository;
@@ -49,43 +41,30 @@ class ProspectosPorFacturarIntegrationTest extends AbstractIntegrationTest {
 	private RolRepository rolRepository;
 
 	@Autowired
-	private JwtService jwtService;
-
-	@Autowired
 	private JdbcTemplate jdbcTemplate;
 
 	@Autowired
 	private EntityManager entityManager;
 
-	@Autowired
-	private ConsultaFacturacion consultaFacturacion;
-
 	@Test
-	void facturacionVeSoloLosProspectosEnFacturacionConSuVendedor() throws Exception {
+	void regresaSoloLosProspectosEnFacturacionConSuVendedor() {
 		Usuario vendedor = registrar("vendedor.facturar", Role.VENTAS);
 		long luis = prospecto(vendedor, "Luis Herrera", "4775550104", "FACTURACION");
 		prospecto(vendedor, "Ana López", "4775550101", "PAGO");
 		prospecto(vendedor, "Valeria Díaz", "4775550105", "ENTREGA");
 
-		mockMvc.perform(conToken(get(URL), token(registrar("facturacion.facturar", Role.FACTURACION))))
-				.andExpect(status().isOk()).andExpect(jsonPath("$.length()").value(1))
-				.andExpect(jsonPath("$[0].id").value(luis)).andExpect(jsonPath("$[0].nombre").value("Luis Herrera"))
-				.andExpect(jsonPath("$[0].telefono").value("4775550104"))
-				.andExpect(jsonPath("$[0].vendedorId").value(vendedor.getId()))
-				.andExpect(jsonPath("$[0].vendedor").value("Persona vendedor.facturar"))
-				.andExpect(jsonPath("$[0].enFacturacionDesde").isNotEmpty());
+		List<ProspectoParaFacturar> lista = consultaFacturacion.enFacturacion();
+
+		assertThat(lista).extracting(ProspectoParaFacturar::prospectoId).containsExactly(luis);
+		ProspectoParaFacturar deLuis = lista.get(0);
+		assertThat(deLuis.nombre()).isEqualTo("Luis Herrera");
+		assertThat(deLuis.vendedorId()).isEqualTo(vendedor.getId());
+		assertThat(deLuis.vendedor()).isEqualTo("Persona vendedor.facturar");
+		assertThat(deLuis.enFacturacionDesde()).isNotNull();
 	}
 
 	@Test
-	void soloFacturacionVeLaLista() throws Exception {
-		mockMvc.perform(conToken(get(URL), token(registrar("vendedor.facturar", Role.VENTAS))))
-				.andExpect(status().isForbidden());
-		mockMvc.perform(conToken(get(URL), token(registrar("inventario.facturar", Role.INVENTARIO))))
-				.andExpect(status().isForbidden());
-	}
-
-	@Test
-	void laConsultaDeFacturacionCalculaElSaldoSinLosPagosAnulados() throws Exception {
+	void calculaElSaldoSinLosPagosAnulados() {
 		Usuario vendedor = registrar("vendedor.saldo", Role.VENTAS);
 		Usuario caja = registrar("caja.saldo", Role.CAJA);
 		long luis = prospecto(vendedor, "Luis Herrera", "4775550104", "FACTURACION");
@@ -95,12 +74,9 @@ class ProspectosPorFacturarIntegrationTest extends AbstractIntegrationTest {
 		conPagos(luis, "489900.00", caja, "400000.00", "89900.00");
 		conPagos(ana, "329900.00", caja, "329900.00", null);
 
-		List<ProspectoParaFacturar> lista = consultaFacturacion.enFacturacion();
-
-		assertThat(lista).extracting(ProspectoParaFacturar::prospectoId).containsExactly(sinPrecio, ana, luis);
+		assertThat(consultaFacturacion.enFacturacion()).extracting(ProspectoParaFacturar::prospectoId)
+				.containsExactly(sinPrecio, ana, luis);
 		ProspectoParaFacturar deLuis = consultaFacturacion.paraFacturar(luis).orElseThrow();
-		assertThat(deLuis.nombre()).isEqualTo("Luis Herrera");
-		assertThat(deLuis.vendedor()).isEqualTo("Persona vendedor.saldo");
 		assertThat(deLuis.total()).isEqualByComparingTo("489900.00");
 		assertThat(deLuis.saldo()).isEqualByComparingTo("89900.00");
 		assertThat(deLuis.receptor()).as("los datos fiscales llegan con la V17").isNull();
@@ -132,30 +108,16 @@ class ProspectosPorFacturarIntegrationTest extends AbstractIntegrationTest {
 				anulado);
 	}
 
-	private long prospecto(Usuario vendedor, String nombre, String telefono, String etapa) throws Exception {
-		String respuesta = mockMvc
-				.perform(conToken(post("/api/v1/prospectos"), token(vendedor)).contentType(MediaType.APPLICATION_JSON)
-						.content("""
-								{"nombre":"%s","telefono":"%s","correo":null}
-								""".formatted(nombre, telefono)))
-				.andExpect(status().isCreated()).andReturn().getResponse().getContentAsString();
-		long id = ((Number) JsonPath.read(respuesta, "$.id")).longValue();
-		entityManager.flush();
-		jdbcTemplate.update("update prospecto set etapa = ? where id = ?", etapa, id);
+	private long prospecto(Usuario vendedor, String nombre, String telefono, String etapa) {
+		Prospecto prospecto = prospectoRepository
+				.saveAndFlush(Prospecto.registrar(nombre, telefono, null, vendedor.getId(), Instant.now()));
+		jdbcTemplate.update("update prospecto set etapa = ? where id = ?", etapa, prospecto.getId());
 		entityManager.clear();
-		return id;
+		return prospecto.getId();
 	}
 
 	private Usuario registrar(String usuario, Role rol) {
 		Rol encontrado = rolRepository.findByNombre(rol.name()).orElseThrow();
 		return usuarioRepository.save(new Usuario(usuario, "hash-de-prueba", "Persona " + usuario, encontrado));
-	}
-
-	private String token(Usuario usuario) {
-		return jwtService.generateToken(usuario.getId(), usuario.getUsuario(), List.of(usuario.getRol().comoRole()));
-	}
-
-	private static MockHttpServletRequestBuilder conToken(MockHttpServletRequestBuilder peticion, String token) {
-		return peticion.header(HttpHeaders.AUTHORIZATION, "Bearer " + token);
 	}
 }

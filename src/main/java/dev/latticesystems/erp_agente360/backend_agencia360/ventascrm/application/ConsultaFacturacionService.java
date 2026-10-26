@@ -16,9 +16,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * Lista de trabajo de Facturación en el ERP: los prospectos en Facturación. Es
- * también la implementación de {@link ConsultaFacturacion} que usa facturacion
- * para emitir la factura (ERP-1.3).
+ * Implementación de {@link ConsultaFacturacion}: los prospectos en Facturación
+ * con lo que facturacion necesita para emitir la factura (ERP-1.3).
  *
  * <p>
  * Los datos fiscales del receptor todavía no existen en el prospecto: los
@@ -26,26 +25,17 @@ import org.springframework.transaction.annotation.Transactional;
  * {@code receptor} sale vacío y facturacion no emite.
  */
 @Service
-public class ProspectosPorFacturarService implements ConsultaFacturacion {
+public class ConsultaFacturacionService implements ConsultaFacturacion {
 
 	private final ProspectoRepository prospectoRepository;
 	private final LiquidacionRepository liquidacionRepository;
 	private final DirectorioUsuarios directorioUsuarios;
 
-	public ProspectosPorFacturarService(ProspectoRepository prospectoRepository,
+	public ConsultaFacturacionService(ProspectoRepository prospectoRepository,
 			LiquidacionRepository liquidacionRepository, DirectorioUsuarios directorioUsuarios) {
 		this.prospectoRepository = prospectoRepository;
 		this.liquidacionRepository = liquidacionRepository;
 		this.directorioUsuarios = directorioUsuarios;
-	}
-
-	@Transactional(readOnly = true)
-	public List<ProspectoPorFacturar> listar() {
-		List<Prospecto> prospectos = prospectoRepository.findByEtapaOrderByCreatedAtDescIdDesc(Etapa.FACTURACION);
-		Map<Long, String> vendedores = vendedores(prospectos);
-		return prospectos.stream().map(p -> new ProspectoPorFacturar(p.getId(), p.getNombre(), p.getTelefono(),
-				p.getCorreo(), p.getVendedorId(), vendedores.get(p.getVendedorId()), p.getEtapaActualizadaEn()))
-				.toList();
 	}
 
 	@Override
