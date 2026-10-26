@@ -7,6 +7,7 @@ import dev.latticesystems.erp_agente360.backend_agencia360.shared.exception.Recu
 import dev.latticesystems.erp_agente360.backend_agencia360.shared.security.Role;
 import dev.latticesystems.erp_agente360.backend_agencia360.shared.security.UsuarioAutenticado;
 import dev.latticesystems.erp_agente360.backend_agencia360.ventascrm.application.ProspectoVista.VehiculoVendido;
+import dev.latticesystems.erp_agente360.backend_agencia360.ventascrm.domain.DatosFiscales;
 import dev.latticesystems.erp_agente360.backend_agencia360.ventascrm.domain.Etapa;
 import dev.latticesystems.erp_agente360.backend_agencia360.ventascrm.domain.HistorialEtapa;
 import dev.latticesystems.erp_agente360.backend_agencia360.ventascrm.domain.MotivoCierre;
@@ -130,7 +131,7 @@ public class SeguimientoProspectosService {
 	@Transactional
 	public ProspectoVista cambiarEtapa(Long prospectoId, Etapa etapa, MotivoCierre motivoCierre,
 			UsuarioAutenticado actor) {
-		return cambiarEtapa(prospectoId, etapa, motivoCierre, false, null, null, actor);
+		return cambiarEtapa(prospectoId, etapa, motivoCierre, false, null, null, null, actor);
 	}
 
 	/**
@@ -153,13 +154,19 @@ public class SeguimientoProspectosService {
 	 *            obligatorio cuando el vendedor pasa a {@link Etapa#PAGO}: el
 	 *            precio total de la venta (ERP-1.1, decisión del PO del 19 de
 	 *            octubre)
+	 * @param datosFiscales
+	 *            obligatorios cuando el vendedor pasa a {@link Etapa#PAGO}: los
+	 *            datos fiscales del cliente para la factura (ERP-1.3, decisión del
+	 *            PO del 21 de octubre)
 	 * @throws IllegalArgumentException
 	 *             si se finaliza sin correo y el cliente sí quiere la app, o se
-	 *             pasa a Pago sin un precio total válido (400)
+	 *             pasa a Pago sin un precio total válido o sin datos fiscales
+	 *             válidos (400)
 	 */
 	@Transactional
 	public ProspectoVista cambiarEtapa(Long prospectoId, Etapa etapa, MotivoCierre motivoCierre,
-			boolean clienteRechazaApp, String correoCliente, BigDecimal precioTotal, UsuarioAutenticado actor) {
+			boolean clienteRechazaApp, String correoCliente, BigDecimal precioTotal,
+			DatosFiscalesCapturados datosFiscales, UsuarioAutenticado actor) {
 		Instant ahora = Instant.now(reloj);
 		if (actor.tieneRol(Role.VENTAS)) {
 			Prospecto prospecto = buscarDelVendedor(prospectoId, actor);
@@ -170,9 +177,11 @@ public class SeguimientoProspectosService {
 			}
 			boolean pasaAPago = etapa == Etapa.PAGO && prospecto.getEtapa() != Etapa.PAGO;
 			BigDecimal precio = pasaAPago ? Prospecto.validarPrecioTotal(precioTotal) : null;
+			DatosFiscales fiscales = pasaAPago ? exigirDatosFiscales(datosFiscales) : null;
 			prospecto.moverPorVendedor(etapa, motivoCierre, actor.id(), ahora);
 			if (pasaAPago) {
 				prospecto.fijarPrecioTotal(precio);
+				prospecto.capturarDatosFiscales(fiscales);
 			}
 			if (finaliza) {
 				eventos.publishEvent(new ProspectoFinalizado(prospecto.getId(), prospecto.getVendedorId(),
@@ -186,6 +195,13 @@ public class SeguimientoProspectosService {
 			return ProspectoVista.de(prospecto);
 		}
 		throw new AccessDeniedException("Tu rol no puede pasar el prospecto a esa etapa");
+	}
+
+	private static DatosFiscales exigirDatosFiscales(DatosFiscalesCapturados datosFiscales) {
+		if (datosFiscales == null) {
+			throw new IllegalArgumentException("Captura los datos fiscales del cliente para la factura");
+		}
+		return datosFiscales.aDominio();
 	}
 
 	private static void prepararCorreoParaLaApp(Prospecto prospecto, boolean clienteRechazaApp, String correoCliente) {

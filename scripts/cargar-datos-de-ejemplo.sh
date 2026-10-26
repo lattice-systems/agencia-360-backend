@@ -164,6 +164,7 @@ crear_prospecto() {
     "{\"nombre\":\"$2\",\"telefono\":$(texto_o_null "$3"),\"correo\":$(texto_o_null "$4")}"
   [ "$CODIGO" = 201 ] || fallar "registrar el prospecto $2"
   PROSPECTO_ID=$(id_de_la_respuesta)
+  PROSPECTO_NOMBRE="$2"
   local aviso=""
   if grep -q '"contactoRepetido":true' <<<"$RESPUESTA"; then
     aviso=" (contacto repetido)"
@@ -177,9 +178,14 @@ avanzar_etapas() {
   local etapa
   for etapa in $3; do
     local cuerpo="{\"etapa\":\"$etapa\"}"
-    # Al pasar a Pago el vendedor captura el precio total de la venta (ERP-1.1).
+    # Al pasar a Pago el vendedor captura el precio total de la venta (ERP-1.1)
+    # y los datos fiscales del cliente para la factura (ERP-1.3). El RFC es de
+    # ejemplo; solo tiene que tener un formato válido.
     if [ "$etapa" = PAGO ]; then
-      cuerpo="{\"etapa\":\"PAGO\",\"precioTotal\":489900}"
+      cuerpo="{\"etapa\":\"PAGO\",\"precioTotal\":489900,\"datosFiscales\":{\"rfc\":\"EJEM850101AB1\","
+      cuerpo+="\"nombre\":\"${PROSPECTO_NOMBRE:-Cliente de ejemplo}\",\"domicilio\":{\"estado\":\"Guanajuato\","
+      cuerpo+="\"ciudad\":\"León\",\"colonia\":\"Centro\",\"calleNumero\":\"Blvd. Adolfo López Mateos 1102\","
+      cuerpo+="\"codigoPostal\":\"37000\"},\"regimenFiscal\":\"612\"}}"
     fi
     if [ "$etapa" = CERRADO ]; then
       cuerpo="{\"etapa\":\"CERRADO\",\"motivoCierre\":\"$4\"}"

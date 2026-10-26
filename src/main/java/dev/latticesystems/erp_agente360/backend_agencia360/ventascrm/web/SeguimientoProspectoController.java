@@ -55,7 +55,7 @@ public class SeguimientoProspectoController {
 	@PreAuthorize("hasAnyRole('VENTAS', 'FACTURACION')")
 	@Operation(summary = "Cambiar la etapa de un prospecto", description = "El vendedor dueño mueve Primer contacto, "
 			+ "Visita y Cotización entre sí, a Pago o a Cerrado (con motivo), y de Entrega a Finalizado. "
-			+ "Al pasar a Pago el vendedor manda precioTotal (obligatorio). "
+			+ "Al pasar a Pago el vendedor manda precioTotal y datosFiscales (obligatorios). "
 			+ "Facturación pasa de Facturación a Entrega. De Pago a Facturación solo se pasa validando los pagos "
 			+ "(/api/v1/liquidaciones). Para finalizar hace falta el correo del cliente (correoCliente si "
 			+ "faltaba), salvo con clienteRechazaApp=true. Un cambio que no corresponde responde 409; un rol que "
@@ -64,6 +64,6 @@ public class SeguimientoProspectoController {
 			@AuthenticationPrincipal UsuarioAutenticado actor) {
 		return seguimientoProspectosService.cambiarEtapa(id, request.etapa(), request.motivoCierre(),
 				Boolean.TRUE.equals(request.clienteRechazaApp()), request.correoCliente(), request.precioTotal(),
-				actor);
+				request.datosFiscales() == null ? null : request.datosFiscales().capturados(), actor);
 	}
 }
