@@ -49,7 +49,7 @@ import org.springframework.transaction.annotation.Transactional;
  * Emisión de la factura (ERP-1.3) de punta a punta contra la base: la unidad
  * pasa a Vendido, se registra la venta, se guarda el PDF y se publica
  * FacturaEmitida. Los datos del prospecto vienen de {@link ConsultaFacturacion}
- * de ventascrm, que se simula porque los datos fiscales llegan con la V17 de
+ * de ventascrm, que se simula porque los datos fiscales llegan con la V20 de
  * Coper. Cada prueba se revierte al terminar.
  */
 @AutoConfigureMockMvc
