@@ -69,10 +69,11 @@ public class SeguimientoProspectoController {
 	}
 
 	@PutMapping("/{id}/datos-fiscales")
-	@PreAuthorize("hasRole('VENTAS')")
-	@Operation(summary = "Capturar o corregir los datos fiscales del cliente", description = "Solo el vendedor dueño "
-			+ "y mientras el prospecto está en Pago (ERP-1.3). Sin ellos Contabilidad no puede validar los pagos. "
-			+ "Un prospecto fuera de Pago responde 409; uno ajeno, 404.")
+	@PreAuthorize("hasAnyRole('VENTAS', 'FACTURACION')")
+	@Operation(summary = "Capturar o corregir los datos fiscales del cliente", description = "El vendedor dueño "
+			+ "mientras el prospecto está en Pago, o Facturación mientras está en Facturación, antes de emitir "
+			+ "(ERP-1.3). Sin ellos Contabilidad no valida los pagos. Fuera de esa etapa responde 409; un "
+			+ "prospecto ajeno para el vendedor, 404.")
 	public ProspectoVista capturarDatosFiscales(@PathVariable Long id, @Valid @RequestBody DatosFiscalesRequest request,
 			@AuthenticationPrincipal UsuarioAutenticado actor) {
 		return seguimientoProspectosService.capturarDatosFiscales(id, request.capturados(), actor);
