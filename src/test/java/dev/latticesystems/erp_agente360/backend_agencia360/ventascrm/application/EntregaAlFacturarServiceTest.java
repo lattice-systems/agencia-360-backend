@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatNoException;
 import static org.mockito.Mockito.when;
 
 import dev.latticesystems.erp_agente360.backend_agencia360.shared.eventos.FacturaEmitida;
+import dev.latticesystems.erp_agente360.backend_agencia360.ventascrm.domain.DatosFiscalesDePrueba;
 import dev.latticesystems.erp_agente360.backend_agencia360.ventascrm.domain.Etapa;
 import dev.latticesystems.erp_agente360.backend_agencia360.ventascrm.domain.MotivoCierre;
 import dev.latticesystems.erp_agente360.backend_agencia360.ventascrm.domain.Prospecto;
@@ -77,7 +78,7 @@ class EntregaAlFacturarServiceTest {
 
 	private static Prospecto enFacturacion() {
 		Prospecto ana = Prospecto.registrar("Ana López", "4771234567", null, 7L, REGISTRO);
-		ana.moverPorVendedor(Etapa.PAGO, null, 7L, REGISTRO);
+		DatosFiscalesDePrueba.pasarAPago(ana, 7L, REGISTRO);
 		ana.validarPago(30L, REGISTRO);
 		return ana;
 	}
