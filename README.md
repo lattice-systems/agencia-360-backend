@@ -107,7 +107,7 @@ src/main/java/dev/latticesystems/erp_agente360/backend_agencia360/
 ├── acceso/          # Usuarios, roles y login del personal — ERP-0.1 · CRM-0.1
 ├── ventascrm/       # Ventas y CRM de prospectos       — ERP HU 1.1 · CareCar HU 1.1, 1.2
 ├── clientes/        # Clientes de la agencia y sus vehículos — CRM-1.5
-├── facturacion/     # Facturación y Administración      — ERP HU 1.2
+├── facturacion/     # Facturación                       — ERP HU 1.3 (emisión con folio interno y PDF)
 ├── inventario/      # Vehículos, refacciones y recepciones — ERP HU 2.0 · 2.1
 ├── servicio/        # Taller y Servicio (órdenes, tickets) — ERP HU 3.1
 ├── refacciones/     # Ventas directas de refacciones     — ERP HU 3.2
@@ -127,7 +127,7 @@ Cada módulo de negocio sigue la misma convención interna (capas, no sub-módul
 └── infrastructure/      # repositorios Spring Data, adaptadores externos (p. ej. cliente del PAC)
 ```
 
-Ya tienen código `acceso`, `ventascrm`, `inventario`, `clientes` y `carecarapp`; los demás módulos siguen vacíos (solo `.gitkeep`) hasta que lleguen sus historias. El modelo de datos v1 está en `docs/TEC-1_modelo-datos_v1.md`. `ModularityTests` (en `src/test/java/.../ModularityTests.java`) corre `ApplicationModules.verify()`: cualquier ciclo entre módulos o acceso a un paquete interno de otro módulo rompe el build.
+Ya tienen código `acceso`, `ventascrm`, `inventario`, `clientes`, `carecarapp` y `facturacion`; los demás módulos siguen vacíos (solo `.gitkeep`) hasta que lleguen sus historias. El modelo de datos v1 está en `docs/TEC-1_modelo-datos_v1.md`. `ModularityTests` (en `src/test/java/.../ModularityTests.java`) corre `ApplicationModules.verify()`: cualquier ciclo entre módulos o acceso a un paquete interno de otro módulo rompe el build.
 
 ### Endpoints implementados
 
@@ -139,12 +139,13 @@ Todos van bajo `/api/v1` y, salvo el login, piden el token en `Authorization: Be
 | `acceso` | `GET /roles`, `GET /usuarios`, `POST /usuarios`, `PUT /usuarios/{id}/rol` | Administrador (ERP) y Gerente de marketing (CRM) |
 | `ventascrm` | `POST /prospectos`, `GET /prospectos?etapa=`, `PATCH /prospectos/{id}/etapa` | Ventas (sus prospectos); el Gerente de marketing consulta todos |
 | `ventascrm` | `PUT /prospectos/{id}/vendedor` | Gerente de marketing |
-| `ventascrm` | `GET /prospectos/por-facturar` | Facturación |
 | `inventario` | `POST /vehiculos`, `PUT /vehiculos/{id}` | Inventario |
 | `inventario` | `GET /vehiculos?estatus=`, `GET /vehiculos/{id}` | Inventario y Administrador (todas); Ventas y Facturación (solo Disponibles) |
 | `inventario` | `GET /vehiculos/eventos` (Server-Sent Events: avisa cuando cambia una unidad) | Inventario, Administrador, Ventas y Facturación |
-| `inventario` | `PUT /ventas/{prospectoId}/unidad` (elige la unidad: pasa a Vendido) | Facturación |
-| `inventario` | `GET /ventas` | Facturación y Administrador |
+| `inventario` | `GET /ventas` (la venta se registra al emitir la factura) | Facturación y Administrador |
+| `facturacion` | `GET /facturas/por-emitir` (prospectos en Facturación sin factura, con total, saldo, datos fiscales y por qué no se puede emitir) | Facturación |
+| `facturacion` | `POST /facturas` (emite: la unidad pasa a Vendido, se registra la venta y se publica `FacturaEmitida`) | Facturación |
+| `facturacion` | `GET /facturas`, `GET /facturas/{id}/pdf` | Facturación y Administrador |
 | `inventario` | `POST /refacciones`, `PUT /refacciones/{id}`, `POST /refacciones/{id}/recepciones` | Inventario |
 | `inventario` | `GET /refacciones?bajoMinimo=`, `GET /refacciones/{id}`, `GET /refacciones/{id}/recepciones` | Inventario, Refacciones y Administrador |
 | `clientes` | `GET /clientes?buscar=`, `GET /clientes/{id}`, `POST /clientes`, `POST /clientes/{id}/vehiculos` | Gerente de marketing |
@@ -158,9 +159,15 @@ Reglas del inventario (decisiones del PO del 13 de octubre):
 - La recepción guarda fecha de llegada y de registro, proveedor, notas y responsable.
 - La recepción y la edición de una refacción bloquean su fila (`SELECT ... FOR UPDATE`) para que no se pisen.
 
+Reglas de la venta y la factura (ERP-1.3, Sprint 3):
+- Ya no hay apartado ni elección previa: Facturación elige una unidad **Disponible** al emitir la factura y, en la misma transacción, la unidad pasa a Vendido y se registra la venta. Se bloquean la fila del prospecto y la de la unidad; si otra factura se adelantó, responde 409.
+- No se emite si el saldo del prospecto es mayor a 0, si no tiene precio total o si faltan sus datos fiscales (RFC, nombre completo, domicilio fiscal y régimen fiscal).
+- Folio interno consecutivo (`F-000001`) y PDF guardado tal como se emitió, sin timbrado (decisión 6 del modelo de datos). El total ya incluye IVA: se desglosa subtotal + IVA 16 %.
+- Al emitir se publica `shared.eventos.FacturaEmitida`; ventascrm lo escucha para pasar el prospecto a Entrega (ERP-1.2). Cuando el vendedor finaliza, la unidad sale del inventario y la venta queda Entregada; la unidad se queda en Vendido.
+
 ## 4. Lineamientos técnicos ya acordados (impactan el diseño del código)
 
-- **Facturación por PAC externo**: el timbrado CFDI se hace consumiendo la API de un proveedor autorizado; no se timbra internamente. La emisión se bloquea si el saldo pendiente es mayor a cero.
+- **Facturación por PAC externo**: el timbrado CFDI se hará consumiendo la API de un proveedor autorizado; no se timbra internamente. Mientras tanto la factura lleva folio interno y PDF (ERP-1.3). La emisión se bloquea si el saldo pendiente es mayor a cero.
 - **Dinero: no se borra, se revierte**: una cancelación de pago se registra como movimiento inverso, nunca como borrado, para conservar trazabilidad. Requiere autorización.
 - **Inventario por movimientos**: cada entrada/salida es un registro; se usa bloqueo de fila para no vender la misma pieza dos veces.
 - **Citas sin empalmes**: restricción a nivel de base de datos para que dos clientes no reserven el mismo horario.
@@ -263,6 +270,8 @@ La API lee su configuración de variables de entorno. Si no defines ninguna, usa
 | `JWT_EXPIRATION_MINUTES` | `60` | Duración del token |
 | `ADMIN_INICIAL_USUARIO` / `ADMIN_INICIAL_CONTRASENA` | Vacío | Si tienen valor, al arrancar se crea el primer Administrador (ERP) cuando todavía no existe |
 | `GERENTE_INICIAL_USUARIO` / `GERENTE_INICIAL_CONTRASENA` | Vacío | Igual, para el primer Gerente de marketing (administrador del CRM) |
+| `AGENCIA_MARCA` | `Nissan` | Marca que vende la agencia; va en la factura y en la unidad del expediente |
+| `FACTURA_EMISOR_RFC`, `FACTURA_EMISOR_NOMBRE`, `FACTURA_EMISOR_DOMICILIO`, `FACTURA_EMISOR_REGIMEN` | Datos ficticios de desarrollo | Datos fiscales de la agencia que emite las facturas |
 
 **`JWT_SECRET` trae un valor de solo-desarrollo por defecto: hay que sobrescribirlo en cualquier ambiente real** (en Azure, vía Key Vault según la sección 5 del PDF).
 
@@ -311,7 +320,7 @@ Solo necesita `bash` y `curl`; en Windows, corre en Git Bash. Para apuntar a otr
 | `gerente` | `Gerente12345` | Gerente de marketing | CRM | Usuarios del CRM; los 12 prospectos y su reasignación |
 | `inventario1` | `Inventario123` | Inventario | ERP | Alta, edición y consulta de vehículos y refacciones; recepciones |
 | `refacciones1` | `Refacciones123` | Refacciones | ERP | Consulta del stock, aviso de las 4 refacciones por resurtir e historial de recepciones |
-| `facturacion1` | `Facturacion123` | Facturación | ERP | Menú vacío por ahora (sus historias llegan después) |
+| `facturacion1` | `Facturacion123` | Facturación | ERP | Facturas: los prospectos por facturar y las facturas emitidas |
 | `servicio1` | `Servicio123` | Servicio | ERP | Menú vacío por ahora |
 | `caja1` | `Caja12345` | Caja | ERP | Menú vacío por ahora |
 | `contabilidad1` | `Contabilidad123` | Contabilidad | ERP | Menú vacío por ahora |
@@ -376,7 +385,7 @@ Para borrar también el volumen de la base y empezar desde cero, incluidas las m
 El mayor esfuerzo de pruebas debe ir en pagos, facturación, inventario y contabilidad: ahí un error significa dinero mal registrado.
 
 Lo que hay hoy:
-- Cada módulo con código (`acceso`, `ventascrm` e `inventario`) tiene pruebas de dominio, de servicio con Mockito y de integración por HTTP contra PostgreSQL real (`*IntegrationTest`). Las de integración cubren seguridad por rol y restricciones de la base.
+- Cada módulo con código (`acceso`, `ventascrm`, `inventario` y `facturacion`) tiene pruebas de dominio, de servicio con Mockito y de integración por HTTP contra PostgreSQL real (`*IntegrationTest`). Las de integración cubren seguridad por rol y restricciones de la base.
 - `RecepcionesConcurrentesIntegrationTest` lanza recepciones y ediciones simultáneas de una refacción para comprobar el bloqueo de fila. Sin el bloqueo, la existencia termina mal (5 de 20 recepciones, o 0 si hay ediciones).
 - `CorsIntegrationTest` comprueba que el preflight de CORS de un origen permitido se responde sin pedir sesión.
 

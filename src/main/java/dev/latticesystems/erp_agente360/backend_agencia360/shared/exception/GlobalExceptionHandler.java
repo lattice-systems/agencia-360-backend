@@ -14,6 +14,7 @@ import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 /**
  * Manejo centralizado de errores para que todos los módulos devuelvan un cuerpo
@@ -114,6 +115,16 @@ public class GlobalExceptionHandler {
 		String mensaje = "El método " + ex.getMethod() + " no está permitido en esta ruta";
 		return ResponseEntity.status(HttpStatus.METHOD_NOT_ALLOWED).body(ApiError
 				.of(HttpStatus.METHOD_NOT_ALLOWED.value(), "Method Not Allowed", mensaje, request.getRequestURI()));
+	}
+
+	/**
+	 * Una ruta que no existe (por ejemplo, una que se quitó) es 404, no un error
+	 * del servidor.
+	 */
+	@ExceptionHandler(NoResourceFoundException.class)
+	public ResponseEntity<ApiError> handleRutaNoEncontrada(NoResourceFoundException ex, HttpServletRequest request) {
+		return ResponseEntity.status(HttpStatus.NOT_FOUND).body(ApiError.of(HttpStatus.NOT_FOUND.value(), "Not Found",
+				"No existe la ruta " + request.getRequestURI(), request.getRequestURI()));
 	}
 
 	/**

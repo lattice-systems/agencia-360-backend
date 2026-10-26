@@ -7,16 +7,19 @@ import java.math.BigDecimal;
 import java.time.Instant;
 
 /**
- * Venta de una unidad (ERP-1.0). Los datos de la unidad vienen vacíos si el
- * prospecto se finalizó sin que Facturación la eligiera.
+ * Venta de una unidad (ERP-1.3). Los datos de la unidad vienen vacíos solo en
+ * las ventas del Sprint 2 que se finalizaron sin unidad.
  *
  * @param precio
- *            precio de la unidad cuando se eligió
+ *            precio de lista de la unidad cuando se vendió
  * @param registradaEn
+ *            cuando se emitió la factura
+ * @param entregadaEn
  *            cuando el prospecto llegó a Finalizado; vacío mientras tanto
  */
 public record VentaVista(Long id, Long prospectoId, Long vehiculoId, String vin, String modelo, String version,
-		Integer anio, String color, BigDecimal precio, EstatusVenta estatus, Instant asignadaEn, Instant registradaEn) {
+		Integer anio, String color, BigDecimal precio, EstatusVenta estatus, Instant asignadaEn, Instant registradaEn,
+		Instant entregadaEn) {
 
 	static VentaVista de(Venta venta) {
 		Vehiculo unidad = venta.getVehiculo();
@@ -24,6 +27,6 @@ public record VentaVista(Long id, Long prospectoId, Long vehiculoId, String vin,
 				unidad == null ? null : unidad.getVin(), unidad == null ? null : unidad.getModelo(),
 				unidad == null ? null : unidad.getVersion(), unidad == null ? null : unidad.getAnio(),
 				unidad == null ? null : unidad.getColor(), venta.getPrecio(), venta.getEstatus(), venta.getAsignadaEn(),
-				venta.getRegistradaEn());
+				venta.getRegistradaEn(), venta.getEntregadaEn());
 	}
 }

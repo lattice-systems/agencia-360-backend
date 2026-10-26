@@ -28,7 +28,7 @@ Antes de subir: `spotless:apply`, `checkstyle:check`, `test` (CI y Lint fallan s
 
 ## Arquitectura
 
-Monolito modular bajo `src/main/java/dev/latticesystems/erp_agente360/backend_agencia360/`. Cada área funcional es un módulo de Spring Modulith: `acceso`, `ventascrm`, `clientes`, `inventario`, `carecarapp` tienen código; `facturacion`, `servicio`, `refacciones`, `caja`, `contabilidad` están vacíos (solo `.gitkeep`). `shared/` es el kernel abierto (config, security, exception, domain base).
+Monolito modular bajo `src/main/java/dev/latticesystems/erp_agente360/backend_agencia360/`. Cada área funcional es un módulo de Spring Modulith: `acceso`, `ventascrm`, `clientes`, `inventario`, `carecarapp`, `facturacion` tienen código; `servicio`, `refacciones`, `caja`, `contabilidad` están vacíos (solo `.gitkeep`). `shared/` es el kernel abierto (config, security, exception, domain base).
 
 - Convención interna de cada módulo: `package-info.java` (`@ApplicationModule`), `domain/`, `application/`, `web/` (controllers + DTOs), `infrastructure/` (repositorios, adaptadores).
 - Entre módulos: **eventos de dominio de Modulith**, no llamadas directas a servicios de otro módulo. `ModularityTests` ejecuta `ApplicationModules.verify()`; un ciclo o acceso a paquete interno de otro módulo rompe el build.
