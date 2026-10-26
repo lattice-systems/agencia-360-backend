@@ -93,13 +93,15 @@ class ConsultaFacturacionIntegrationTest extends AbstractIntegrationTest {
 		long ana = prospecto(vendedor, "Ana López", "4775550101", "FACTURACION");
 		jdbcTemplate.update("""
 				update prospecto set rfc = 'LOHA850101AB1', nombre_fiscal = 'Ana López Hernández',
-				domicilio_fiscal = 'Blvd. López Mateos 1102, León, Gto.', regimen_fiscal = '612' where id = ?""", ana);
+				fiscal_estado = 'Guanajuato', fiscal_ciudad = 'León', fiscal_colonia = 'Centro',
+				fiscal_calle_numero = 'Blvd. López Mateos 1102', fiscal_codigo_postal = '37000',
+				regimen_fiscal = '612' where id = ?""", ana);
 		entityManager.clear();
 
 		DatosFiscales receptor = consultaFacturacion.paraFacturar(ana).orElseThrow().receptor();
 
 		assertThat(receptor).isEqualTo(new DatosFiscales("LOHA850101AB1", "Ana López Hernández",
-				"Blvd. López Mateos 1102, León, Gto.", "612"));
+				"Blvd. López Mateos 1102, Col. Centro, C.P. 37000, León, Guanajuato", "612"));
 		assertThat(receptor.completos()).isTrue();
 	}
 
