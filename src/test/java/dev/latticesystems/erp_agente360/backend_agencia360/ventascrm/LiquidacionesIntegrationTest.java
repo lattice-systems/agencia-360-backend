@@ -166,9 +166,10 @@ class LiquidacionesIntegrationTest extends AbstractIntegrationTest {
 	@Test
 	void sinDatosFiscalesContabilidadNoValidaYElProspectoSigueEnPago() throws Exception {
 		long id = prospectoEnPago("Ana López");
-		// Como un prospecto que llegó a Pago antes de la V17.
+		// Como un prospecto que llegó a Pago antes de la V20.
 		entityManager.flush();
-		jdbcTemplate.update("update prospecto set rfc = null, nombre_fiscal = null, domicilio_fiscal = null, "
+		jdbcTemplate.update("update prospecto set rfc = null, nombre_fiscal = null, fiscal_estado = null, "
+				+ "fiscal_ciudad = null, fiscal_colonia = null, fiscal_calle_numero = null, fiscal_codigo_postal = null, "
 				+ "regimen_fiscal = null where id = ?", id);
 		entityManager.clear();
 		mockMvc.perform(pago(id, "489900", hoy().toString(), null)).andExpect(status().isCreated());
