@@ -62,6 +62,7 @@ class ConsultaFacturacionIntegrationTest extends AbstractIntegrationTest {
 		assertThat(deLuis.vendedorId()).isEqualTo(vendedor.getId());
 		assertThat(deLuis.vendedor()).isEqualTo("Persona vendedor.facturar");
 		assertThat(deLuis.enFacturacionDesde()).isNotNull();
+		assertThat(deLuis.cierrePendiente()).isFalse();
 	}
 
 	@Test
@@ -85,6 +86,16 @@ class ConsultaFacturacionIntegrationTest extends AbstractIntegrationTest {
 		assertThat(consultaFacturacion.paraFacturar(sinPrecio).orElseThrow().saldo()).isNull();
 		assertThat(consultaFacturacion.paraFacturar(enPago)).isEmpty();
 		assertThat(consultaFacturacion.paraFacturar(999_999L)).isEmpty();
+	}
+
+	@Test
+	void avisaSiTieneUnaSolicitudDeCierrePendiente() {
+		Usuario vendedor = registrar("vendedor.cierre", Role.VENTAS);
+		long luis = prospecto(vendedor, "Luis Herrera", "4775550104", "FACTURACION");
+		jdbcTemplate.update("update prospecto set cierre_pendiente = true where id = ?", luis);
+		entityManager.clear();
+
+		assertThat(consultaFacturacion.paraFacturar(luis).orElseThrow().cierrePendiente()).isTrue();
 	}
 
 	@Test
