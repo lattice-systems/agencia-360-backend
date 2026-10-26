@@ -20,8 +20,8 @@ import org.springframework.transaction.annotation.Transactional;
  * con lo que facturacion necesita para emitir la factura (ERP-1.3).
  *
  * <p>
- * Los datos fiscales del receptor todavía no existen en el prospecto: los
- * agrega Coper con la V17 (se capturan al pasar a Pagos). Mientras tanto
+ * El receptor son los datos fiscales que captura el vendedor al pasar a Pago
+ * (V17). Los prospectos que llegaron a Pago antes no los tienen: su
  * {@code receptor} sale vacío y facturacion no emite.
  */
 @Service
@@ -60,8 +60,18 @@ public class ConsultaFacturacionService implements ConsultaFacturacion {
 				.map(p -> new ProspectoParaFacturar(p.getId(), p.getNombre(), p.getVendedorId(),
 						vendedores.get(p.getVendedorId()), p.getPrecioTotal(),
 						saldo(p.getPrecioTotal(), pagado.getOrDefault(p.getId(), BigDecimal.ZERO)),
-						p.getEtapaActualizadaEn(), null))
+						p.getEtapaActualizadaEn(), receptor(p)))
 				.toList();
+	}
+
+	/** Los datos fiscales del cliente; vacío si todavía no los tiene. */
+	private static ConsultaFacturacion.DatosFiscales receptor(Prospecto prospecto) {
+		var datos = prospecto.getDatosFiscales();
+		if (datos == null) {
+			return null;
+		}
+		return new ConsultaFacturacion.DatosFiscales(datos.getRfc(), datos.getNombre(), datos.getDomicilio(),
+				datos.getRegimen().getClave());
 	}
 
 	/** Sin precio total no se sabe cuánto falta: el saldo queda vacío. */
