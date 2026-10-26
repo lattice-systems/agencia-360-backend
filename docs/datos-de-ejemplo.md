@@ -97,6 +97,20 @@ Qué se puede probar:
 - Con `admin`, la solicitud de cierre pendiente de Carlos Núñez (`GET /api/v1/solicitudes-cierre`).
 - Los cerrados guardan su motivo y la última etapa a la que llegaron.
 
+## Clienta de la app CareCar y su expediente
+
+La registra el Gerente de marketing desde el CRM con sus dos vehículos y le abre la cuenta de la app; la contraseña temporal llega a Mailpit (`http://localhost:8025`). Servicio corrige placas y kilometraje del March y registra sus servicios; el Gerente sube el manual del March 2026.
+
+| Vehículo | VIN | Placas y kilometraje | Servicios | Manual |
+|---|---|---|---|---|
+| Nissan March 2026 Advance | `3N1CK3CD7RL900001` | GTO-123-A, 10,250 km | Servicio de 5,000 km (hace 150 días) y de 10,000 km (hace 10 días) | Sí, uno de ejemplo de una página (o el real con `MANUAL_MARCH_PDF`) |
+| Nissan Sentra 2025 Sense | `3N1AB8CV9RY900002` | Sin capturar | Cambio de balatas (hace 30 días) | No |
+
+Qué se puede probar:
+- Con `servicio1`, buscar `900001` en Expediente, abrir los detalles de cada servicio y corregir placas y kilometraje.
+- Con `admin`, que el expediente se puede consultar pero no corregir.
+- En la app, con `laura.mendez@example.com`: el primer ingreso con cambio de contraseña, los 2 vehículos y el manual del March, que se abre con su URL temporal. El Sentra regresa una lista de manuales vacía.
+
 ## Lo que no incluye todavía
 
 Ventas, pagos, facturas, clientes, órdenes de servicio y citas: llegan en S2 a S4. El criterio de TEC-3 los pide, pero se agregan al script cuando existan sus endpoints.

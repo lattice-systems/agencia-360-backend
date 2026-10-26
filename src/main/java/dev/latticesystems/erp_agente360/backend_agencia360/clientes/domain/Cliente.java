@@ -113,7 +113,23 @@ public class Cliente extends Auditable {
 	 * @return {@code true} si lo agregó
 	 */
 	public boolean asignarVehiculo(Long vehiculoId, String vin, String modelo, int anio) {
-		VehiculoCliente nuevo = VehiculoCliente.de(this, vehiculoId, vin, modelo, anio);
+		return asignarVehiculo(vehiculoId, vin, null, modelo, anio, null);
+	}
+
+	/**
+	 * Le asigna un vehículo con su marca y versión (ERP-3.0). Si ya tiene uno con
+	 * ese VIN no hace nada.
+	 *
+	 * @param vehiculoId
+	 *            unidad del inventario, o {@code null} si no la vendió la agencia
+	 * @param marca
+	 *            puede faltar
+	 * @param version
+	 *            puede faltar
+	 * @return {@code true} si lo agregó
+	 */
+	public boolean asignarVehiculo(Long vehiculoId, String vin, String marca, String modelo, int anio, String version) {
+		VehiculoCliente nuevo = VehiculoCliente.de(this, vehiculoId, vin, marca, modelo, anio, version);
 		if (vehiculos.stream().anyMatch(v -> v.getVin().equals(nuevo.getVin()))) {
 			return false;
 		}
