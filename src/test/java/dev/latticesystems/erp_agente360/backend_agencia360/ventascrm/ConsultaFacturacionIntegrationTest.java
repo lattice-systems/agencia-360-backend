@@ -8,6 +8,7 @@ import dev.latticesystems.erp_agente360.backend_agencia360.acceso.infrastructure
 import dev.latticesystems.erp_agente360.backend_agencia360.acceso.infrastructure.UsuarioRepository;
 import dev.latticesystems.erp_agente360.backend_agencia360.shared.AbstractIntegrationTest;
 import dev.latticesystems.erp_agente360.backend_agencia360.shared.security.Role;
+import dev.latticesystems.erp_agente360.backend_agencia360.ventascrm.ConsultaFacturacion.DatosFiscales;
 import dev.latticesystems.erp_agente360.backend_agencia360.ventascrm.ConsultaFacturacion.ProspectoParaFacturar;
 import dev.latticesystems.erp_agente360.backend_agencia360.ventascrm.domain.Prospecto;
 import dev.latticesystems.erp_agente360.backend_agencia360.ventascrm.infrastructure.ProspectoRepository;
@@ -22,8 +23,8 @@ import org.springframework.transaction.annotation.Transactional;
 
 /**
  * La consulta que ventascrm ofrece a facturacion (ERP-1.3): los prospectos en
- * Facturación con su total, su saldo y el vendedor. Cada prueba se revierte al
- * terminar.
+ * Facturación con su total, su saldo, el vendedor y los datos fiscales del
+ * cliente. Cada prueba se revierte al terminar.
  */
 @Transactional
 class ConsultaFacturacionIntegrationTest extends AbstractIntegrationTest {
@@ -61,6 +62,7 @@ class ConsultaFacturacionIntegrationTest extends AbstractIntegrationTest {
 		assertThat(deLuis.vendedorId()).isEqualTo(vendedor.getId());
 		assertThat(deLuis.vendedor()).isEqualTo("Persona vendedor.facturar");
 		assertThat(deLuis.enFacturacionDesde()).isNotNull();
+		assertThat(deLuis.cierrePendiente()).isFalse();
 	}
 
 	@Test
@@ -79,11 +81,39 @@ class ConsultaFacturacionIntegrationTest extends AbstractIntegrationTest {
 		ProspectoParaFacturar deLuis = consultaFacturacion.paraFacturar(luis).orElseThrow();
 		assertThat(deLuis.total()).isEqualByComparingTo("489900.00");
 		assertThat(deLuis.saldo()).isEqualByComparingTo("89900.00");
-		assertThat(deLuis.receptor()).as("los datos fiscales llegan con la V17").isNull();
+		assertThat(deLuis.receptor()).as("sin datos fiscales capturados").isNull();
 		assertThat(consultaFacturacion.paraFacturar(ana).orElseThrow().saldo()).isEqualByComparingTo(BigDecimal.ZERO);
 		assertThat(consultaFacturacion.paraFacturar(sinPrecio).orElseThrow().saldo()).isNull();
 		assertThat(consultaFacturacion.paraFacturar(enPago)).isEmpty();
 		assertThat(consultaFacturacion.paraFacturar(999_999L)).isEmpty();
+	}
+
+	@Test
+	void avisaSiTieneUnaSolicitudDeCierrePendiente() {
+		Usuario vendedor = registrar("vendedor.cierre", Role.VENTAS);
+		long luis = prospecto(vendedor, "Luis Herrera", "4775550104", "FACTURACION");
+		jdbcTemplate.update("update prospecto set cierre_pendiente = true where id = ?", luis);
+		entityManager.clear();
+
+		assertThat(consultaFacturacion.paraFacturar(luis).orElseThrow().cierrePendiente()).isTrue();
+	}
+
+	@Test
+	void regresaLosDatosFiscalesQueCapturoElVendedorComoReceptor() {
+		Usuario vendedor = registrar("vendedor.receptor", Role.VENTAS);
+		long ana = prospecto(vendedor, "Ana López", "4775550101", "FACTURACION");
+		jdbcTemplate.update("""
+				update prospecto set rfc = 'LOHA850101AB1', nombre_fiscal = 'Ana López Hernández',
+				fiscal_estado = 'Guanajuato', fiscal_ciudad = 'León', fiscal_colonia = 'Centro',
+				fiscal_calle_numero = 'Blvd. López Mateos 1102', fiscal_codigo_postal = '37000',
+				regimen_fiscal = '612' where id = ?""", ana);
+		entityManager.clear();
+
+		DatosFiscales receptor = consultaFacturacion.paraFacturar(ana).orElseThrow().receptor();
+
+		assertThat(receptor).isEqualTo(new DatosFiscales("LOHA850101AB1", "Ana López Hernández",
+				"Blvd. López Mateos 1102, Col. Centro, C.P. 37000, León, Guanajuato", "612"));
+		assertThat(receptor.completos()).isTrue();
 	}
 
 	/**

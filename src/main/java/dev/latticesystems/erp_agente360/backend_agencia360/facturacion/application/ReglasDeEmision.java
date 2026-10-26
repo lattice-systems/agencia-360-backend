@@ -8,7 +8,8 @@ import java.util.Optional;
 
 /**
  * Lo que debe cumplir un prospecto en Facturación para emitirle la factura
- * (reglas 2 y 4 del Sprint 3). La pantalla lo muestra antes de intentar y la
+ * (reglas 2 y 4 del Sprint 3, y sin solicitud de cierre pendiente por decisión
+ * del PO del 26 de octubre). La pantalla lo muestra antes de intentar y la
  * emisión lo vuelve a revisar.
  */
 final class ReglasDeEmision {
@@ -27,6 +28,10 @@ final class ReglasDeEmision {
 			BigDecimal saldo = prospecto.saldo() == null ? prospecto.total() : prospecto.saldo();
 			return Optional.of("Tiene un saldo de " + NumberFormat.getCurrencyInstance(MEXICO).format(saldo)
 					+ ": la factura se emite con el saldo en 0");
+		}
+		if (prospecto.cierrePendiente()) {
+			return Optional
+					.of("Tiene una solicitud de cierre pendiente: se factura cuando el Administrador la rechace");
 		}
 		if (prospecto.receptor() == null || !prospecto.receptor().completos()) {
 			return Optional.of("Faltan los datos fiscales del cliente (RFC, nombre completo, domicilio fiscal y "

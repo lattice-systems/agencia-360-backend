@@ -187,10 +187,15 @@ public class Prospecto extends Auditable {
 	 * Facturación.
 	 *
 	 * @throws ConflictoException
-	 *             si el prospecto no está en Pago
+	 *             si el prospecto no está en Pago o le faltan los datos fiscales
+	 *             del cliente (ERP-1.3)
 	 */
 	public void validarPago(Long usuarioId, Instant ahora) {
 		exigirEtapa(Etapa.PAGO, "Solo se valida el pago de un prospecto en Pago");
+		if (datosFiscales == null) {
+			throw new ConflictoException(
+					"Faltan los datos fiscales del cliente; el vendedor los captura antes de validar los pagos");
+		}
 		moverA(Etapa.FACTURACION, OrigenCambio.ERP, usuarioId, ahora);
 	}
 
