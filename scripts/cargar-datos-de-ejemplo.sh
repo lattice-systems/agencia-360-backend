@@ -183,8 +183,9 @@ avanzar_etapas() {
     # ejemplo; solo tiene que tener un formato válido.
     if [ "$etapa" = PAGO ]; then
       cuerpo="{\"etapa\":\"PAGO\",\"precioTotal\":489900,\"datosFiscales\":{\"rfc\":\"EJEM850101AB1\","
-      cuerpo+="\"nombre\":\"${PROSPECTO_NOMBRE:-Cliente de ejemplo}\",\"domicilio\":\"Blvd. Adolfo López Mateos 1102, "
-      cuerpo+="Col. Centro, C.P. 37000, León, Gto.\",\"regimenFiscal\":\"612\"}}"
+      cuerpo+="\"nombre\":\"${PROSPECTO_NOMBRE:-Cliente de ejemplo}\",\"domicilio\":{\"estado\":\"Guanajuato\","
+      cuerpo+="\"ciudad\":\"León\",\"colonia\":\"Centro\",\"calleNumero\":\"Blvd. Adolfo López Mateos 1102\","
+      cuerpo+="\"codigoPostal\":\"37000\"},\"regimenFiscal\":\"612\"}}"
     fi
     if [ "$etapa" = CERRADO ]; then
       cuerpo="{\"etapa\":\"CERRADO\",\"motivoCierre\":\"$4\"}"

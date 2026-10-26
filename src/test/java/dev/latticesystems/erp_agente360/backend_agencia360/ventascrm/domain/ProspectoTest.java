@@ -258,8 +258,8 @@ class ProspectoTest {
 		void elVendedorCapturaYCorrigeLosDatosFiscalesEnPago() {
 			Prospecto prospecto = en(Etapa.PAGO);
 
-			prospecto.capturarDatosFiscales(
-					DatosFiscales.de("ABC010203XY9", "Autopartes del Bajío SA de CV", "León, Gto.", "601"));
+			prospecto.capturarDatosFiscales(DatosFiscales.de("ABC010203XY9", "Autopartes del Bajío SA de CV",
+					DatosFiscalesDePrueba.domicilioDeAna(), "601"));
 
 			assertThat(prospecto.getDatosFiscales().getRfc()).isEqualTo("ABC010203XY9");
 			assertThat(prospecto.getDatosFiscales().getRegimen()).isEqualTo(RegimenFiscal.GENERAL_PERSONAS_MORALES);

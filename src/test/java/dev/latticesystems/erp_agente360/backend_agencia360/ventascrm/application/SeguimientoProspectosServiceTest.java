@@ -44,8 +44,10 @@ class SeguimientoProspectosServiceTest {
 
 	private static final Instant REGISTRO = Instant.parse("2026-10-12T18:00:00Z");
 	private static final Instant AHORA = Instant.parse("2026-10-13T10:30:00Z");
+	private static final DomicilioFiscalDatos DOMICILIO_ANA = new DomicilioFiscalDatos("Guanajuato", "León", "Centro",
+			"Blvd. López Mateos 1102", "37000");
 	private static final DatosFiscalesCapturados DATOS_ANA = new DatosFiscalesCapturados(" loha850101ab1 ",
-			"Ana López Hernández", "Blvd. López Mateos 1102, León, Gto.", "612");
+			"Ana López Hernández", DOMICILIO_ANA, "612");
 
 	private static final UsuarioAutenticado VENDEDOR = new UsuarioAutenticado(7L, "vendedor1", Set.of(Role.VENTAS));
 	private static final UsuarioAutenticado GERENTE = new UsuarioAutenticado(2L, "gerente1",
@@ -171,9 +173,8 @@ class SeguimientoProspectosServiceTest {
 
 		assertThat(enPago.etapa()).isEqualTo(Etapa.PAGO);
 		assertThat(enPago.precioTotal()).isEqualByComparingTo("489900");
-		assertThat(enPago.datosFiscales()).isEqualTo(
-				new DatosFiscalesVista("LOHA850101AB1", "Ana López Hernández", "Blvd. López Mateos 1102, León, Gto.",
-						"612", "Personas Físicas con Actividades Empresariales y Profesionales"));
+		assertThat(enPago.datosFiscales()).isEqualTo(new DatosFiscalesVista("LOHA850101AB1", "Ana López Hernández",
+				DOMICILIO_ANA, "612", "Personas Físicas con Actividades Empresariales y Profesionales"));
 	}
 
 	@Test
@@ -186,7 +187,7 @@ class SeguimientoProspectosServiceTest {
 				.isInstanceOf(IllegalArgumentException.class)
 				.hasMessage("Captura los datos fiscales del cliente para la factura");
 		assertThatThrownBy(() -> service.cambiarEtapa(1L, Etapa.PAGO, null, false, null, new BigDecimal("489900"),
-				new DatosFiscalesCapturados("XXX", "Ana", "León", "612"), VENDEDOR))
+				new DatosFiscalesCapturados("XXX", "Ana", DOMICILIO_ANA, "612"), VENDEDOR))
 				.isInstanceOf(IllegalArgumentException.class).hasMessage("El RFC no tiene un formato válido");
 		assertThat(ana.getEtapa()).isEqualTo(Etapa.PRIMER_CONTACTO);
 		assertThat(ana.getDatosFiscales()).isNull();

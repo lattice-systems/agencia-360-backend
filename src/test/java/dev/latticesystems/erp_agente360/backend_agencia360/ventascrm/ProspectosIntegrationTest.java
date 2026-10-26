@@ -352,13 +352,15 @@ class ProspectosIntegrationTest extends AbstractIntegrationTest {
 		mockMvc.perform(conToken(patch(URL + "/{id}/etapa", id), token(vendedor))
 				.contentType(MediaType.APPLICATION_JSON)
 				.content("{\"etapa\":\"PAGO\",\"precioTotal\":489900,\"datosFiscales\":{\"rfc\":\"LOHA851301AB1\","
-						+ "\"nombre\":\"Ana\",\"domicilio\":\"León\",\"regimenFiscal\":\"612\"}}"))
+						+ "\"nombre\":\"Ana\",\"domicilio\":" + DatosFiscalesDePrueba.DOMICILIO_JSON
+						+ ",\"regimenFiscal\":\"612\"}}"))
 				.andExpect(status().isBadRequest())
 				.andExpect(jsonPath("$.message").value("El RFC no tiene un formato válido"));
 		mockMvc.perform(conToken(patch(URL + "/{id}/etapa", id), token(vendedor))
 				.contentType(MediaType.APPLICATION_JSON)
 				.content("{\"etapa\":\"PAGO\",\"precioTotal\":489900,\"datosFiscales\":{\"rfc\":\"LOHA850101AB1\","
-						+ "\"nombre\":\"Ana\",\"domicilio\":\"León\",\"regimenFiscal\":\"999\"}}"))
+						+ "\"nombre\":\"Ana\",\"domicilio\":" + DatosFiscalesDePrueba.DOMICILIO_JSON
+						+ ",\"regimenFiscal\":\"999\"}}"))
 				.andExpect(status().isBadRequest())
 				.andExpect(jsonPath("$.message").value("El régimen fiscal 999 no está en el catálogo del SAT"));
 
