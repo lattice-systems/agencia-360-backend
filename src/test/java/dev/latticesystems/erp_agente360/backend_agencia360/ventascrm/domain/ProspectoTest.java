@@ -293,6 +293,32 @@ class ProspectoTest {
 		}
 
 		@Test
+		void laFacturaEmitidaAutorizaLaEntregaSinUsuarioYConLaHoraDeLaEmision() {
+			Prospecto prospecto = en(Etapa.FACTURACION);
+
+			assertThat(prospecto.autorizarEntregaPorFactura(DESPUES)).isTrue();
+
+			assertThat(prospecto.getEtapa()).isEqualTo(Etapa.ENTREGA);
+			assertThat(prospecto.getEtapaActualizadaEn()).isEqualTo(DESPUES);
+			assertThat(prospecto.getHistorial()).last().satisfies(movimiento -> {
+				assertThat(movimiento.getOrigen()).isEqualTo(OrigenCambio.ERP);
+				assertThat(movimiento.getUsuarioId()).isNull();
+			});
+		}
+
+		@ParameterizedTest
+		@EnumSource(value = Etapa.class, names = {"PAGO", "ENTREGA", "FINALIZADO", "CERRADO"})
+		void fueraDeFacturacionLaFacturaNoCambiaNada(Etapa etapa) {
+			Prospecto prospecto = en(etapa);
+			int movimientos = prospecto.getHistorial().size();
+
+			assertThat(prospecto.autorizarEntregaPorFactura(DESPUES)).isFalse();
+
+			assertThat(prospecto.getEtapa()).isEqualTo(etapa);
+			assertThat(prospecto.getHistorial()).hasSize(movimientos);
+		}
+
+		@Test
 		void soloSeFacturaUnProspectoEnFacturacion() {
 			Prospecto prospecto = en(Etapa.PAGO);
 
