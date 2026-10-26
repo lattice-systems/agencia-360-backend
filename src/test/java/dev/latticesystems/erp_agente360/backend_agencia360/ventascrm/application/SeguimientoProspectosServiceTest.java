@@ -16,6 +16,7 @@ import dev.latticesystems.erp_agente360.backend_agencia360.shared.exception.Recu
 import dev.latticesystems.erp_agente360.backend_agencia360.shared.security.Role;
 import dev.latticesystems.erp_agente360.backend_agencia360.shared.security.UsuarioAutenticado;
 import dev.latticesystems.erp_agente360.backend_agencia360.ventascrm.application.ProspectoVista.VehiculoVendido;
+import dev.latticesystems.erp_agente360.backend_agencia360.ventascrm.domain.DatosFiscalesDePrueba;
 import dev.latticesystems.erp_agente360.backend_agencia360.ventascrm.domain.Etapa;
 import dev.latticesystems.erp_agente360.backend_agencia360.ventascrm.domain.MotivoCierre;
 import dev.latticesystems.erp_agente360.backend_agencia360.ventascrm.domain.OrigenCambio;
@@ -43,6 +44,10 @@ class SeguimientoProspectosServiceTest {
 
 	private static final Instant REGISTRO = Instant.parse("2026-10-12T18:00:00Z");
 	private static final Instant AHORA = Instant.parse("2026-10-13T10:30:00Z");
+	private static final DomicilioFiscalDatos DOMICILIO_ANA = new DomicilioFiscalDatos("Guanajuato", "León", "Centro",
+			"Blvd. López Mateos 1102", "37000");
+	private static final DatosFiscalesCapturados DATOS_ANA = new DatosFiscalesCapturados(" loha850101ab1 ",
+			"Ana López Hernández", DOMICILIO_ANA, "612");
 
 	private static final UsuarioAutenticado VENDEDOR = new UsuarioAutenticado(7L, "vendedor1", Set.of(Role.VENTAS));
 	private static final UsuarioAutenticado GERENTE = new UsuarioAutenticado(2L, "gerente1",
@@ -164,10 +169,28 @@ class SeguimientoProspectosServiceTest {
 		when(prospectoRepository.findByIdAndVendedorId(1L, 7L)).thenReturn(Optional.of(ana));
 
 		ProspectoVista enPago = service.cambiarEtapa(1L, Etapa.PAGO, null, false, null, new BigDecimal("489900"),
-				VENDEDOR);
+				DATOS_ANA, VENDEDOR);
 
 		assertThat(enPago.etapa()).isEqualTo(Etapa.PAGO);
 		assertThat(enPago.precioTotal()).isEqualByComparingTo("489900");
+		assertThat(enPago.datosFiscales()).isEqualTo(new DatosFiscalesVista("LOHA850101AB1", "Ana López Hernández",
+				DOMICILIO_ANA, "612", "Personas Físicas con Actividades Empresariales y Profesionales"));
+	}
+
+	@Test
+	void sinDatosFiscalesNoSePasaAPago() {
+		Prospecto ana = prospecto("Ana López", 7L);
+		when(prospectoRepository.findByIdAndVendedorId(1L, 7L)).thenReturn(Optional.of(ana));
+
+		assertThatThrownBy(
+				() -> service.cambiarEtapa(1L, Etapa.PAGO, null, false, null, new BigDecimal("489900"), null, VENDEDOR))
+				.isInstanceOf(IllegalArgumentException.class)
+				.hasMessage("Captura los datos fiscales del cliente para la factura");
+		assertThatThrownBy(() -> service.cambiarEtapa(1L, Etapa.PAGO, null, false, null, new BigDecimal("489900"),
+				new DatosFiscalesCapturados("XXX", "Ana", DOMICILIO_ANA, "612"), VENDEDOR))
+				.isInstanceOf(IllegalArgumentException.class).hasMessage("El RFC no tiene un formato válido");
+		assertThat(ana.getEtapa()).isEqualTo(Etapa.PRIMER_CONTACTO);
+		assertThat(ana.getDatosFiscales()).isNull();
 	}
 
 	@Test
@@ -208,7 +231,7 @@ class SeguimientoProspectosServiceTest {
 		when(prospectoRepository.findByIdAndVendedorId(1L, 7L)).thenReturn(Optional.of(ana));
 
 		ProspectoVista finalizado = service.cambiarEtapa(1L, Etapa.FINALIZADO, null, false, " Ana@Ejemplo.com ", null,
-				VENDEDOR);
+				null, VENDEDOR);
 
 		assertThat(finalizado.correo()).isEqualTo("ana@ejemplo.com");
 		verify(eventos).publishEvent(new ProspectoFinalizado(1L, 7L, "Ana López", "ana@ejemplo.com", AHORA));
@@ -219,7 +242,7 @@ class SeguimientoProspectosServiceTest {
 		Prospecto ana = enEntrega("ana@ejemplo.com");
 		when(prospectoRepository.findByIdAndVendedorId(1L, 7L)).thenReturn(Optional.of(ana));
 
-		ProspectoVista finalizado = service.cambiarEtapa(1L, Etapa.FINALIZADO, null, true, null, null, VENDEDOR);
+		ProspectoVista finalizado = service.cambiarEtapa(1L, Etapa.FINALIZADO, null, true, null, null, null, VENDEDOR);
 
 		assertThat(finalizado.correo()).isEqualTo("ana@ejemplo.com");
 		verify(eventos).publishEvent(new ProspectoFinalizado(1L, 7L, "Ana López", null, AHORA));
@@ -230,7 +253,7 @@ class SeguimientoProspectosServiceTest {
 		Prospecto ana = enEntrega(null);
 		when(prospectoRepository.findByIdAndVendedorId(1L, 7L)).thenReturn(Optional.of(ana));
 
-		service.cambiarEtapa(1L, Etapa.FINALIZADO, null, true, null, null, VENDEDOR);
+		service.cambiarEtapa(1L, Etapa.FINALIZADO, null, true, null, null, null, VENDEDOR);
 
 		verify(eventos).publishEvent(new ProspectoFinalizado(1L, 7L, "Ana López", null, AHORA));
 	}
@@ -295,7 +318,7 @@ class SeguimientoProspectosServiceTest {
 	@Test
 	void facturacionPasaDeFacturacionAEntrega() {
 		Prospecto ana = prospecto("Ana López", 7L);
-		ana.moverPorVendedor(Etapa.PAGO, null, 7L, REGISTRO);
+		DatosFiscalesDePrueba.pasarAPago(ana, 7L, REGISTRO);
 		ana.validarPago(30L, REGISTRO);
 		when(prospectoRepository.findById(1L)).thenReturn(Optional.of(ana));
 
@@ -327,7 +350,7 @@ class SeguimientoProspectosServiceTest {
 	private static Prospecto enEntrega(String correo) {
 		Prospecto ana = Prospecto.registrar("Ana López", "4771234567", correo, 7L, REGISTRO);
 		ReflectionTestUtils.setField(ana, "id", 1L);
-		ana.moverPorVendedor(Etapa.PAGO, null, 7L, REGISTRO);
+		DatosFiscalesDePrueba.pasarAPago(ana, 7L, REGISTRO);
 		ana.validarPago(30L, REGISTRO);
 		ana.confirmarFacturacion(40L, REGISTRO);
 		return ana;

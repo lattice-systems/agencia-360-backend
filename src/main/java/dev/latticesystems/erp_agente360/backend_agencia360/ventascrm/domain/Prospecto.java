@@ -4,6 +4,7 @@ import dev.latticesystems.erp_agente360.backend_agencia360.shared.domain.Auditab
 import dev.latticesystems.erp_agente360.backend_agencia360.shared.exception.ConflictoException;
 import jakarta.persistence.CascadeType;
 import jakarta.persistence.Column;
+import jakarta.persistence.Embedded;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
@@ -85,6 +86,13 @@ public class Prospecto extends Auditable {
 	 */
 	@Column(name = "precio_total", precision = 12, scale = 2)
 	private BigDecimal precioTotal;
+
+	/**
+	 * Datos fiscales del cliente para la factura (ERP-1.3): los captura el vendedor
+	 * al pasar a Pago. Nulo si todavía no los tiene.
+	 */
+	@Embedded
+	private DatosFiscales datosFiscales;
 
 	/** Hay una solicitud de cierre esperando al Administrador. */
 	@Column(name = "cierre_pendiente", nullable = false)
@@ -245,6 +253,19 @@ public class Prospecto extends Auditable {
 			throw new IllegalArgumentException("El precio total es demasiado grande");
 		}
 		return precio.setScale(2);
+	}
+
+	/**
+	 * Guarda o corrige los datos fiscales del cliente (ERP-1.3). Solo en Pago: es
+	 * cuando el vendedor los captura, y después los usa la factura.
+	 *
+	 * @throws ConflictoException
+	 *             si el prospecto no está en Pago
+	 */
+	public void capturarDatosFiscales(DatosFiscales datos) {
+		Objects.requireNonNull(datos, "datos");
+		exigirEtapa(Etapa.PAGO, "Los datos fiscales se capturan mientras el prospecto está en Pago");
+		this.datosFiscales = datos;
 	}
 
 	/**
@@ -422,6 +443,10 @@ public class Prospecto extends Auditable {
 
 	public BigDecimal getPrecioTotal() {
 		return precioTotal;
+	}
+
+	public DatosFiscales getDatosFiscales() {
+		return datosFiscales;
 	}
 
 	public boolean isCierrePendiente() {

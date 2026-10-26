@@ -47,7 +47,8 @@ public class RegistroClientesService {
 	 * @throws RecursoNoEncontradoException
 	 *             si el cliente no existe (404)
 	 * @throws IllegalArgumentException
-	 *             si el VIN, el modelo o el año no son válidos (400)
+	 *             si el VIN, la marca, el modelo, el año o la versión no son
+	 *             válidos (400)
 	 * @throws ConflictoException
 	 *             si el VIN ya es de otro cliente (409)
 	 */
@@ -60,7 +61,8 @@ public class RegistroClientesService {
 		if (!yaEsSuyo && clienteRepository.existeVehiculoConVin(vin)) {
 			throw new ConflictoException("El vehículo con VIN " + vin + " ya es de otro cliente");
 		}
-		cliente.asignarVehiculo(vehiculo.vehiculoId(), vin, vehiculo.modelo(), vehiculo.anio());
+		cliente.asignarVehiculo(vehiculo.vehiculoId(), vin, vehiculo.marca(), vehiculo.modelo(), vehiculo.anio(),
+				vehiculo.version());
 		clienteRepository.flush();
 		return ClienteDetalle.de(cliente);
 	}

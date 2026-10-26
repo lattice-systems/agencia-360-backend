@@ -56,8 +56,8 @@ public class ClienteController {
 			+ "caracteres o el año es menor a 1900, 404 si el cliente no existe y 409 si el VIN ya es de otro "
 			+ "cliente.")
 	public ClienteDetalle asignarVehiculo(@PathVariable Long id, @Valid @RequestBody AsignarVehiculoRequest request) {
-		return registroClientesService.asignarVehiculo(id,
-				new VehiculoNuevo(null, request.vin(), request.modelo(), request.anio()));
+		return registroClientesService.asignarVehiculo(id, new VehiculoNuevo(null, request.vin(), request.marca(),
+				request.modelo(), request.anio(), request.version()));
 	}
 
 	@GetMapping
