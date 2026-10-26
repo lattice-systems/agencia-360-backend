@@ -3,6 +3,7 @@ package dev.latticesystems.erp_agente360.backend_agencia360.ventascrm.applicatio
 import dev.latticesystems.erp_agente360.backend_agencia360.acceso.DirectorioUsuarios;
 import dev.latticesystems.erp_agente360.backend_agencia360.inventario.ConsultaUnidades;
 import dev.latticesystems.erp_agente360.backend_agencia360.shared.eventos.ProspectoFinalizado;
+import dev.latticesystems.erp_agente360.backend_agencia360.shared.exception.ConflictoException;
 import dev.latticesystems.erp_agente360.backend_agencia360.shared.exception.RecursoNoEncontradoException;
 import dev.latticesystems.erp_agente360.backend_agencia360.shared.security.Role;
 import dev.latticesystems.erp_agente360.backend_agencia360.shared.security.UsuarioAutenticado;
@@ -195,6 +196,31 @@ public class SeguimientoProspectosService {
 			return ProspectoVista.de(prospecto);
 		}
 		throw new AccessDeniedException("Tu rol no puede pasar el prospecto a esa etapa");
+	}
+
+	/**
+	 * El vendedor captura o corrige los datos fiscales de su prospecto en Pago
+	 * (ERP-1.3). Sirve para los prospectos que llegaron a Pago antes de que se
+	 * pidieran y para corregir un error antes de que Contabilidad valide.
+	 *
+	 * @throws AccessDeniedException
+	 *             si no es Ventas (403)
+	 * @throws RecursoNoEncontradoException
+	 *             si el prospecto no existe o es de otro vendedor (404)
+	 * @throws IllegalArgumentException
+	 *             si algún dato no es válido (400)
+	 * @throws ConflictoException
+	 *             si el prospecto no está en Pago (409)
+	 */
+	@Transactional
+	public ProspectoVista capturarDatosFiscales(Long prospectoId, DatosFiscalesCapturados datosFiscales,
+			UsuarioAutenticado actor) {
+		if (!actor.tieneRol(Role.VENTAS)) {
+			throw new AccessDeniedException("Solo el vendedor captura los datos fiscales");
+		}
+		Prospecto prospecto = buscarDelVendedor(prospectoId, actor);
+		prospecto.capturarDatosFiscales(exigirDatosFiscales(datosFiscales));
+		return ProspectoVista.de(prospecto);
 	}
 
 	private static DatosFiscales exigirDatosFiscales(DatosFiscalesCapturados datosFiscales) {
