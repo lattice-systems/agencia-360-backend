@@ -15,6 +15,7 @@ import dev.latticesystems.erp_agente360.backend_agencia360.acceso.infrastructure
 import dev.latticesystems.erp_agente360.backend_agencia360.shared.AbstractIntegrationTest;
 import dev.latticesystems.erp_agente360.backend_agencia360.shared.security.JwtService;
 import dev.latticesystems.erp_agente360.backend_agencia360.shared.security.Role;
+import dev.latticesystems.erp_agente360.backend_agencia360.ventascrm.domain.DatosFiscalesDePrueba;
 import jakarta.persistence.EntityManager;
 import java.time.LocalDate;
 import java.time.ZoneId;
@@ -236,8 +237,10 @@ class LiquidacionesIntegrationTest extends AbstractIntegrationTest {
 
 	private long prospectoEnPago(String nombre) throws Exception {
 		long id = crearProspecto(nombre, "4771234567");
-		mockMvc.perform(conToken(patch(PROSPECTOS + "/{id}/etapa", id), token(vendedor))
-				.contentType(MediaType.APPLICATION_JSON).content("{\"etapa\":\"PAGO\",\"precioTotal\":489900}"))
+		mockMvc.perform(
+				conToken(patch(PROSPECTOS + "/{id}/etapa", id), token(vendedor)).contentType(MediaType.APPLICATION_JSON)
+						.content("{\"etapa\":\"PAGO\",\"precioTotal\":489900,\"datosFiscales\":"
+								+ DatosFiscalesDePrueba.JSON + "}"))
 				.andExpect(status().isOk());
 		return id;
 	}
