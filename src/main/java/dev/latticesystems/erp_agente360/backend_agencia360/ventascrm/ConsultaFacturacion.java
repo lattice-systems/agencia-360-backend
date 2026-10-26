@@ -44,9 +44,12 @@ public interface ConsultaFacturacion {
 	 * @param receptor
 	 *            datos fiscales del cliente que captura el vendedor al pasar a
 	 *            Pagos; vacío mientras no se capturen
+	 * @param cierrePendiente
+	 *            hay una solicitud de cierre esperando al Administrador; no se
+	 *            factura hasta que la resuelva (decisión del PO del 26 de octubre)
 	 */
 	record ProspectoParaFacturar(Long prospectoId, String nombre, Long vendedorId, String vendedor, BigDecimal total,
-			BigDecimal saldo, Instant enFacturacionDesde, DatosFiscales receptor) {
+			BigDecimal saldo, Instant enFacturacionDesde, DatosFiscales receptor, boolean cierrePendiente) {
 	}
 
 	/** Datos fiscales del receptor de la factura. */

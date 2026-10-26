@@ -255,6 +255,16 @@ class ProspectoTest {
 		}
 
 		@Test
+		void sinDatosFiscalesNoPasaAFacturacion() {
+			Prospecto prospecto = nuevo();
+			prospecto.moverPorVendedor(Etapa.PAGO, null, VENDEDOR, AHORA);
+
+			assertThatThrownBy(() -> prospecto.validarPago(CONTADOR, DESPUES)).isInstanceOf(ConflictoException.class)
+					.hasMessageContaining("datos fiscales");
+			assertThat(prospecto.getEtapa()).isEqualTo(Etapa.PAGO);
+		}
+
+		@Test
 		void elVendedorCapturaYCorrigeLosDatosFiscalesEnPago() {
 			Prospecto prospecto = en(Etapa.PAGO);
 

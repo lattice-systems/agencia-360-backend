@@ -181,6 +181,15 @@ class FacturasIntegrationTest extends AbstractIntegrationTest {
 	}
 
 	@Test
+	void noSeEmiteConUnaSolicitudDeCierrePendiente() throws Exception {
+		when(consultaFacturacion.paraFacturar(luis)).thenReturn(Optional.of(conCierrePendiente(luis)));
+
+		mockMvc.perform(emitir(token(facturacion), luis, sentra)).andExpect(status().isConflict())
+				.andExpect(jsonPath("$.message").value(startsWith("Tiene una solicitud de cierre pendiente")));
+		sinVenta();
+	}
+
+	@Test
 	void noSeEmiteSinLosDatosFiscalesDelCliente() throws Exception {
 		when(consultaFacturacion.paraFacturar(luis)).thenReturn(Optional.of(sinDatosFiscales(luis)));
 
@@ -264,17 +273,22 @@ class FacturasIntegrationTest extends AbstractIntegrationTest {
 
 	private ProspectoParaFacturar listo(long prospectoId) {
 		return new ProspectoParaFacturar(prospectoId, "Luis Herrera", vendedor.getId(), "Persona vendedor.facturas",
-				new BigDecimal("489900.00"), new BigDecimal("0.00"), Instant.now(), RECEPTOR);
+				new BigDecimal("489900.00"), new BigDecimal("0.00"), Instant.now(), RECEPTOR, false);
 	}
 
 	private ProspectoParaFacturar conSaldo(long prospectoId, BigDecimal saldo) {
 		return new ProspectoParaFacturar(prospectoId, "Carlos Núñez", vendedor.getId(), "Persona vendedor.facturas",
-				new BigDecimal("489900.00"), saldo, Instant.now(), RECEPTOR);
+				new BigDecimal("489900.00"), saldo, Instant.now(), RECEPTOR, false);
 	}
 
 	private ProspectoParaFacturar sinDatosFiscales(long prospectoId) {
 		return new ProspectoParaFacturar(prospectoId, "Ana López", vendedor.getId(), "Persona vendedor.facturas",
-				new BigDecimal("329900.00"), BigDecimal.ZERO, Instant.now(), null);
+				new BigDecimal("329900.00"), BigDecimal.ZERO, Instant.now(), null, false);
+	}
+
+	private ProspectoParaFacturar conCierrePendiente(long prospectoId) {
+		return new ProspectoParaFacturar(prospectoId, "Luis Herrera", vendedor.getId(), "Persona vendedor.facturas",
+				new BigDecimal("489900.00"), new BigDecimal("0.00"), Instant.now(), RECEPTOR, true);
 	}
 
 	private long prospecto(String nombre, String telefono) {
