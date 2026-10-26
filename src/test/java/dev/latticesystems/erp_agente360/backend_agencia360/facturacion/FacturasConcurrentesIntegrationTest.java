@@ -93,7 +93,7 @@ class FacturasConcurrentesIntegrationTest extends AbstractIntegrationTest {
 				"616 - Sin obligaciones fiscales");
 		when(consultaFacturacion.paraFacturar(anyLong())).thenAnswer(llamada -> Optional
 				.of(new ProspectoParaFacturar(llamada.getArgument(0), "Cliente concurrente", vendedor.getId(),
-						"Vendedor", new BigDecimal("489900.00"), BigDecimal.ZERO, Instant.now(), receptor)));
+						"Vendedor", new BigDecimal("489900.00"), BigDecimal.ZERO, Instant.now(), receptor, false)));
 	}
 
 	@AfterEach

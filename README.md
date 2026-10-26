@@ -166,7 +166,7 @@ Reglas del inventario (decisiones del PO del 13 de octubre):
 
 Reglas de la venta y la factura (ERP-1.3, Sprint 3):
 - Ya no hay apartado ni elección previa: Facturación elige una unidad **Disponible** al emitir la factura y, en la misma transacción, la unidad pasa a Vendido y se registra la venta. Se bloquean la fila del prospecto y la de la unidad; si otra factura se adelantó, responde 409.
-- No se emite si el saldo del prospecto es mayor a 0, si no tiene precio total o si faltan sus datos fiscales (RFC, nombre completo, domicilio fiscal y régimen fiscal).
+- No se emite si el saldo del prospecto es mayor a 0, si no tiene precio total, si tiene una solicitud de cierre pendiente o si faltan sus datos fiscales (RFC, nombre completo, domicilio fiscal y régimen fiscal).
 - Folio interno consecutivo (`F-000001`) y PDF guardado tal como se emitió, sin timbrado (decisión 6 del modelo de datos). El total ya incluye IVA: se desglosa subtotal + IVA 16 %.
 - Al emitir se publica `shared.eventos.FacturaEmitida`; ventascrm lo escucha para pasar el prospecto a Entrega (ERP-1.2). Cuando el vendedor finaliza, la unidad sale del inventario y la venta queda Entregada; la unidad se queda en Vendido.
 
