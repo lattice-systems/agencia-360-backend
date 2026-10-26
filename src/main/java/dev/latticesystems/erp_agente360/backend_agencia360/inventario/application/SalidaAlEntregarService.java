@@ -1,6 +1,5 @@
 package dev.latticesystems.erp_agente360.backend_agencia360.inventario.application;
 
-import dev.latticesystems.erp_agente360.backend_agencia360.inventario.domain.EstatusVenta;
 import dev.latticesystems.erp_agente360.backend_agencia360.inventario.domain.MovimientoInventario;
 import dev.latticesystems.erp_agente360.backend_agencia360.inventario.domain.Venta;
 import dev.latticesystems.erp_agente360.backend_agencia360.inventario.infrastructure.MovimientoInventarioRepository;
@@ -14,26 +13,25 @@ import org.springframework.modulith.events.ApplicationModuleListener;
 import org.springframework.stereotype.Service;
 
 /**
- * Registra la venta cuando el vendedor pasa el prospecto a Finalizado (ERP-1.0:
- * es venta cuando el vendedor llevó el proceso hasta Finalizado). La unidad que
- * eligió Facturación sale del inventario a cargo del vendedor, con la fecha de
- * entrega.
+ * Cuando el vendedor pasa el prospecto a Finalizado, la unidad sale del
+ * inventario a cargo del vendedor, con la fecha de entrega. La venta ya no se
+ * registra aquí: desde ERP-1.3 es venta al emitir la factura.
  *
  * <p>
  * Corre después del commit del cambio de etapa, en su propia transacción. Si el
  * evento llega dos veces (Modulith reintenta las publicaciones pendientes), la
- * segunda no hace nada.
+ * segunda no hace nada. La unidad se queda en Vendido.
  */
 @Service
-public class RegistroVentaService {
+public class SalidaAlEntregarService {
 
-	private static final Logger LOG = LoggerFactory.getLogger(RegistroVentaService.class);
+	private static final Logger LOG = LoggerFactory.getLogger(SalidaAlEntregarService.class);
 
 	private final VentaRepository ventaRepository;
 	private final MovimientoInventarioRepository movimientoRepository;
 	private final ApplicationEventPublisher eventos;
 
-	public RegistroVentaService(VentaRepository ventaRepository, MovimientoInventarioRepository movimientoRepository,
+	public SalidaAlEntregarService(VentaRepository ventaRepository, MovimientoInventarioRepository movimientoRepository,
 			ApplicationEventPublisher eventos) {
 		this.ventaRepository = ventaRepository;
 		this.movimientoRepository = movimientoRepository;
@@ -44,17 +42,14 @@ public class RegistroVentaService {
 	public void alFinalizar(ProspectoFinalizado finalizado) {
 		Optional<Venta> existente = ventaRepository.findByProspectoId(finalizado.prospectoId());
 		if (existente.isEmpty()) {
-			// Facturación no eligió la unidad: la venta se registra igual para no
-			// perderla.
-			LOG.warn("El prospecto {} se finalizó sin unidad elegida por Facturación", finalizado.prospectoId());
-			ventaRepository.save(Venta.registrarSinUnidad(finalizado.prospectoId(), finalizado.fechaEntrega()));
+			LOG.warn("El prospecto {} se finalizó sin factura; no sale ninguna unidad del inventario",
+					finalizado.prospectoId());
 			return;
 		}
 		Venta venta = existente.get();
-		if (venta.getEstatus() == EstatusVenta.REGISTRADA) {
+		if (!venta.entregar(finalizado.fechaEntrega()) || venta.getVehiculo() == null) {
 			return;
 		}
-		venta.registrar(finalizado.fechaEntrega());
 		movimientoRepository.save(MovimientoInventario.salidaDeVehiculo(venta.getVehiculo(), finalizado.vendedorId(),
 				finalizado.fechaEntrega()));
 		eventos.publishEvent(new VehiculoCambiado(venta.getVehiculo().getId()));

@@ -1,6 +1,7 @@
 package dev.latticesystems.erp_agente360.backend_agencia360.inventario;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
@@ -12,10 +13,14 @@ import dev.latticesystems.erp_agente360.backend_agencia360.acceso.domain.Rol;
 import dev.latticesystems.erp_agente360.backend_agencia360.acceso.domain.Usuario;
 import dev.latticesystems.erp_agente360.backend_agencia360.acceso.infrastructure.RolRepository;
 import dev.latticesystems.erp_agente360.backend_agencia360.acceso.infrastructure.UsuarioRepository;
+import dev.latticesystems.erp_agente360.backend_agencia360.inventario.VentaDeUnidades.UnidadVendida;
 import dev.latticesystems.erp_agente360.backend_agencia360.shared.AbstractIntegrationTest;
+import dev.latticesystems.erp_agente360.backend_agencia360.shared.exception.ConflictoException;
+import dev.latticesystems.erp_agente360.backend_agencia360.shared.exception.RecursoNoEncontradoException;
 import dev.latticesystems.erp_agente360.backend_agencia360.shared.security.JwtService;
 import dev.latticesystems.erp_agente360.backend_agencia360.shared.security.Role;
 import jakarta.persistence.EntityManager;
+import java.time.Instant;
 import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -29,8 +34,8 @@ import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilde
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * Venta de la unidad (ERP-1.0) de punta a punta: Facturación elige la unidad de
- * un prospecto y la unidad pasa a Vendido; la consulta de unidades la regresa a
+ * Venta de la unidad (ERP-1.3) contra la base: facturacion la vende al emitir
+ * la factura, la unidad pasa a Vendido y la consulta de unidades la regresa a
  * los demás módulos. Cada prueba se revierte al terminar.
  */
 @AutoConfigureMockMvc
@@ -58,6 +63,9 @@ class VentasIntegrationTest extends AbstractIntegrationTest {
 	@Autowired
 	private ConsultaUnidades consultaUnidades;
 
+	@Autowired
+	private VentaDeUnidades ventaDeUnidades;
+
 	private Usuario almacen;
 	private Usuario facturacion;
 	private Usuario vendedor;
@@ -70,86 +78,76 @@ class VentasIntegrationTest extends AbstractIntegrationTest {
 	}
 
 	@Test
-	void facturacionEligeUnaUnidadDisponibleYPasaAVendido() throws Exception {
+	void alVenderLaUnidadPasaAVendidoYSeRegistraLaVenta() throws Exception {
 		long sentra = altaDeVehiculo("3N1AB8CV5PY123456");
 		long prospecto = prospectoEnFacturacion("Luis Herrera", "4775550104");
 
-		mockMvc.perform(asignar(token(facturacion), prospecto, sentra)).andExpect(status().isOk())
-				.andExpect(jsonPath("$.prospectoId").value(prospecto)).andExpect(jsonPath("$.vehiculoId").value(sentra))
-				.andExpect(jsonPath("$.vin").value("3N1AB8CV5PY123456")).andExpect(jsonPath("$.modelo").value("Sentra"))
-				.andExpect(jsonPath("$.precio").value(489900.00)).andExpect(jsonPath("$.estatus").value("POR_ENTREGAR"))
-				.andExpect(jsonPath("$.asignadaEn").isNotEmpty());
+		UnidadVendida vendida = vender(prospecto, sentra);
 
+		assertThat(vendida.vehiculoId()).isEqualTo(sentra);
+		assertThat(vendida.ventaId()).isNotNull();
+		assertThat(vendida)
+				.extracting(UnidadVendida::vin, UnidadVendida::marca, UnidadVendida::modelo, UnidadVendida::version,
+						UnidadVendida::anio, UnidadVendida::color)
+				.containsExactly("3N1AB8CV5PY123456", "Nissan", "Sentra", "Advance", 2026, "Blanco");
 		assertThat(estatusDe(sentra)).isEqualTo("VENDIDO");
 		mockMvc.perform(conToken(get("/api/v1/ventas"), token(facturacion))).andExpect(status().isOk())
-				.andExpect(jsonPath("$.length()").value(1)).andExpect(jsonPath("$[0].prospectoId").value(prospecto));
+				.andExpect(jsonPath("$.length()").value(1)).andExpect(jsonPath("$[0].prospectoId").value(prospecto))
+				.andExpect(jsonPath("$[0].vehiculoId").value(sentra))
+				.andExpect(jsonPath("$[0].precio").value(489900.00))
+				.andExpect(jsonPath("$[0].estatus").value("REGISTRADA"))
+				.andExpect(jsonPath("$[0].registradaEn").isNotEmpty())
+				.andExpect(jsonPath("$[0].entregadaEn").isEmpty());
 	}
 
 	@Test
-	void alCambiarDeUnidadLaAnteriorRegresaADisponible() throws Exception {
-		long sentra = altaDeVehiculo("3N1AB8CV5PY123456");
-		long kicks = altaDeVehiculo("3N1CP5CV6RL123458");
-		long prospecto = prospectoEnFacturacion("Luis Herrera", "4775550104");
-		mockMvc.perform(asignar(token(facturacion), prospecto, sentra)).andExpect(status().isOk());
-
-		mockMvc.perform(asignar(token(facturacion), prospecto, kicks)).andExpect(status().isOk())
-				.andExpect(jsonPath("$.vehiculoId").value(kicks));
-
-		assertThat(estatusDe(kicks)).isEqualTo("VENDIDO");
-		assertThat(estatusDe(sentra)).isEqualTo("DISPONIBLE");
-		assertThat(jdbcTemplate.queryForObject("select count(*) from venta where prospecto_id = ?", Integer.class,
-				prospecto)).isEqualTo(1);
-	}
-
-	@Test
-	void unaUnidadVendidaNoSeEligeParaOtroProspecto() throws Exception {
+	void unaUnidadVendidaNoSeVendeAOtroProspecto() throws Exception {
 		long sentra = altaDeVehiculo("3N1AB8CV5PY123456");
 		long luis = prospectoEnFacturacion("Luis Herrera", "4775550104");
 		long carlos = prospectoEnFacturacion("Carlos Núñez", "4775550109");
-		mockMvc.perform(asignar(token(facturacion), luis, sentra)).andExpect(status().isOk());
+		vender(luis, sentra);
 
-		mockMvc.perform(asignar(token(facturacion), carlos, sentra)).andExpect(status().isConflict())
-				.andExpect(jsonPath("$.message").value("La unidad 3N1AB8CV5PY123456 ya no está disponible"));
+		assertThatThrownBy(() -> vender(carlos, sentra)).isInstanceOf(ConflictoException.class)
+				.hasMessage("La unidad 3N1AB8CV5PY123456 ya no está disponible");
 	}
 
 	@Test
-	void unaUnidadNoDisponibleNoSeElige() throws Exception {
+	void unaUnidadNoDisponibleNoSeVende() throws Exception {
 		long danada = altaDeVehiculo("3N6AD33A2RK123459", "NO_DISPONIBLE");
 		long prospecto = prospectoEnFacturacion("Luis Herrera", "4775550104");
 
-		mockMvc.perform(asignar(token(facturacion), prospecto, danada)).andExpect(status().isConflict());
+		assertThatThrownBy(() -> vender(prospecto, danada)).isInstanceOf(ConflictoException.class);
 		assertThat(jdbcTemplate.queryForObject("select count(*) from venta", Integer.class)).isZero();
 	}
 
 	@Test
-	void respondeNoEncontradoSiNoExisteLaUnidadOElProspecto() throws Exception {
+	void unProspectoConVentaNoCompraOtraUnidad() throws Exception {
 		long sentra = altaDeVehiculo("3N1AB8CV5PY123456");
+		long kicks = altaDeVehiculo("3N1CP5CV6RL123458");
 		long prospecto = prospectoEnFacturacion("Luis Herrera", "4775550104");
+		vender(prospecto, sentra);
 
-		mockMvc.perform(asignar(token(facturacion), prospecto, 999_999)).andExpect(status().isNotFound())
-				.andExpect(jsonPath("$.message").value("No existe el vehículo 999999"));
-		mockMvc.perform(asignar(token(facturacion), 999_999, sentra)).andExpect(status().isNotFound())
-				.andExpect(jsonPath("$.message").value("No existe el prospecto 999999"));
-		assertThat(estatusDe(sentra)).isEqualTo("DISPONIBLE");
+		assertThatThrownBy(() -> vender(prospecto, kicks)).isInstanceOf(ConflictoException.class)
+				.hasMessage("El prospecto ya tiene una unidad vendida");
+		assertThat(estatusDe(kicks)).isEqualTo("DISPONIBLE");
 	}
 
 	@Test
-	void pideLaUnidad() throws Exception {
+	void siNoExisteLaUnidadNoSeVende() throws Exception {
+		long prospecto = prospectoEnFacturacion("Luis Herrera", "4775550104");
+
+		assertThatThrownBy(() -> vender(prospecto, 999_999L)).isInstanceOf(RecursoNoEncontradoException.class)
+				.hasMessage("No existe el vehículo 999999");
+	}
+
+	@Test
+	void yaNoSeEligeLaUnidadAntesDeFacturar() throws Exception {
+		long sentra = altaDeVehiculo("3N1AB8CV5PY123456");
 		long prospecto = prospectoEnFacturacion("Luis Herrera", "4775550104");
 
 		mockMvc.perform(conToken(put("/api/v1/ventas/{id}/unidad", prospecto), token(facturacion))
-				.contentType(MediaType.APPLICATION_JSON).content("{}")).andExpect(status().isBadRequest());
-	}
-
-	@Test
-	void soloFacturacionEligeLaUnidad() throws Exception {
-		long sentra = altaDeVehiculo("3N1AB8CV5PY123456");
-		long prospecto = prospectoEnFacturacion("Luis Herrera", "4775550104");
-		Usuario admin = registrar("admin.ventas", Role.ADMINISTRADOR);
-
-		mockMvc.perform(asignar(token(almacen), prospecto, sentra)).andExpect(status().isForbidden());
-		mockMvc.perform(asignar(token(admin), prospecto, sentra)).andExpect(status().isForbidden());
-		mockMvc.perform(asignar(token(vendedor), prospecto, sentra)).andExpect(status().isForbidden());
+				.contentType(MediaType.APPLICATION_JSON).content("{\"vehiculoId\":%d}".formatted(sentra)))
+				.andExpect(status().isNotFound());
 		assertThat(estatusDe(sentra)).isEqualTo("DISPONIBLE");
 	}
 
@@ -177,11 +175,15 @@ class VentasIntegrationTest extends AbstractIntegrationTest {
 		long sentra = altaDeVehiculo("3N1AB8CV5PY123456");
 		long prospecto = prospectoEnFacturacion("Luis Herrera", "4775550104");
 		long sinUnidad = prospectoEnFacturacion("Carlos Núñez", "4775550109");
-		mockMvc.perform(asignar(token(facturacion), prospecto, sentra)).andExpect(status().isOk());
+		vender(prospecto, sentra);
 
 		assertThat(consultaUnidades.unidadDelProspecto(prospecto)).contains(new ConsultaUnidades.UnidadDelProspecto(
 				sentra, "3N1AB8CV5PY123456", "Sentra", 2026, "Advance", "Nissan"));
 		assertThat(consultaUnidades.unidadDelProspecto(sinUnidad)).isEmpty();
+	}
+
+	private UnidadVendida vender(long prospectoId, long vehiculoId) {
+		return ventaDeUnidades.vender(prospectoId, vehiculoId, facturacion.getId(), Instant.now());
 	}
 
 	private long prospectoEnFacturacion(String nombre, String telefono) throws Exception {
@@ -217,11 +219,6 @@ class VentasIntegrationTest extends AbstractIntegrationTest {
 	private String estatusDe(long vehiculoId) {
 		entityManager.flush();
 		return jdbcTemplate.queryForObject("select estatus from vehiculo where id = ?", String.class, vehiculoId);
-	}
-
-	private static MockHttpServletRequestBuilder asignar(String token, long prospectoId, long vehiculoId) {
-		return conToken(put("/api/v1/ventas/{id}/unidad", prospectoId), token).contentType(MediaType.APPLICATION_JSON)
-				.content("{\"vehiculoId\":%d}".formatted(vehiculoId));
 	}
 
 	private Usuario registrar(String usuario, Role rol) {

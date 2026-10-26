@@ -5,20 +5,16 @@ import static org.assertj.core.api.Assertions.assertThat;
 import dev.latticesystems.erp_agente360.backend_agencia360.acceso.domain.Usuario;
 import dev.latticesystems.erp_agente360.backend_agencia360.acceso.infrastructure.RolRepository;
 import dev.latticesystems.erp_agente360.backend_agencia360.acceso.infrastructure.UsuarioRepository;
-import dev.latticesystems.erp_agente360.backend_agencia360.inventario.application.AsignacionUnidadService;
 import dev.latticesystems.erp_agente360.backend_agencia360.inventario.domain.Vehiculo;
 import dev.latticesystems.erp_agente360.backend_agencia360.inventario.infrastructure.VehiculoRepository;
 import dev.latticesystems.erp_agente360.backend_agencia360.shared.AbstractIntegrationTest;
 import dev.latticesystems.erp_agente360.backend_agencia360.shared.exception.ConflictoException;
-import dev.latticesystems.erp_agente360.backend_agencia360.shared.security.Role;
-import dev.latticesystems.erp_agente360.backend_agencia360.shared.security.UsuarioAutenticado;
 import dev.latticesystems.erp_agente360.backend_agencia360.ventascrm.domain.Prospecto;
 import dev.latticesystems.erp_agente360.backend_agencia360.ventascrm.infrastructure.ProspectoRepository;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Set;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
@@ -30,19 +26,23 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.transaction.support.TransactionTemplate;
 
 /**
- * Comprueba el bloqueo de fila de la unidad (ERP-1.0): si varias personas de
- * Facturación eligen la misma unidad al mismo tiempo para prospectos distintos,
- * solo una venta se la queda. Confirma sus transacciones, así que borra sus
- * datos al terminar.
+ * Comprueba el bloqueo de fila de la unidad (ERP-1.3): si varias facturas
+ * venden la misma unidad al mismo tiempo a prospectos distintos, solo una venta
+ * se la queda. Cada venta corre en su transacción, como en la emisión, y se
+ * confirma, así que la prueba borra sus datos al terminar.
  */
 class VentasConcurrentesIntegrationTest extends AbstractIntegrationTest {
 
 	private static final int PROSPECTOS = 8;
 
 	@Autowired
-	private AsignacionUnidadService asignacionService;
+	private VentaDeUnidades ventaDeUnidades;
+
+	@Autowired
+	private TransactionTemplate transaccion;
 
 	@Autowired
 	private VehiculoRepository vehiculoRepository;
@@ -92,9 +92,7 @@ class VentasConcurrentesIntegrationTest extends AbstractIntegrationTest {
 	}
 
 	@Test
-	void soloUnaVentaSeQuedaConLaUnidadAunqueLaElijanAlMismoTiempo() throws Exception {
-		UsuarioAutenticado actor = new UsuarioAutenticado(facturacion.getId(), facturacion.getUsuario(),
-				Set.of(Role.FACTURACION));
+	void soloUnaVentaSeQuedaConLaUnidadAunqueLaVendanAlMismoTiempo() throws Exception {
 		CountDownLatch salida = new CountDownLatch(1);
 		ExecutorService hilos = Executors.newFixedThreadPool(4);
 		int vendidas = 0;
@@ -104,7 +102,8 @@ class VentasConcurrentesIntegrationTest extends AbstractIntegrationTest {
 			for (Long prospectoId : prospectos) {
 				resultados.add(hilos.submit(() -> {
 					salida.await();
-					return asignacionService.asignar(prospectoId, unidad.getId(), actor);
+					return transaccion.execute(estado -> ventaDeUnidades.vender(prospectoId, unidad.getId(),
+							facturacion.getId(), Instant.now()));
 				}));
 			}
 			salida.countDown();

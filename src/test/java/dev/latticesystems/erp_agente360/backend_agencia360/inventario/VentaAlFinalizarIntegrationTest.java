@@ -3,7 +3,6 @@ package dev.latticesystems.erp_agente360.backend_agencia360.inventario;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.jayway.jsonpath.JsonPath;
@@ -28,13 +27,15 @@ import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
+import org.springframework.transaction.support.TransactionTemplate;
 
 /**
- * ERP-1.0 de punta a punta: Facturación elige la unidad, el vendedor finaliza
- * el prospecto en el CRM y, con el evento ProspectoFinalizado, inventario
- * registra la venta y la salida de la unidad. El evento se atiende después del
- * commit y en otro hilo, así que la prueba confirma sus datos, espera el
- * resultado y borra todo al terminar.
+ * Entrega de la unidad de punta a punta: la unidad se vendió al emitir la
+ * factura (ERP-1.3), el vendedor finaliza el prospecto en el CRM y, con el
+ * evento ProspectoFinalizado, inventario registra la salida de la unidad y la
+ * venta queda entregada. El evento se atiende después del commit y en otro
+ * hilo, así que la prueba confirma sus datos, espera el resultado y borra todo
+ * al terminar.
  */
 @AutoConfigureMockMvc
 class VentaAlFinalizarIntegrationTest extends AbstractIntegrationTest {
@@ -55,6 +56,12 @@ class VentaAlFinalizarIntegrationTest extends AbstractIntegrationTest {
 
 	@Autowired
 	private JdbcTemplate jdbcTemplate;
+
+	@Autowired
+	private VentaDeUnidades ventaDeUnidades;
+
+	@Autowired
+	private TransactionTemplate transaccion;
 
 	private Usuario almacen;
 	private Usuario facturacion;
@@ -93,26 +100,26 @@ class VentaAlFinalizarIntegrationTest extends AbstractIntegrationTest {
 	}
 
 	@Test
-	void alFinalizarSeRegistraLaVentaYLaUnidadSaleDelInventario() throws Exception {
+	void alFinalizarLaUnidadSaleDelInventarioYLaVentaQuedaEntregada() throws Exception {
 		long sentra = altaDeVehiculo("3N1AB8CV5PY188888");
 		long prospecto = prospectoEn("Luis Herrera", "4775550188", "FACTURACION");
-		mockMvc.perform(conToken(put("/api/v1/ventas/{id}/unidad", prospecto), token(facturacion))
-				.contentType(MediaType.APPLICATION_JSON).content("{\"vehiculoId\":%d}".formatted(sentra)))
-				.andExpect(status().isOk());
+		transaccion.executeWithoutResult(
+				estado -> ventaDeUnidades.vender(prospecto, sentra, facturacion.getId(), Instant.now()));
 		jdbcTemplate.update("update prospecto set etapa = 'ENTREGA' where id = ?", prospecto);
 
 		finalizar(prospecto);
 
 		Map<String, Object> venta = esperar(() -> {
 			List<Map<String, Object>> filas = jdbcTemplate.queryForList(
-					"select estatus, registrada_en from venta where prospecto_id = ? and estatus = 'REGISTRADA'",
+					"select estatus, entregada_en from venta where prospecto_id = ? and estatus = 'ENTREGADA'",
 					prospecto);
 			return filas.isEmpty() ? null : filas.get(0);
 		});
-		assertThat(venta.get("registrada_en")).isNotNull();
-		Map<String, Object> salida = jdbcTemplate.queryForMap(
-				"select responsable_id, cantidad from movimiento_inventario where vehiculo_id = ? and tipo = 'SALIDA'",
-				sentra);
+		assertThat(venta.get("entregada_en")).isNotNull();
+		Map<String, Object> salida = esperar(() -> jdbcTemplate
+				.queryForList("select responsable_id, cantidad from movimiento_inventario where vehiculo_id = ? "
+						+ "and tipo = 'SALIDA'", sentra)
+				.stream().findFirst().orElse(null));
 		assertThat(((Number) salida.get("responsable_id")).longValue()).isEqualTo(vendedor.getId());
 		assertThat(((Number) salida.get("cantidad")).intValue()).isEqualTo(1);
 		assertThat(jdbcTemplate.queryForObject("select estatus from vehiculo where id = ?", String.class, sentra))
@@ -120,18 +127,18 @@ class VentaAlFinalizarIntegrationTest extends AbstractIntegrationTest {
 	}
 
 	@Test
-	void sinUnidadElegidaLaVentaSeRegistraSinVehiculo() throws Exception {
+	void sinFacturaNoSeRegistraVentaAlFinalizar() throws Exception {
 		long prospecto = prospectoEn("Carlos Núñez", "4775550189", "ENTREGA");
 
 		finalizar(prospecto);
 
-		Map<String, Object> venta = esperar(() -> {
-			List<Map<String, Object>> filas = jdbcTemplate
-					.queryForList("select estatus, vehiculo_id from venta where prospecto_id = ?", prospecto);
-			return filas.isEmpty() ? null : filas.get(0);
-		});
-		assertThat(venta.get("estatus")).isEqualTo("REGISTRADA");
-		assertThat(venta.get("vehiculo_id")).isNull();
+		// Se espera al otro listener del evento (clientes) para saber que ya se
+		// atendió.
+		esperar(() -> jdbcTemplate.queryForList("select id from cliente where prospecto_id = ?", prospecto).stream()
+				.findFirst().orElse(null));
+		Thread.sleep(300);
+		assertThat(jdbcTemplate.queryForObject("select count(*) from venta where prospecto_id = ?", Integer.class,
+				prospecto)).isZero();
 	}
 
 	private void finalizar(long prospecto) throws Exception {
