@@ -60,7 +60,7 @@ public class ConsultaFacturacionService implements ConsultaFacturacion {
 				.map(p -> new ProspectoParaFacturar(p.getId(), p.getNombre(), p.getVendedorId(),
 						vendedores.get(p.getVendedorId()), p.getPrecioTotal(),
 						saldo(p.getPrecioTotal(), pagado.getOrDefault(p.getId(), BigDecimal.ZERO)),
-						p.getEtapaActualizadaEn(), receptor(p)))
+						p.getEtapaActualizadaEn(), receptor(p), p.isCierrePendiente()))
 				.toList();
 	}
 
