@@ -194,6 +194,35 @@ class SeguimientoProspectosServiceTest {
 	}
 
 	@Test
+	void elVendedorCorrigeLosDatosFiscalesDeSuProspectoEnPago() {
+		Prospecto ana = prospecto("Ana López", 7L);
+		DatosFiscalesDePrueba.pasarAPago(ana, 7L, REGISTRO);
+		when(prospectoRepository.findByIdAndVendedorId(1L, 7L)).thenReturn(Optional.of(ana));
+
+		ProspectoVista vista = service.capturarDatosFiscales(1L,
+				new DatosFiscalesCapturados("ABC010203XY9", "Autopartes del Bajío SA de CV", "León, Gto.", "601"),
+				VENDEDOR);
+
+		assertThat(vista.datosFiscales().rfc()).isEqualTo("ABC010203XY9");
+		assertThat(vista.datosFiscales().regimenFiscalDescripcion()).isEqualTo("General de Ley Personas Morales");
+	}
+
+	@Test
+	void soloElVendedorCapturaLosDatosFiscales() {
+		assertThatThrownBy(() -> service.capturarDatosFiscales(1L, DATOS_ANA, GERENTE))
+				.isInstanceOf(AccessDeniedException.class);
+		verifyNoInteractions(prospectoRepository);
+	}
+
+	@Test
+	void unVendedorNoCapturaDatosFiscalesDeUnProspectoAjeno() {
+		when(prospectoRepository.findByIdAndVendedorId(1L, 7L)).thenReturn(Optional.empty());
+
+		assertThatThrownBy(() -> service.capturarDatosFiscales(1L, DATOS_ANA, VENDEDOR))
+				.isInstanceOf(RecursoNoEncontradoException.class);
+	}
+
+	@Test
 	void sinPrecioTotalNoSePasaAPago() {
 		Prospecto ana = prospecto("Ana López", 7L);
 		when(prospectoRepository.findByIdAndVendedorId(1L, 7L)).thenReturn(Optional.of(ana));

@@ -14,6 +14,7 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -65,5 +66,15 @@ public class SeguimientoProspectoController {
 		return seguimientoProspectosService.cambiarEtapa(id, request.etapa(), request.motivoCierre(),
 				Boolean.TRUE.equals(request.clienteRechazaApp()), request.correoCliente(), request.precioTotal(),
 				request.datosFiscales() == null ? null : request.datosFiscales().capturados(), actor);
+	}
+
+	@PutMapping("/{id}/datos-fiscales")
+	@PreAuthorize("hasRole('VENTAS')")
+	@Operation(summary = "Capturar o corregir los datos fiscales del cliente", description = "Solo el vendedor dueño "
+			+ "y mientras el prospecto está en Pago (ERP-1.3). Sin ellos Contabilidad no puede validar los pagos. "
+			+ "Un prospecto fuera de Pago responde 409; uno ajeno, 404.")
+	public ProspectoVista capturarDatosFiscales(@PathVariable Long id, @Valid @RequestBody DatosFiscalesRequest request,
+			@AuthenticationPrincipal UsuarioAutenticado actor) {
+		return seguimientoProspectosService.capturarDatosFiscales(id, request.capturados(), actor);
 	}
 }
