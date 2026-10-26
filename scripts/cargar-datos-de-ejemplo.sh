@@ -304,5 +304,125 @@ if [ -n "$PROSPECTO_ID" ]; then
   avanzar_etapas "$TOKEN_VENDEDOR2" "$PROSPECTO_ID" "FINALIZADO" ""
 fi
 
+# Cliente de la app CareCar con sus vehículos (APP-2.1 y APP-3.1), servicios en su
+# expediente (ERP-3.0) y el manual de uno de sus vehículos.
+CLIENTE_APP_CORREO="laura.mendez@example.com"
+VIN_MARCH="3N1CK3CD7RL900001"
+VIN_SENTRA="3N1AB8CV9RY900002"
+
+# Fecha de hace $1 días, AAAA-MM-DD (GNU date o BSD/macOS date).
+fecha_hace_dias() {
+  date -d "$1 days ago" +%Y-%m-%d 2>/dev/null || date -v-"$1"d +%Y-%m-%d
+}
+
+# Id del vehículo con ese VIN en el expediente. $1 VIN.
+vehiculo_por_vin() {
+  pedir GET "/api/v1/expedientes?vin=$1" "$TOKEN_SERVICIO"
+  [ "$CODIGO" = 200 ] || fallar "buscar el vehículo $1"
+  printf '%s' "$RESPUESTA" | sed -n 's/^\[{"id":\([0-9][0-9]*\).*/\1/p'
+}
+
+# Registra un servicio si el vehículo todavía no tiene. $1 id del vehículo,
+# $2 días atrás, $3 kilometraje, $4 renglones en JSON.
+registrar_servicio() {
+  pedir POST "/api/v1/expedientes/$1/servicios" "$TOKEN_SERVICIO" \
+    "{\"fecha\":\"$(fecha_hace_dias "$2")\",\"kilometraje\":$3,\"renglones\":$4}"
+  [ "$CODIGO" = 201 ] || fallar "registrar el servicio del vehículo $1"
+}
+
+echo "Cliente de la app con sus vehículos (Gerente de marketing):"
+pedir POST /api/v1/clientes "$TOKEN_GERENTE" \
+  "{\"nombre\":\"Laura Méndez\",\"correo\":\"$CLIENTE_APP_CORREO\",\"telefono\":\"477 555 0120\"}"
+case "$CODIGO" in
+  201)
+    CLIENTE_APP_ID=$(id_de_la_respuesta)
+    echo "  creada      Laura Méndez ($CLIENTE_APP_CORREO)"
+    ;;
+  409)
+    pedir GET "/api/v1/clientes?buscar=$CLIENTE_APP_CORREO" "$TOKEN_GERENTE"
+    CLIENTE_APP_ID=$(printf '%s' "$RESPUESTA" | sed -n 's/^\[{"id":\([0-9][0-9]*\).*/\1/p')
+    [ -n "$CLIENTE_APP_ID" ] || fallar "encontrar a Laura Méndez"
+    echo "  ya existía  Laura Méndez ($CLIENTE_APP_CORREO)"
+    ;;
+  *) fallar "registrar a Laura Méndez" ;;
+esac
+pedir POST "/api/v1/clientes/$CLIENTE_APP_ID/vehiculos" "$TOKEN_GERENTE" \
+  "{\"vin\":\"$VIN_MARCH\",\"marca\":\"Nissan\",\"modelo\":\"March\",\"anio\":2026,\"version\":\"Advance\"}"
+[ "$CODIGO" = 200 ] || fallar "asignar el March a Laura Méndez"
+pedir POST "/api/v1/clientes/$CLIENTE_APP_ID/vehiculos" "$TOKEN_GERENTE" \
+  "{\"vin\":\"$VIN_SENTRA\",\"marca\":\"Nissan\",\"modelo\":\"Sentra\",\"anio\":2025,\"version\":\"Sense\"}"
+[ "$CODIGO" = 200 ] || fallar "asignar el Sentra a Laura Méndez"
+echo "              con un March 2026 y un Sentra 2025"
+pedir POST "/api/v1/clientes/$CLIENTE_APP_ID/cuenta-app" "$TOKEN_GERENTE"
+case "$CODIGO" in
+  201) echo "              cuenta de la app abierta: la contraseña temporal llegó a Mailpit" ;;
+  409) echo "              ya tenía cuenta de la app" ;;
+  *) fallar "abrir la cuenta de la app de Laura Méndez" ;;
+esac
+
+echo "Servicios en el expediente (Servicio):"
+TOKEN_SERVICIO=$(iniciar_sesion servicio1 Servicio123 ERP)
+ID_MARCH=$(vehiculo_por_vin "$VIN_MARCH")
+ID_SENTRA=$(vehiculo_por_vin "$VIN_SENTRA")
+[ -n "$ID_MARCH" ] && [ -n "$ID_SENTRA" ] || fallar "encontrar los vehículos de Laura Méndez"
+pedir GET "/api/v1/expedientes/$ID_MARCH" "$TOKEN_SERVICIO"
+if grep -q '"servicios":\[\]' <<<"$RESPUESTA"; then
+  pedir PATCH "/api/v1/expedientes/$ID_MARCH" "$TOKEN_SERVICIO" '{"placas":"GTO-123-A","kilometraje":10250}'
+  [ "$CODIGO" = 200 ] || fallar "corregir el March de Laura Méndez"
+  registrar_servicio "$ID_MARCH" 150 5100 \
+    '[{"tipo":"MANO_DE_OBRA","concepto":"Servicio de 5,000 km","cantidad":1,"precioUnitario":1450.00},
+      {"tipo":"REFACCION","concepto":"Filtro de aceite","cantidad":1,"precioUnitario":149.00},
+      {"tipo":"REFACCION","concepto":"Aceite sintético 5W-30 (litro)","cantidad":4,"precioUnitario":239.00}]'
+  registrar_servicio "$ID_MARCH" 10 10250 \
+    '[{"tipo":"MANO_DE_OBRA","concepto":"Servicio de 10,000 km","cantidad":1,"precioUnitario":2350.00},
+      {"tipo":"REFACCION","concepto":"Filtro de aire","cantidad":1,"precioUnitario":199.00},
+      {"tipo":"REFACCION","concepto":"Bujía de iridio","cantidad":4,"precioUnitario":259.00}]'
+  echo "  creados     2 servicios del March ($VIN_MARCH)"
+else
+  echo "  ya existían los servicios del March ($VIN_MARCH)"
+fi
+pedir GET "/api/v1/expedientes/$ID_SENTRA" "$TOKEN_SERVICIO"
+if grep -q '"servicios":\[\]' <<<"$RESPUESTA"; then
+  registrar_servicio "$ID_SENTRA" 30 8300 \
+    '[{"tipo":"MANO_DE_OBRA","concepto":"Cambio de balatas delanteras","cantidad":1,"precioUnitario":650.00},
+      {"tipo":"REFACCION","concepto":"Balatas delanteras","cantidad":1,"precioUnitario":890.00}]'
+  echo "  creado      1 servicio del Sentra ($VIN_SENTRA)"
+else
+  echo "  ya existía  el servicio del Sentra ($VIN_SENTRA)"
+fi
+
+echo "Manual del March 2026 (Gerente de marketing):"
+# Con MANUAL_MARCH_PDF se sube un PDF real; si no, uno de ejemplo de una página.
+MANUAL_TMP=$(mktemp)
+trap 'rm -f "$RESPUESTA_TMP" "$MANUAL_TMP"' EXIT
+if [ -n "${MANUAL_MARCH_PDF:-}" ]; then
+  cp "$MANUAL_MARCH_PDF" "$MANUAL_TMP"
+else
+  base64 -d >"$MANUAL_TMP" <<'PDF'
+JVBERi0xLjQKMSAwIG9iago8PCAvVHlwZSAvQ2F0YWxvZyAvUGFnZXMgMiAwIFIgPj4KZW5kb2Jq
+CjIgMCBvYmoKPDwgL1R5cGUgL1BhZ2VzIC9LaWRzIFszIDAgUl0gL0NvdW50IDEgPj4KZW5kb2Jq
+CjMgMCBvYmoKPDwgL1R5cGUgL1BhZ2UgL1BhcmVudCAyIDAgUiAvTWVkaWFCb3ggWzAgMCA2MTIg
+NzkyXSAvQ29udGVudHMgNCAwIFIgL1Jlc291cmNlcyA8PCAvRm9udCA8PCAvRjEgNSAwIFIgPj4g
+Pj4gPj4KZW5kb2JqCjQgMCBvYmoKPDwgL0xlbmd0aCAxNDggPj4Kc3RyZWFtCkJUIC9GMSAxOCBU
+ZiA3MiA3MjAgVGQgKE5pc3NhbiBNYXJjaCAyMDI2IE1hbnVhbCBkZSBwcm9waWV0YXJpbykgVGog
+MCAtMjggVGQgL0YxIDEyIFRmIChFamVtcGxvIHBhcmEgZGVzYXJyb2xsby4gUmVlbXBsYXphbG8g
+cG9yIGVsIFBERiByZWFsLikgVGogRVQKZW5kc3RyZWFtCmVuZG9iago1IDAgb2JqCjw8IC9UeXBl
+IC9Gb250IC9TdWJ0eXBlIC9UeXBlMSAvQmFzZUZvbnQgL0hlbHZldGljYSA+PgplbmRvYmoKeHJl
+ZgowIDYKMDAwMDAwMDAwMCA2NTUzNSBmIAowMDAwMDAwMDA5IDAwMDAwIG4gCjAwMDAwMDAwNTgg
+MDAwMDAgbiAKMDAwMDAwMDExNSAwMDAwMCBuIAowMDAwMDAwMjQxIDAwMDAwIG4gCjAwMDAwMDA0
+NDAgMDAwMDAgbiAKdHJhaWxlcgo8PCAvU2l6ZSA2IC9Sb290IDEgMCBSID4+CnN0YXJ0eHJlZgo1
+MTAKJSVFT0YK
+PDF
+fi
+if ! CODIGO=$(curl -sS -o "$RESPUESTA_TMP" -w '%{http_code}' -X POST "$API/api/v1/manuales" \
+  -H "Authorization: Bearer $TOKEN_GERENTE" -F marca=Nissan -F modelo=March -F anio=2026 \
+  -F "archivo=@$MANUAL_TMP;type=application/pdf;filename=nissan-march-2026.pdf"); then
+  echo "No hubo respuesta de la API en $API. ¿Está corriendo?" >&2
+  exit 1
+fi
+RESPUESTA=$(cat "$RESPUESTA_TMP")
+[ "$CODIGO" = 200 ] || fallar "subir el manual del March 2026"
+echo "  subido      Nissan March 2026 Manual de propietario"
+
 echo
 echo "Listo. Qué demuestra cada dato: docs/datos-de-ejemplo.md. Contraseñas: README, sección 5.6."
