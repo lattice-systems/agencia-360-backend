@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -376,6 +377,52 @@ class ProspectosIntegrationTest extends AbstractIntegrationTest {
 	}
 
 	@Test
+	void elVendedorCorrigeLosDatosFiscalesSoloMientrasElProspectoEstaEnPago() throws Exception {
+		Usuario vendedor = registrar("vendedor1", Role.VENTAS);
+		long enPago = crearProspecto(vendedor, "Ana López", "4771234567", null);
+		long enVisita = crearProspecto(vendedor, "Luis Pérez", "4771234568", null);
+		mockMvc.perform(cambioDeEtapa(token(vendedor), enPago, "PAGO")).andExpect(status().isOk());
+		String corregidos = "{\"rfc\":\"abc010203xy9\",\"nombre\":\"Autopartes del Bajío SA de CV\"," + "\"domicilio\":"
+				+ DatosFiscalesDePrueba.DOMICILIO_JSON + ",\"regimenFiscal\":\"601\"}";
+
+		mockMvc.perform(datosFiscales(token(vendedor), enPago, corregidos)).andExpect(status().isOk())
+				.andExpect(jsonPath("$.datosFiscales.rfc").value("ABC010203XY9"))
+				.andExpect(jsonPath("$.datosFiscales.regimenFiscal").value("601"));
+		mockMvc.perform(datosFiscales(token(vendedor), enVisita, corregidos)).andExpect(status().isConflict())
+				.andExpect(jsonPath("$.message")
+						.value("Los datos fiscales se capturan mientras el prospecto está en Pago"));
+		mockMvc.perform(datosFiscales(token(registrar("vendedor2", Role.VENTAS)), enPago, corregidos))
+				.andExpect(status().isNotFound());
+		mockMvc.perform(datosFiscales(token(registrar("gerente1", Role.GERENTE_MARKETING)), enPago, corregidos))
+				.andExpect(status().isForbidden());
+		mockMvc.perform(datosFiscales(token(vendedor), enPago, "{\"rfc\":\"ABC010203XY9\"}"))
+				.andExpect(status().isBadRequest());
+	}
+
+	@Test
+	void facturacionCorrigeLosDatosFiscalesSoloMientrasElProspectoEstaEnFacturacion() throws Exception {
+		Usuario vendedor = registrar("vendedor1", Role.VENTAS);
+		String facturista = token(registrar("facturacion1", Role.FACTURACION));
+		long enFacturacion = crearProspecto(vendedor, "Ana López", "4771234567", null);
+		long enPago = crearProspecto(vendedor, "Luis Pérez", "4771234568", null);
+		mockMvc.perform(cambioDeEtapa(token(vendedor), enFacturacion, "PAGO")).andExpect(status().isOk());
+		mockMvc.perform(cambioDeEtapa(token(vendedor), enPago, "PAGO")).andExpect(status().isOk());
+		entityManager.flush();
+		jdbcTemplate.update("update prospecto set etapa = 'FACTURACION' where id = ?", enFacturacion);
+		entityManager.clear();
+		String corregidos = "{\"rfc\":\"LOHA850101AB2\",\"nombre\":\"Ana López Hernández\",\"domicilio\":"
+				+ DatosFiscalesDePrueba.DOMICILIO_JSON + ",\"regimenFiscal\":\"612\"}";
+
+		mockMvc.perform(datosFiscales(facturista, enFacturacion, corregidos)).andExpect(status().isOk())
+				.andExpect(jsonPath("$.datosFiscales.rfc").value("LOHA850101AB2"))
+				.andExpect(jsonPath("$.datosFiscales.domicilio.codigoPostal").value("37000"));
+		mockMvc.perform(datosFiscales(facturista, enPago, corregidos)).andExpect(status().isConflict())
+				.andExpect(jsonPath("$.message")
+						.value("Facturación corrige los datos fiscales mientras el prospecto está en Facturación"));
+		mockMvc.perform(datosFiscales(token(vendedor), enFacturacion, corregidos)).andExpect(status().isConflict());
+	}
+
+	@Test
 	void contabilidadYaNoPasaDePagoAFacturacionSinValidarLosPagos() throws Exception {
 		Usuario vendedor = registrar("vendedor1", Role.VENTAS);
 		Usuario contador = registrar("contabilidad1", Role.CONTABILIDAD);
@@ -608,6 +655,11 @@ class ProspectosIntegrationTest extends AbstractIntegrationTest {
 					"{\"etapa\":\"PAGO\",\"precioTotal\":489900,\"datosFiscales\":" + DatosFiscalesDePrueba.JSON + "}");
 		}
 		return cambioDeEtapaSinPrecio(token, id, etapa);
+	}
+
+	private static MockHttpServletRequestBuilder datosFiscales(String token, long id, String cuerpo) {
+		return conToken(put(URL + "/{id}/datos-fiscales", id), token).contentType(MediaType.APPLICATION_JSON)
+				.content(cuerpo);
 	}
 
 	private static MockHttpServletRequestBuilder cambioDeEtapaSinPrecio(String token, long id, String etapa) {

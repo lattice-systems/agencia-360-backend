@@ -275,6 +275,21 @@ class ProspectoTest {
 			assertThat(prospecto.getDatosFiscales().getRegimen()).isEqualTo(RegimenFiscal.GENERAL_PERSONAS_MORALES);
 		}
 
+		@Test
+		void facturacionCorrigeLosDatosFiscalesSoloEnFacturacion() {
+			Prospecto prospecto = en(Etapa.FACTURACION);
+			DatosFiscales corregidos = DatosFiscales.de("ABC010203XY9", "Autopartes del Bajío SA de CV",
+					DatosFiscalesDePrueba.domicilioDeAna(), "601");
+
+			prospecto.corregirDatosFiscalesEnFacturacion(corregidos);
+
+			assertThat(prospecto.getDatosFiscales().getRfc()).isEqualTo("ABC010203XY9");
+			assertThatThrownBy(() -> en(Etapa.PAGO).corregirDatosFiscalesEnFacturacion(corregidos))
+					.isInstanceOf(ConflictoException.class);
+			assertThatThrownBy(() -> en(Etapa.ENTREGA).corregirDatosFiscalesEnFacturacion(corregidos))
+					.isInstanceOf(ConflictoException.class);
+		}
+
 		@ParameterizedTest
 		@EnumSource(value = Etapa.class, names = {"COTIZACION", "FACTURACION", "ENTREGA"})
 		void losDatosFiscalesSoloSeCapturanEnPago(Etapa etapa) {

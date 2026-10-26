@@ -274,6 +274,20 @@ public class Prospecto extends Auditable {
 	}
 
 	/**
+	 * Facturación corrige los datos fiscales del cliente antes de emitir la factura
+	 * (ERP-1.3, decisión del PO del 26 de octubre).
+	 *
+	 * @throws ConflictoException
+	 *             si el prospecto no está en Facturación
+	 */
+	public void corregirDatosFiscalesEnFacturacion(DatosFiscales datos) {
+		Objects.requireNonNull(datos, "datos");
+		exigirEtapa(Etapa.FACTURACION,
+				"Facturación corrige los datos fiscales mientras el prospecto está en Facturación");
+		this.datosFiscales = datos;
+	}
+
+	/**
 	 * Guarda el correo del cliente al finalizar, si faltaba o venía mal (CRM-1.4:
 	 * sin correo no se crea su cuenta de la app).
 	 *
