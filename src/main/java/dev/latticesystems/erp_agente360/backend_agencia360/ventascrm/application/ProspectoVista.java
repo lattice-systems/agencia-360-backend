@@ -21,13 +21,16 @@ import java.time.Instant;
  *            hay una solicitud de cierre esperando al Administrador
  * @param precioTotal
  *            precio total de la venta; lo captura el vendedor al pasar a Pago
+ * @param datosFiscales
+ *            datos fiscales del cliente para la factura (ERP-1.3); los captura
+ *            el vendedor al pasar a Pago. Nulos si todavía no los tiene
  * @param vehiculo
  *            solo en los finalizados: la unidad que eligió Facturación
  *            (CRM-1.4); nulo si todavía no tiene
  */
 public record ProspectoVista(Long id, String nombre, String telefono, String correo, Etapa etapa, Long vendedorId,
 		Instant creadoEn, Instant ultimoCambio, MotivoCierre motivoCierre, Etapa ultimaEtapa, boolean cierrePendiente,
-		BigDecimal precioTotal, VehiculoVendido vehiculo) {
+		BigDecimal precioTotal, DatosFiscalesVista datosFiscales, VehiculoVendido vehiculo) {
 
 	/**
 	 * Unidad vendida, como se muestra en Finalizados. En pantalla {@code modelo} es
@@ -44,6 +47,7 @@ public record ProspectoVista(Long id, String nombre, String telefono, String cor
 		return new ProspectoVista(prospecto.getId(), prospecto.getNombre(), prospecto.getTelefono(),
 				prospecto.getCorreo(), prospecto.getEtapa(), prospecto.getVendedorId(), prospecto.getCreatedAt(),
 				prospecto.getEtapaActualizadaEn(), prospecto.getMotivoCierre(), prospecto.getUltimaEtapa(),
-				prospecto.isCierrePendiente(), prospecto.getPrecioTotal(), vehiculo);
+				prospecto.isCierrePendiente(), prospecto.getPrecioTotal(),
+				DatosFiscalesVista.de(prospecto.getDatosFiscales()), vehiculo);
 	}
 }

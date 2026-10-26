@@ -2,6 +2,7 @@ package dev.latticesystems.erp_agente360.backend_agencia360.ventascrm.web;
 
 import dev.latticesystems.erp_agente360.backend_agencia360.ventascrm.domain.Etapa;
 import dev.latticesystems.erp_agente360.backend_agencia360.ventascrm.domain.MotivoCierre;
+import jakarta.validation.Valid;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
@@ -24,7 +25,11 @@ import java.math.BigDecimal;
  *            solo al pasar a {@code FINALIZADO}: el correo que le faltaba al
  *            prospecto. Sin correo solo se finaliza si el cliente no quiere la
  *            app
+ * @param datosFiscales
+ *            solo al pasar a {@code PAGO}, y obligatorios: los datos fiscales
+ *            del cliente para la factura (ERP-1.3)
  */
 public record CambiarEtapaRequest(@NotNull Etapa etapa, MotivoCierre motivoCierre, Boolean clienteRechazaApp,
-		@Email @Size(max = 120) String correoCliente, BigDecimal precioTotal) {
+		@Email @Size(max = 120) String correoCliente, BigDecimal precioTotal,
+		@Valid DatosFiscalesRequest datosFiscales) {
 }

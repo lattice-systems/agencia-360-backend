@@ -72,7 +72,7 @@ Qué se puede probar:
 
 ## Prospectos
 
-Los registran los vendedores desde el CRM; cada cambio de etapa queda en el historial. El script avanza cada prospecto etapa por etapa, con el usuario al que le corresponde cada una (decisión del PO del 12 de octubre): el vendedor hasta Pago; Caja registra y envía un pago de ejemplo y Contabilidad lo valida, con lo que pasa a Facturación (ERP-1.1); Facturación lo pasa a Entrega y otra vez el vendedor lo finaliza.
+Los registran los vendedores desde el CRM; cada cambio de etapa queda en el historial. El script avanza cada prospecto etapa por etapa, con el usuario al que le corresponde cada una (decisión del PO del 12 de octubre): el vendedor hasta Pago, donde captura el precio total y los datos fiscales del cliente (RFC de ejemplo `EJEM850101AB1`, ERP-1.3); Caja registra y envía un pago de ejemplo y Contabilidad lo valida, con lo que pasa a Facturación (ERP-1.1); Facturación lo pasa a Entrega y otra vez el vendedor lo finaliza.
 
 | Prospecto | Teléfono | Correo | Vendedor | Etapa | Notas |
 |---|---|---|---|---|---|
