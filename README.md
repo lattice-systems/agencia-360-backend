@@ -109,7 +109,7 @@ src/main/java/dev/latticesystems/erp_agente360/backend_agencia360/
 ├── clientes/        # Clientes de la agencia y sus vehículos — CRM-1.5
 ├── facturacion/     # Facturación                       — ERP HU 1.3 (emisión con folio interno y PDF)
 ├── inventario/      # Vehículos, refacciones y recepciones — ERP HU 2.0 · 2.1
-├── servicio/        # Taller y Servicio (órdenes, tickets) — ERP HU 3.1
+├── servicio/        # Expediente del vehículo y sus servicios — ERP HU 3.0
 ├── refacciones/     # Ventas directas de refacciones     — ERP HU 3.2
 ├── caja/            # Caja (pagos, cobros, cancelaciones) — ERP HU 4.1
 ├── contabilidad/    # Balance de ingresos y egresos       — ERP HU 4.2
@@ -127,7 +127,7 @@ Cada módulo de negocio sigue la misma convención interna (capas, no sub-módul
 └── infrastructure/      # repositorios Spring Data, adaptadores externos (p. ej. cliente del PAC)
 ```
 
-Ya tienen código `acceso`, `ventascrm`, `inventario`, `clientes`, `carecarapp` y `facturacion`; los demás módulos siguen vacíos (solo `.gitkeep`) hasta que lleguen sus historias. El modelo de datos v1 está en `docs/TEC-1_modelo-datos_v1.md`. `ModularityTests` (en `src/test/java/.../ModularityTests.java`) corre `ApplicationModules.verify()`: cualquier ciclo entre módulos o acceso a un paquete interno de otro módulo rompe el build.
+Ya tienen código `acceso`, `ventascrm`, `inventario`, `clientes`, `carecarapp`, `facturacion` y `servicio`; los demás módulos siguen vacíos (solo `.gitkeep`) hasta que lleguen sus historias. El modelo de datos v1 está en `docs/TEC-1_modelo-datos_v1.md`. `ModularityTests` (en `src/test/java/.../ModularityTests.java`) corre `ApplicationModules.verify()`: cualquier ciclo entre módulos o acceso a un paquete interno de otro módulo rompe el build.
 
 ### Endpoints implementados
 
@@ -149,6 +149,8 @@ Todos van bajo `/api/v1` y, salvo el login, piden el token en `Authorization: Be
 | `inventario` | `POST /refacciones`, `PUT /refacciones/{id}`, `POST /refacciones/{id}/recepciones` | Inventario |
 | `inventario` | `GET /refacciones?bajoMinimo=`, `GET /refacciones/{id}`, `GET /refacciones/{id}/recepciones` | Inventario, Refacciones y Administrador |
 | `clientes` | `GET /clientes?buscar=`, `GET /clientes/{id}`, `POST /clientes`, `POST /clientes/{id}/vehiculos` | Gerente de marketing |
+| `servicio` | `GET /expedientes?vin=`, `GET /expedientes/{vehiculoId}`, `GET /expedientes/{vehiculoId}/servicios/{servicioId}` | Servicio y Administrador |
+| `servicio` | `PATCH /expedientes/{vehiculoId}` (placas y kilometraje), `POST /expedientes/{vehiculoId}/servicios` | Servicio |
 | `carecarapp` | `GET` y `POST /clientes/{id}/cuenta-app`, `POST /clientes/{id}/cuenta-app/desactivar` y `/activar` | Gerente de marketing |
 | `carecarapp` | `POST /app/auth/login`, `/refrescar`, `/cerrar-sesion`, `/recuperar-contrasena`, `/restablecer-contrasena` | Clientes de la app (sin token) |
 | `carecarapp` | `POST /app/auth/cambiar-contrasena`, `GET /app/perfil` | Clientes de la app (rol `CLIENTE_CARECAR`) |
@@ -164,6 +166,12 @@ Reglas de la venta y la factura (ERP-1.3, Sprint 3):
 - No se emite si el saldo del prospecto es mayor a 0, si no tiene precio total o si faltan sus datos fiscales (RFC, nombre completo, domicilio fiscal y régimen fiscal).
 - Folio interno consecutivo (`F-000001`) y PDF guardado tal como se emitió, sin timbrado (decisión 6 del modelo de datos). El total ya incluye IVA: se desglosa subtotal + IVA 16 %.
 - Al emitir se publica `shared.eventos.FacturaEmitida`; ventascrm lo escucha para pasar el prospecto a Entrega (ERP-1.2). Cuando el vendedor finaliza, la unidad sale del inventario y la venta queda Entregada; la unidad se queda en Vendido.
+
+Reglas del expediente del vehículo (ERP-3.0):
+- Servicio busca el vehículo por su VIN, completo o una parte de al menos 5 caracteres. Solo ve clientes que vienen del CRM: si necesita uno nuevo, lo registra el Gerente de marketing.
+- Arriba muestra número de serie, marca, tipo, modelo y versión, y los datos del cliente; abajo, los servicios del más reciente al más antiguo. Como en el inventario y la factura, `modelo` es el Tipo (Sentra) y `anio` el Modelo (2026).
+- Cada servicio guarda fecha, kilometraje, quién lo atendió y sus renglones (mano de obra o refacción, cantidad y precio). Los precios traen el IVA incluido: el total es la suma de los renglones y de ahí se desglosan subtotal e IVA 16 %.
+- Los servicios son dinero: no se editan ni se borran. Su captura en pantalla llega después; por ahora se registran por la API y con el script de datos de ejemplo.
 
 ## 4. Lineamientos técnicos ya acordados (impactan el diseño del código)
 
@@ -321,7 +329,7 @@ Solo necesita `bash` y `curl`; en Windows, corre en Git Bash. Para apuntar a otr
 | `inventario1` | `Inventario123` | Inventario | ERP | Alta, edición y consulta de vehículos y refacciones; recepciones |
 | `refacciones1` | `Refacciones123` | Refacciones | ERP | Consulta del stock, aviso de las 4 refacciones por resurtir e historial de recepciones |
 | `facturacion1` | `Facturacion123` | Facturación | ERP | Facturas: los prospectos por facturar y las facturas emitidas |
-| `servicio1` | `Servicio123` | Servicio | ERP | Menú vacío por ahora |
+| `servicio1` | `Servicio123` | Servicio | ERP | Expediente: buscar por VIN, ver los servicios y corregir placas y kilometraje |
 | `caja1` | `Caja12345` | Caja | ERP | Menú vacío por ahora |
 | `contabilidad1` | `Contabilidad123` | Contabilidad | ERP | Menú vacío por ahora |
 | `vendedor1` | `Vendedor123` | Ventas (Sergio Luna) | CRM | Sus 6 prospectos |
@@ -385,7 +393,7 @@ Para borrar también el volumen de la base y empezar desde cero, incluidas las m
 El mayor esfuerzo de pruebas debe ir en pagos, facturación, inventario y contabilidad: ahí un error significa dinero mal registrado.
 
 Lo que hay hoy:
-- Cada módulo con código (`acceso`, `ventascrm`, `inventario` y `facturacion`) tiene pruebas de dominio, de servicio con Mockito y de integración por HTTP contra PostgreSQL real (`*IntegrationTest`). Las de integración cubren seguridad por rol y restricciones de la base.
+- Cada módulo con código (`acceso`, `ventascrm`, `inventario`, `facturacion`, `clientes`, `carecarapp` y `servicio`) tiene pruebas de dominio, de servicio con Mockito y de integración por HTTP contra PostgreSQL real (`*IntegrationTest`). Las de integración cubren seguridad por rol y restricciones de la base.
 - `RecepcionesConcurrentesIntegrationTest` lanza recepciones y ediciones simultáneas de una refacción para comprobar el bloqueo de fila. Sin el bloqueo, la existencia termina mal (5 de 20 recepciones, o 0 si hay ediciones).
 - `CorsIntegrationTest` comprueba que el preflight de CORS de un origen permitido se responde sin pedir sesión.
 
