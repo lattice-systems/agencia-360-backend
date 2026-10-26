@@ -109,7 +109,7 @@ src/main/java/dev/latticesystems/erp_agente360/backend_agencia360/
 ├── clientes/        # Clientes de la agencia y sus vehículos — CRM-1.5
 ├── facturacion/     # Facturación                       — ERP HU 1.3 (emisión con folio interno y PDF)
 ├── inventario/      # Vehículos, refacciones y recepciones — ERP HU 2.0 · 2.1
-├── servicio/        # Taller y Servicio (órdenes, tickets) — ERP HU 3.1
+├── servicio/        # Expediente del vehículo y sus servicios — ERP HU 3.0
 ├── refacciones/     # Ventas directas de refacciones     — ERP HU 3.2
 ├── caja/            # Caja (pagos, cobros, cancelaciones) — ERP HU 4.1
 ├── contabilidad/    # Balance de ingresos y egresos       — ERP HU 4.2
@@ -127,7 +127,7 @@ Cada módulo de negocio sigue la misma convención interna (capas, no sub-módul
 └── infrastructure/      # repositorios Spring Data, adaptadores externos (p. ej. cliente del PAC)
 ```
 
-Ya tienen código `acceso`, `ventascrm`, `inventario`, `clientes`, `carecarapp` y `facturacion`; los demás módulos siguen vacíos (solo `.gitkeep`) hasta que lleguen sus historias. El modelo de datos v1 está en `docs/TEC-1_modelo-datos_v1.md`. `ModularityTests` (en `src/test/java/.../ModularityTests.java`) corre `ApplicationModules.verify()`: cualquier ciclo entre módulos o acceso a un paquete interno de otro módulo rompe el build.
+Ya tienen código `acceso`, `ventascrm`, `inventario`, `clientes`, `carecarapp`, `facturacion` y `servicio`; los demás módulos siguen vacíos (solo `.gitkeep`) hasta que lleguen sus historias. El modelo de datos v1 está en `docs/TEC-1_modelo-datos_v1.md`. `ModularityTests` (en `src/test/java/.../ModularityTests.java`) corre `ApplicationModules.verify()`: cualquier ciclo entre módulos o acceso a un paquete interno de otro módulo rompe el build.
 
 ### Endpoints implementados
 
@@ -149,9 +149,14 @@ Todos van bajo `/api/v1` y, salvo el login, piden el token en `Authorization: Be
 | `inventario` | `POST /refacciones`, `PUT /refacciones/{id}`, `POST /refacciones/{id}/recepciones` | Inventario |
 | `inventario` | `GET /refacciones?bajoMinimo=`, `GET /refacciones/{id}`, `GET /refacciones/{id}/recepciones` | Inventario, Refacciones y Administrador |
 | `clientes` | `GET /clientes?buscar=`, `GET /clientes/{id}`, `POST /clientes`, `POST /clientes/{id}/vehiculos` | Gerente de marketing |
+| `servicio` | `GET /expedientes?vin=`, `GET /expedientes/{vehiculoId}`, `GET /expedientes/{vehiculoId}/servicios/{servicioId}` | Servicio y Administrador |
+| `servicio` | `PATCH /expedientes/{vehiculoId}` (placas y kilometraje), `POST /expedientes/{vehiculoId}/servicios` | Servicio |
 | `carecarapp` | `GET` y `POST /clientes/{id}/cuenta-app`, `POST /clientes/{id}/cuenta-app/desactivar` y `/activar` | Gerente de marketing |
 | `carecarapp` | `POST /app/auth/login`, `/refrescar`, `/cerrar-sesion`, `/recuperar-contrasena`, `/restablecer-contrasena` | Clientes de la app (sin token) |
 | `carecarapp` | `POST /app/auth/cambiar-contrasena`, `GET /app/perfil` | Clientes de la app (rol `CLIENTE_CARECAR`) |
+| `carecarapp` | `GET /app/vehiculos`, `GET /app/vehiculos/{id}/manuales` | Clientes de la app (rol `CLIENTE_CARECAR`) |
+| `carecarapp` | `GET /app/manuales/{id}/archivo?expira=&firma=` (URL temporal del PDF, vence a los 15 minutos) | Clientes de la app (sin token: la URL va firmada) |
+| `carecarapp` | `POST /manuales` (multipart: `marca`, `modelo`, `anio`, `archivo`; si ya hay uno, lo reemplaza) | Gerente de marketing |
 
 Reglas del inventario (decisiones del PO del 13 de octubre):
 - Las unidades y refacciones se editan, pero no se eliminan.
@@ -164,6 +169,17 @@ Reglas de la venta y la factura (ERP-1.3, Sprint 3):
 - No se emite si el saldo del prospecto es mayor a 0, si no tiene precio total o si faltan sus datos fiscales (RFC, nombre completo, domicilio fiscal y régimen fiscal).
 - Folio interno consecutivo (`F-000001`) y PDF guardado tal como se emitió, sin timbrado (decisión 6 del modelo de datos). El total ya incluye IVA: se desglosa subtotal + IVA 16 %.
 - Al emitir se publica `shared.eventos.FacturaEmitida`; ventascrm lo escucha para pasar el prospecto a Entrega (ERP-1.2). Cuando el vendedor finaliza, la unidad sale del inventario y la venta queda Entregada; la unidad se queda en Vendido.
+
+Reglas del expediente del vehículo (ERP-3.0):
+- Servicio busca el vehículo por su VIN, completo o una parte de al menos 5 caracteres. Solo ve clientes que vienen del CRM: si necesita uno nuevo, lo registra el Gerente de marketing.
+- Arriba muestra número de serie, marca, tipo, modelo y versión, y los datos del cliente; abajo, los servicios del más reciente al más antiguo. Como en el inventario y la factura, `modelo` es el Tipo (Sentra) y `anio` el Modelo (2026).
+- Cada servicio guarda fecha, kilometraje, quién lo atendió y sus renglones (mano de obra o refacción, cantidad y precio). Los precios traen el IVA incluido: el total es la suma de los renglones y de ahí se desglosan subtotal e IVA 16 %.
+- Los servicios son dinero: no se editan ni se borran. Su captura en pantalla llega después; por ahora se registran por la API y con el script de datos de ejemplo.
+
+Reglas de los manuales de la app (APP-3.1):
+- Un manual es de una marca, un tipo y un modelo (Nissan March 2026); la versión no cambia el manual. Su nombre es "Nissan March 2026 Manual de propietario".
+- Solo PDF, de 20 MB como máximo. Lo sube el Gerente de marketing; su pantalla llega después y por ahora lo sube el script de datos de ejemplo.
+- El PDF no se guarda en la base: mientras no haya Azure Blob Storage vive en la carpeta `MANUALES_DIRECTORIO`. La app lo abre con una URL temporal firmada (HMAC con `MANUALES_SECRETO`) que vence a los 15 minutos.
 
 ## 4. Lineamientos técnicos ya acordados (impactan el diseño del código)
 
@@ -268,12 +284,14 @@ La API lee su configuración de variables de entorno. Si no defines ninguna, usa
 | `CORS_ALLOWED_ORIGINS` | `http://localhost:5173`; con el perfil `dev`, también `http://localhost:5174` | Orígenes de los frontends que pueden llamar a la API, separados por comas |
 | `JWT_SECRET` | Valor de solo-desarrollo | Llave para firmar los JWT |
 | `JWT_EXPIRATION_MINUTES` | `60` | Duración del token |
+| `MANUALES_DIRECTORIO` | Carpeta `agencia360/manuales` dentro de la carpeta temporal del sistema | Dónde se guardan los PDF de los manuales mientras no haya Azure Blob Storage |
+| `MANUALES_SECRETO` | Valor de solo-desarrollo | Llave para firmar las URL temporales de los manuales; al menos 32 caracteres |
 | `ADMIN_INICIAL_USUARIO` / `ADMIN_INICIAL_CONTRASENA` | Vacío | Si tienen valor, al arrancar se crea el primer Administrador (ERP) cuando todavía no existe |
 | `GERENTE_INICIAL_USUARIO` / `GERENTE_INICIAL_CONTRASENA` | Vacío | Igual, para el primer Gerente de marketing (administrador del CRM) |
 | `AGENCIA_MARCA` | `Nissan` | Marca que vende la agencia; va en la factura y en la unidad del expediente |
 | `FACTURA_EMISOR_RFC`, `FACTURA_EMISOR_NOMBRE`, `FACTURA_EMISOR_DOMICILIO`, `FACTURA_EMISOR_REGIMEN` | Datos ficticios de desarrollo | Datos fiscales de la agencia que emite las facturas |
 
-**`JWT_SECRET` trae un valor de solo-desarrollo por defecto: hay que sobrescribirlo en cualquier ambiente real** (en Azure, vía Key Vault según la sección 5 del PDF).
+**`JWT_SECRET` y `MANUALES_SECRETO` traen un valor de solo-desarrollo por defecto: hay que sobrescribirlos en cualquier ambiente real** (en Azure, vía Key Vault según la sección 5 del PDF).
 
 Ejemplo, para apuntar a otro PostgreSQL sin tocar código:
 
@@ -287,7 +305,8 @@ La base empieza vacía. Para probar el ERP y el CRM en local hay un juego de dat
 - un usuario por rol;
 - 8 vehículos;
 - 8 refacciones con sus recepciones;
-- 12 prospectos repartidos en las 7 etapas.
+- 12 prospectos repartidos en las 7 etapas;
+- una clienta de la app CareCar con 2 vehículos, sus servicios en el expediente y el manual de uno de ellos.
 
 Qué contiene y qué demuestra cada dato está en [`docs/datos-de-ejemplo.md`](docs/datos-de-ejemplo.md).
 
@@ -321,11 +340,19 @@ Solo necesita `bash` y `curl`; en Windows, corre en Git Bash. Para apuntar a otr
 | `inventario1` | `Inventario123` | Inventario | ERP | Alta, edición y consulta de vehículos y refacciones; recepciones |
 | `refacciones1` | `Refacciones123` | Refacciones | ERP | Consulta del stock, aviso de las 4 refacciones por resurtir e historial de recepciones |
 | `facturacion1` | `Facturacion123` | Facturación | ERP | Facturas: los prospectos por facturar y las facturas emitidas |
-| `servicio1` | `Servicio123` | Servicio | ERP | Menú vacío por ahora |
+| `servicio1` | `Servicio123` | Servicio | ERP | Expediente: buscar por VIN, ver los servicios y corregir placas y kilometraje |
 | `caja1` | `Caja12345` | Caja | ERP | Menú vacío por ahora |
 | `contabilidad1` | `Contabilidad123` | Contabilidad | ERP | Menú vacío por ahora |
 | `vendedor1` | `Vendedor123` | Ventas (Sergio Luna) | CRM | Sus 6 prospectos |
 | `vendedor2` | `Vendedor123` | Ventas (Elena Ríos) | CRM | Sus 6 prospectos, incluido uno que el Gerente le reasignó |
+
+**Clienta de la app CareCar**
+
+| Correo | Contraseña | Para probar |
+|---|---|---|
+| `laura.mendez@example.com` | La temporal que llega a Mailpit (`http://localhost:8025`) al cargar los datos; la app pide cambiarla al entrar | Login, primer ingreso, sus 2 vehículos (Nissan March 2026 y Sentra 2025) y el manual del March |
+
+Para subir el PDF real del manual del March en lugar del de ejemplo: `MANUAL_MARCH_PDF=/ruta/al/manual.pdf ./scripts/cargar-datos-de-ejemplo.sh`.
 
 **Verificar que se cargaron**
 
@@ -335,6 +362,8 @@ Solo necesita `bash` y `curl`; en Windows, corre en Git Bash. Para apuntar a otr
 | ERP, Refacciones | `refacciones1` o `admin` | 8 refacciones y el aviso "4 refacciones llegaron a su existencia mínima". En `REF-002`, el historial marca "Registrada después" |
 | CRM, Prospectos | `vendedor1` o `vendedor2` | 6 prospectos cada uno, solo los suyos |
 | CRM, Prospectos | `gerente` | Los 12, al menos uno en cada etapa |
+| ERP, Expediente | `servicio1` o `admin` | Al buscar `900001`, el March 2026 de Laura Méndez con 2 servicios; el Sentra (`900002`) tiene 1 |
+| App CareCar | `laura.mendez@example.com` | 2 vehículos; el March 2026 trae su manual |
 
 El CRM debe correr contra esta API y no contra su API simulada: crea su `.env.development.local` con `VITE_API_MOCK=false` (ver el README del CRM).
 
@@ -385,7 +414,7 @@ Para borrar también el volumen de la base y empezar desde cero, incluidas las m
 El mayor esfuerzo de pruebas debe ir en pagos, facturación, inventario y contabilidad: ahí un error significa dinero mal registrado.
 
 Lo que hay hoy:
-- Cada módulo con código (`acceso`, `ventascrm`, `inventario` y `facturacion`) tiene pruebas de dominio, de servicio con Mockito y de integración por HTTP contra PostgreSQL real (`*IntegrationTest`). Las de integración cubren seguridad por rol y restricciones de la base.
+- Cada módulo con código (`acceso`, `ventascrm`, `inventario`, `facturacion`, `clientes`, `carecarapp` y `servicio`) tiene pruebas de dominio, de servicio con Mockito y de integración por HTTP contra PostgreSQL real (`*IntegrationTest`). Las de integración cubren seguridad por rol y restricciones de la base.
 - `RecepcionesConcurrentesIntegrationTest` lanza recepciones y ediciones simultáneas de una refacción para comprobar el bloqueo de fila. Sin el bloqueo, la existencia termina mal (5 de 20 recepciones, o 0 si hay ediciones).
 - `CorsIntegrationTest` comprueba que el preflight de CORS de un origen permitido se responde sin pedir sesión.
 
