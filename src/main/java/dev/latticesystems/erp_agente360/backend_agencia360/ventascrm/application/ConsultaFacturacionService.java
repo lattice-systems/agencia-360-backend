@@ -73,8 +73,12 @@ public class ConsultaFacturacionService implements ConsultaFacturacion {
 		if (datos == null) {
 			return null;
 		}
-		return new ConsultaFacturacion.DatosFiscales(datos.getRfc(), datos.getNombre(),
-				datos.getDomicilio().enUnaLinea(), datos.getRegimen().getClave());
+		var domicilio = datos.getDomicilio();
+		return new ConsultaFacturacion.DatosFiscales(datos.getRfc(), datos.getNombre(), domicilio.enUnaLinea(),
+				datos.getRegimen().getClave(),
+				new ConsultaFacturacion.Domicilio(domicilio.getEstado(), domicilio.getCiudad(), domicilio.getColonia(),
+						domicilio.getCalleNumero(), domicilio.getCodigoPostal()),
+				datos.getRegimen().getDescripcion());
 	}
 
 	/** Sin precio total no se sabe cuánto falta: el saldo queda vacío. */
