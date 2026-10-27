@@ -213,18 +213,21 @@ public class Prospecto extends Auditable {
 	/**
 	 * La factura emitida autoriza la entrega (ERP-1.2, decisión del PO del 21 de
 	 * octubre): el prospecto pasa de Facturación a Entrega sin otra autorización.
-	 * El movimiento queda con origen ERP y sin usuario, porque lo hace el sistema
-	 * al recibir la factura, con la fecha y hora de la emisión.
+	 * El movimiento queda con origen ERP, a nombre de quien emitió la factura y con
+	 * la fecha y hora de la emisión.
+	 *
+	 * @param emitidaPorId
+	 *            quién de Facturación emitió; vacío solo en eventos viejos
 	 *
 	 * @return {@code false} si el prospecto ya no está en Facturación; entonces no
 	 *         cambia nada (el evento llegó dos veces, o el prospecto se cerró
 	 *         mientras se facturaba)
 	 */
-	public boolean autorizarEntregaPorFactura(Instant emitidaEn) {
+	public boolean autorizarEntregaPorFactura(Instant emitidaEn, Long emitidaPorId) {
 		if (etapa != Etapa.FACTURACION) {
 			return false;
 		}
-		moverA(Etapa.ENTREGA, OrigenCambio.ERP, null, emitidaEn);
+		moverA(Etapa.ENTREGA, OrigenCambio.ERP, emitidaPorId, emitidaEn);
 		return true;
 	}
 

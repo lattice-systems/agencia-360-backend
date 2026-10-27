@@ -41,7 +41,7 @@ public class EntregaAlFacturarService {
 			return;
 		}
 		Prospecto prospecto = encontrado.get();
-		if (prospecto.autorizarEntregaPorFactura(factura.emitidaEn())) {
+		if (prospecto.autorizarEntregaPorFactura(factura.emitidaEn(), factura.emitidaPorId())) {
 			return;
 		}
 		if (prospecto.getEtapa() != Etapa.ENTREGA && prospecto.getEtapa() != Etapa.FINALIZADO) {

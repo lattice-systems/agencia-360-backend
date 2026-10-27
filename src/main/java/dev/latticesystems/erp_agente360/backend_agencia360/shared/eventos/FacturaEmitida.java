@@ -20,6 +20,10 @@ import java.time.Instant;
  *            de datos)
  * @param emitidaEn
  *            el momento de la emisión
+ * @param emitidaPorId
+ *            quién de Facturación emitió la factura; queda en el historial del
+ *            prospecto al pasar a Entrega. Se agregó al final para no mover los
+ *            demás campos
  */
-public record FacturaEmitida(Long prospectoId, Long vehiculoId, String folio, Instant emitidaEn) {
+public record FacturaEmitida(Long prospectoId, Long vehiculoId, String folio, Instant emitidaEn, Long emitidaPorId) {
 }
