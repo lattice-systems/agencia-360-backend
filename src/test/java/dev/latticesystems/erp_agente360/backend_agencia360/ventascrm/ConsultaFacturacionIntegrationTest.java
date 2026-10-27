@@ -9,6 +9,7 @@ import dev.latticesystems.erp_agente360.backend_agencia360.acceso.infrastructure
 import dev.latticesystems.erp_agente360.backend_agencia360.shared.AbstractIntegrationTest;
 import dev.latticesystems.erp_agente360.backend_agencia360.shared.security.Role;
 import dev.latticesystems.erp_agente360.backend_agencia360.ventascrm.ConsultaFacturacion.DatosFiscales;
+import dev.latticesystems.erp_agente360.backend_agencia360.ventascrm.ConsultaFacturacion.Domicilio;
 import dev.latticesystems.erp_agente360.backend_agencia360.ventascrm.ConsultaFacturacion.ProspectoParaFacturar;
 import dev.latticesystems.erp_agente360.backend_agencia360.ventascrm.domain.Prospecto;
 import dev.latticesystems.erp_agente360.backend_agencia360.ventascrm.infrastructure.ProspectoRepository;
@@ -112,7 +113,11 @@ class ConsultaFacturacionIntegrationTest extends AbstractIntegrationTest {
 		DatosFiscales receptor = consultaFacturacion.paraFacturar(ana).orElseThrow().receptor();
 
 		assertThat(receptor).isEqualTo(new DatosFiscales("LOHA850101AB1", "Ana López Hernández",
-				"Blvd. López Mateos 1102, Col. Centro, C.P. 37000, León, Guanajuato", "612"));
+				"Blvd. López Mateos 1102, Col. Centro, C.P. 37000, León, Guanajuato", "612",
+				new Domicilio("Guanajuato", "León", "Centro", "Blvd. López Mateos 1102", "37000"),
+				"Personas Físicas con Actividades Empresariales y Profesionales"));
+		assertThat(receptor.regimenConDescripcion())
+				.isEqualTo("612 - Personas Físicas con Actividades Empresariales y Profesionales");
 		assertThat(receptor.completos()).isTrue();
 	}
 

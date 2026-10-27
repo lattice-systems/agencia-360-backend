@@ -23,7 +23,7 @@ class EntregaAlFacturarServiceTest {
 
 	private static final Instant REGISTRO = Instant.parse("2026-10-21T16:00:00Z");
 	private static final Instant EMITIDA = Instant.parse("2026-10-23T18:30:00Z");
-	private static final FacturaEmitida FACTURA = new FacturaEmitida(1L, 50L, "A-0001", EMITIDA);
+	private static final FacturaEmitida FACTURA = new FacturaEmitida(1L, 50L, "A-0001", EMITIDA, 12L);
 
 	@Mock
 	private ProspectoRepository prospectoRepository;

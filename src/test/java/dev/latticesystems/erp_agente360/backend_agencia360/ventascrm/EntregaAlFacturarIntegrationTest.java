@@ -48,12 +48,15 @@ class EntregaAlFacturarIntegrationTest extends AbstractIntegrationTest {
 	private RolRepository rolRepository;
 
 	private Usuario vendedor;
+	private Usuario facturacion;
 	private final List<Long> prospectos = new ArrayList<>();
 
 	@BeforeEach
 	void setUp() {
 		vendedor = usuarioRepository.save(new Usuario("vendedor.entrega", "hash-de-prueba", "Persona vendedor.entrega",
 				rolRepository.findByNombre("VENTAS").orElseThrow()));
+		facturacion = usuarioRepository.save(new Usuario("facturacion.entrega", "hash-de-prueba",
+				"Persona facturacion.entrega", rolRepository.findByNombre("FACTURACION").orElseThrow()));
 	}
 
 	@AfterEach
@@ -62,7 +65,7 @@ class EntregaAlFacturarIntegrationTest extends AbstractIntegrationTest {
 			jdbcTemplate.update("delete from historial_etapa where prospecto_id = ?", id);
 			jdbcTemplate.update("delete from prospecto where id = ?", id);
 		}
-		jdbcTemplate.update("delete from usuario where id = ?", vendedor.getId());
+		jdbcTemplate.update("delete from usuario where id in (?, ?)", vendedor.getId(), facturacion.getId());
 	}
 
 	@Test
@@ -70,20 +73,21 @@ class EntregaAlFacturarIntegrationTest extends AbstractIntegrationTest {
 		long prospecto = prospectoEn("FACTURACION");
 		Instant emitida = Instant.now().truncatedTo(ChronoUnit.MICROS);
 
-		emitir(new FacturaEmitida(prospecto, null, "A-0001", emitida));
+		emitir(new FacturaEmitida(prospecto, null, "A-0001", emitida, facturacion.getId()));
 
 		esperarEtapa(prospecto, "ENTREGA");
 		Map<String, Object> movimiento = jdbcTemplate.queryForMap("select origen, usuario_id, fecha_hora "
 				+ "from historial_etapa where prospecto_id = ? order by id desc limit 1", prospecto);
 		assertThat(movimiento.get("origen")).isEqualTo("ERP");
-		assertThat(movimiento.get("usuario_id")).isNull();
+		assertThat(((Number) movimiento.get("usuario_id")).longValue()).as("quien emitió la factura")
+				.isEqualTo(facturacion.getId());
 		assertThat(((Timestamp) movimiento.get("fecha_hora")).toInstant()).isEqualTo(emitida);
 	}
 
 	@Test
 	void siElEventoLlegaDosVecesSoloQuedaUnMovimientoAEntrega() throws InterruptedException {
 		long prospecto = prospectoEn("FACTURACION");
-		FacturaEmitida factura = new FacturaEmitida(prospecto, null, "A-0002", Instant.now());
+		FacturaEmitida factura = new FacturaEmitida(prospecto, null, "A-0002", Instant.now(), facturacion.getId());
 
 		emitir(factura);
 		esperarEtapa(prospecto, "ENTREGA");

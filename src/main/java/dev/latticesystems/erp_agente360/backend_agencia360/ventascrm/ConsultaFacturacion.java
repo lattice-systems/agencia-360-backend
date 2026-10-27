@@ -52,8 +52,33 @@ public interface ConsultaFacturacion {
 			BigDecimal saldo, Instant enFacturacionDesde, DatosFiscales receptor, boolean cierrePendiente) {
 	}
 
-	/** Datos fiscales del receptor de la factura. */
-	record DatosFiscales(String rfc, String nombreCompleto, String domicilioFiscal, String regimenFiscal) {
+	/**
+	 * Datos fiscales del receptor de la factura.
+	 *
+	 * @param domicilioFiscal
+	 *            el domicilio en una línea, como lo imprime la factura
+	 * @param regimenFiscal
+	 *            la clave del catálogo del SAT (612)
+	 * @param domicilio
+	 *            el mismo domicilio separado, para corregirlo desde el ERP con
+	 *            {@code PUT /prospectos/{id}/datos-fiscales}
+	 * @param regimenFiscalDescripcion
+	 *            la descripción del régimen en el catálogo del SAT
+	 */
+	record DatosFiscales(String rfc, String nombreCompleto, String domicilioFiscal, String regimenFiscal,
+			Domicilio domicilio, String regimenFiscalDescripcion) {
+
+		/** Sin el domicilio separado ni la descripción del régimen. */
+		public DatosFiscales(String rfc, String nombreCompleto, String domicilioFiscal, String regimenFiscal) {
+			this(rfc, nombreCompleto, domicilioFiscal, regimenFiscal, null, null);
+		}
+
+		/** Como lo imprime la factura: "612 - Personas Físicas con...". */
+		public String regimenConDescripcion() {
+			return regimenFiscalDescripcion == null || regimenFiscalDescripcion.isBlank()
+					? regimenFiscal
+					: regimenFiscal + " - " + regimenFiscalDescripcion;
+		}
 
 		/** Con todos los datos se puede emitir la factura. */
 		public boolean completos() {
@@ -63,5 +88,9 @@ public interface ConsultaFacturacion {
 		private static boolean conValor(String valor) {
 			return valor != null && !valor.isBlank();
 		}
+	}
+
+	/** Domicilio fiscal separado, como lo captura el vendedor. */
+	record Domicilio(String estado, String ciudad, String colonia, String calleNumero, String codigoPostal) {
 	}
 }
