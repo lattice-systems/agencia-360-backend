@@ -28,17 +28,31 @@ GERENTE_USUARIO="${GERENTE_USUARIO:-gerente}"
 GERENTE_CONTRASENA="${GERENTE_CONTRASENA:-Gerente12345}"
 
 RESPUESTA_TMP=$(mktemp)
-trap 'rm -f "$RESPUESTA_TMP"' EXIT
+CUERPO_TMP=$(mktemp)
+trap 'rm -f "$RESPUESTA_TMP" "$CUERPO_TMP"' EXIT
+
+# Ruta que entiende curl. En Git Bash de Windows, curl es un programa de Windows
+# y no encuentra /tmp/...; cygpath la convierte a C:/Users/.../Temp/...
+ruta_para_curl() {
+  if command -v cygpath >/dev/null 2>&1; then
+    cygpath -m "$1"
+  else
+    printf '%s' "$1"
+  fi
+}
 
 # Hace una petición a la API. Deja el código HTTP en CODIGO y el cuerpo en
 # RESPUESTA. $1 método, $2 ruta, $3 token (vacío si no hay), $4 cuerpo JSON.
+# El cuerpo va en un archivo y no como argumento: en Windows los argumentos
+# pierden los acentos (por ejemplo "Daniela León") y la API responde 400.
 pedir() {
   local argumentos=(-sS -o "$RESPUESTA_TMP" -w '%{http_code}' -X "$1" "$API$2" -H 'Accept: application/json')
   if [ -n "$3" ]; then
     argumentos+=(-H "Authorization: Bearer $3")
   fi
   if [ $# -ge 4 ]; then
-    argumentos+=(-H 'Content-Type: application/json' -d "$4")
+    printf '%s' "$4" >"$CUERPO_TMP"
+    argumentos+=(-H 'Content-Type: application/json' --data-binary "@$(ruta_para_curl "$CUERPO_TMP")")
   fi
   if ! CODIGO=$(curl "${argumentos[@]}"); then
     echo "No hubo respuesta de la API en $API. ¿Está corriendo?" >&2
@@ -434,7 +448,7 @@ fi
 echo "Manual del March 2026 (Gerente de marketing):"
 # Con MANUAL_MARCH_PDF se sube un PDF real; si no, uno de ejemplo de una página.
 MANUAL_TMP=$(mktemp)
-trap 'rm -f "$RESPUESTA_TMP" "$MANUAL_TMP"' EXIT
+trap 'rm -f "$RESPUESTA_TMP" "$CUERPO_TMP" "$MANUAL_TMP"' EXIT
 if [ -n "${MANUAL_MARCH_PDF:-}" ]; then
   cp "$MANUAL_MARCH_PDF" "$MANUAL_TMP"
 else
@@ -456,7 +470,7 @@ PDF
 fi
 if ! CODIGO=$(curl -sS -o "$RESPUESTA_TMP" -w '%{http_code}' -X POST "$API/api/v1/manuales" \
   -H "Authorization: Bearer $TOKEN_GERENTE" -F marca=Nissan -F modelo=March -F anio=2026 \
-  -F "archivo=@$MANUAL_TMP;type=application/pdf;filename=nissan-march-2026.pdf"); then
+  -F "archivo=@$(ruta_para_curl "$MANUAL_TMP");type=application/pdf;filename=nissan-march-2026.pdf"); then
   echo "No hubo respuesta de la API en $API. ¿Está corriendo?" >&2
   exit 1
 fi
