@@ -318,16 +318,16 @@ class ProspectoTest {
 		}
 
 		@Test
-		void laFacturaEmitidaAutorizaLaEntregaSinUsuarioYConLaHoraDeLaEmision() {
+		void laFacturaEmitidaAutorizaLaEntregaANombreDeQuienEmitioYConLaHoraDeLaEmision() {
 			Prospecto prospecto = en(Etapa.FACTURACION);
 
-			assertThat(prospecto.autorizarEntregaPorFactura(DESPUES)).isTrue();
+			assertThat(prospecto.autorizarEntregaPorFactura(DESPUES, 12L)).isTrue();
 
 			assertThat(prospecto.getEtapa()).isEqualTo(Etapa.ENTREGA);
 			assertThat(prospecto.getEtapaActualizadaEn()).isEqualTo(DESPUES);
 			assertThat(prospecto.getHistorial()).last().satisfies(movimiento -> {
 				assertThat(movimiento.getOrigen()).isEqualTo(OrigenCambio.ERP);
-				assertThat(movimiento.getUsuarioId()).isNull();
+				assertThat(movimiento.getUsuarioId()).isEqualTo(12L);
 			});
 		}
 
@@ -337,7 +337,7 @@ class ProspectoTest {
 			Prospecto prospecto = en(etapa);
 			int movimientos = prospecto.getHistorial().size();
 
-			assertThat(prospecto.autorizarEntregaPorFactura(DESPUES)).isFalse();
+			assertThat(prospecto.autorizarEntregaPorFactura(DESPUES, 12L)).isFalse();
 
 			assertThat(prospecto.getEtapa()).isEqualTo(etapa);
 			assertThat(prospecto.getHistorial()).hasSize(movimientos);

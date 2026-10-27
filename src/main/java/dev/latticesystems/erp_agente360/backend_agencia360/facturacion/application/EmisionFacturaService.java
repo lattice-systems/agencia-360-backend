@@ -87,7 +87,8 @@ public class EmisionFacturaService {
 						unidad.marca(), unidad.modelo(), unidad.version(), unidad.anio(), unidad.color()),
 				Montos.desglosar(prospecto.total()));
 		Factura factura = facturaRepository.save(Factura.emitir(datos, facturaPdf.armar(datos), actor.id()));
-		eventos.publishEvent(new FacturaEmitida(prospectoId, unidad.vehiculoId(), factura.getFolio(), ahora));
+		eventos.publishEvent(
+				new FacturaEmitida(prospectoId, unidad.vehiculoId(), factura.getFolio(), ahora, actor.id()));
 		return FacturaVista.de(factura);
 	}
 
@@ -98,6 +99,6 @@ public class EmisionFacturaService {
 
 	private static Parte receptor(DatosFiscales datos) {
 		return new Parte(datos.rfc().trim(), datos.nombreCompleto().trim(), datos.domicilioFiscal().trim(),
-				datos.regimenFiscal().trim());
+				datos.regimenConDescripcion().trim());
 	}
 }
