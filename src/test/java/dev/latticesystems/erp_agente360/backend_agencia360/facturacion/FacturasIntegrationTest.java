@@ -23,6 +23,7 @@ import dev.latticesystems.erp_agente360.backend_agencia360.shared.eventos.Factur
 import dev.latticesystems.erp_agente360.backend_agencia360.shared.security.JwtService;
 import dev.latticesystems.erp_agente360.backend_agencia360.ventascrm.ConsultaFacturacion;
 import dev.latticesystems.erp_agente360.backend_agencia360.ventascrm.ConsultaFacturacion.DatosFiscales;
+import dev.latticesystems.erp_agente360.backend_agencia360.ventascrm.ConsultaFacturacion.Domicilio;
 import dev.latticesystems.erp_agente360.backend_agencia360.ventascrm.ConsultaFacturacion.ProspectoParaFacturar;
 import dev.latticesystems.erp_agente360.backend_agencia360.ventascrm.domain.Prospecto;
 import dev.latticesystems.erp_agente360.backend_agencia360.ventascrm.infrastructure.ProspectoRepository;
@@ -59,8 +60,9 @@ class FacturasIntegrationTest extends AbstractIntegrationTest {
 
 	private static final String URL = "/api/v1/facturas";
 	private static final DatosFiscales RECEPTOR = new DatosFiscales("HELL800101AB1", "Luis Herrera López",
-			"Calle Hidalgo 10, Col. Centro, C.P. 37000, León, Gto.",
-			"612 - Personas Físicas con Actividades " + "Empresariales");
+			"Calle Hidalgo 10, Col. Centro, C.P. 37000, León, Guanajuato", "612",
+			new Domicilio("Guanajuato", "León", "Centro", "Calle Hidalgo 10", "37000"),
+			"Personas Físicas con Actividades Empresariales y Profesionales");
 
 	@MockitoBean
 	private ConsultaFacturacion consultaFacturacion;
@@ -127,11 +129,14 @@ class FacturasIntegrationTest extends AbstractIntegrationTest {
 				.isEqualTo("VENDIDO");
 		assertThat(jdbcTemplate.queryForObject("select estatus from venta where prospecto_id = ?", String.class, luis))
 				.isEqualTo("REGISTRADA");
+		assertThat(jdbcTemplate.queryForObject("select receptor_regimen_fiscal from factura where id = ?", String.class,
+				id)).isEqualTo("612 - Personas Físicas con Actividades Empresariales y Profesionales");
 		assertThat(eventos.stream(FacturaEmitida.class)).singleElement().satisfies(evento -> {
 			assertThat(evento.prospectoId()).isEqualTo(luis);
 			assertThat(evento.vehiculoId()).isEqualTo(sentra);
 			assertThat(evento.folio()).isEqualTo(folio);
 			assertThat(evento.emitidaEn()).isNotNull();
+			assertThat(evento.emitidaPorId()).isEqualTo(facturacion.getId());
 		});
 
 		mockMvc.perform(conToken(get(URL), token(facturacion))).andExpect(status().isOk())
@@ -167,6 +172,11 @@ class FacturasIntegrationTest extends AbstractIntegrationTest {
 
 		mockMvc.perform(conToken(get(URL + "/por-emitir"), token(facturacion))).andExpect(status().isOk())
 				.andExpect(jsonPath("$[0].receptor.rfc").value("HELL800101AB1"))
+				.andExpect(jsonPath("$[0].receptor.regimenFiscal").value("612"))
+				.andExpect(jsonPath("$[0].receptor.regimenFiscalDescripcion")
+						.value("Personas Físicas con Actividades Empresariales y Profesionales"))
+				.andExpect(jsonPath("$[0].receptor.domicilio.colonia").value("Centro"))
+				.andExpect(jsonPath("$[0].receptor.domicilio.codigoPostal").value("37000"))
 				.andExpect(jsonPath("$[0].vendedor").value("Persona vendedor.facturas"))
 				.andExpect(jsonPath("$[0].bloqueo").isEmpty());
 	}
