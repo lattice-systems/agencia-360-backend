@@ -39,12 +39,12 @@ class ProspectoTest {
 			case ENTREGA -> {
 				DatosFiscalesDePrueba.pasarAPago(prospecto, VENDEDOR, AHORA);
 				prospecto.validarPago(CONTADOR, AHORA);
-				prospecto.confirmarFacturacion(FACTURISTA, AHORA);
+				prospecto.autorizarEntregaPorFactura(AHORA, FACTURISTA);
 			}
 			case FINALIZADO -> {
 				DatosFiscalesDePrueba.pasarAPago(prospecto, VENDEDOR, AHORA);
 				prospecto.validarPago(CONTADOR, AHORA);
-				prospecto.confirmarFacturacion(FACTURISTA, AHORA);
+				prospecto.autorizarEntregaPorFactura(AHORA, FACTURISTA);
 				prospecto.moverPorVendedor(Etapa.FINALIZADO, null, VENDEDOR, AHORA);
 			}
 			case CERRADO -> prospecto.moverPorVendedor(Etapa.CERRADO, MOTIVO, VENDEDOR, AHORA);
@@ -307,17 +307,6 @@ class ProspectoTest {
 		}
 
 		@Test
-		void facturacionEmiteLaFacturaYPasaAEntregaDesdeElErp() {
-			Prospecto prospecto = en(Etapa.FACTURACION);
-
-			prospecto.confirmarFacturacion(FACTURISTA, DESPUES);
-
-			assertThat(prospecto.getEtapa()).isEqualTo(Etapa.ENTREGA);
-			assertThat(prospecto.getHistorial()).last().extracting(HistorialEtapa::getOrigen)
-					.isEqualTo(OrigenCambio.ERP);
-		}
-
-		@Test
 		void laFacturaEmitidaAutorizaLaEntregaANombreDeQuienEmitioYConLaHoraDeLaEmision() {
 			Prospecto prospecto = en(Etapa.FACTURACION);
 
@@ -341,14 +330,6 @@ class ProspectoTest {
 
 			assertThat(prospecto.getEtapa()).isEqualTo(etapa);
 			assertThat(prospecto.getHistorial()).hasSize(movimientos);
-		}
-
-		@Test
-		void soloSeFacturaUnProspectoEnFacturacion() {
-			Prospecto prospecto = en(Etapa.PAGO);
-
-			assertThatThrownBy(() -> prospecto.confirmarFacturacion(FACTURISTA, DESPUES))
-					.isInstanceOf(ConflictoException.class);
 		}
 	}
 

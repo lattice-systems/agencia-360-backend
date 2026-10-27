@@ -20,6 +20,7 @@ import dev.latticesystems.erp_agente360.backend_agencia360.shared.eventos.Prospe
 import dev.latticesystems.erp_agente360.backend_agencia360.shared.security.JwtService;
 import dev.latticesystems.erp_agente360.backend_agencia360.shared.security.Role;
 import dev.latticesystems.erp_agente360.backend_agencia360.ventascrm.domain.DatosFiscalesDePrueba;
+import dev.latticesystems.erp_agente360.backend_agencia360.ventascrm.infrastructure.ProspectoRepository;
 import jakarta.persistence.EntityManager;
 import java.time.Instant;
 import java.util.List;
@@ -53,6 +54,9 @@ class ProspectosIntegrationTest extends AbstractIntegrationTest {
 
 	@Autowired
 	private VentaDeUnidades ventaDeUnidades;
+
+	@Autowired
+	private ProspectoRepository prospectoRepository;
 
 	@Autowired
 	private UsuarioRepository usuarioRepository;
@@ -505,6 +509,18 @@ class ProspectosIntegrationTest extends AbstractIntegrationTest {
 	}
 
 	@Test
+	void facturacionYaNoPasaAEntregaPorElPatch() throws Exception {
+		Usuario vendedor = registrar("vendedor1", Role.VENTAS);
+		long id = crearProspecto(vendedor, "Ana López", "4771234567", null);
+		Usuario facturista = llevarAFacturacion(vendedor, id);
+
+		mockMvc.perform(cambioDeEtapa(token(facturista), id, "ENTREGA")).andExpect(status().isForbidden());
+		entityManager.flush();
+		assertThat(jdbcTemplate.queryForObject("select etapa from prospecto where id = ?", String.class, id))
+				.isEqualTo("FACTURACION");
+	}
+
+	@Test
 	void contabilidadNoCambiaEtapasPorElPatch() throws Exception {
 		Usuario vendedor = registrar("vendedor1", Role.VENTAS);
 		Usuario contador = registrar("contabilidad1", Role.CONTABILIDAD);
@@ -515,13 +531,24 @@ class ProspectosIntegrationTest extends AbstractIntegrationTest {
 	}
 
 	/**
-	 * Lleva el prospecto a Entrega por el camino real: el vendedor lo pasa a Pago,
-	 * Caja registra y envía un pago, Contabilidad lo valida (ERP-1.1) y Facturación
-	 * lo pasa a Entrega.
+	 * Lleva el prospecto a Entrega: el vendedor lo pasa a Pago, Caja registra y
+	 * envía un pago, Contabilidad lo valida (ERP-1.1) y la factura emitida lo pasa
+	 * a Entrega (ERP-1.2).
 	 */
 	private void llevarAEntrega(Usuario vendedor, long id) throws Exception {
 		Usuario facturista = llevarAFacturacion(vendedor, id);
-		mockMvc.perform(cambioDeEtapa(token(facturista), id, "ENTREGA")).andExpect(status().isOk());
+		autorizarEntrega(id, facturista);
+	}
+
+	/**
+	 * Lo que hace ventascrm al recibir FacturaEmitida. Aquí se llama directo porque
+	 * la prueba corre en una transacción y el evento llega después del commit; el
+	 * evento real se prueba en EntregaAlFacturarIntegrationTest.
+	 */
+	private void autorizarEntrega(long id, Usuario facturista) {
+		entityManager.flush();
+		prospectoRepository.findById(id).orElseThrow().autorizarEntregaPorFactura(Instant.now(), facturista.getId());
+		entityManager.flush();
 	}
 
 	/** Hasta Facturación por el camino real; regresa a quien factura. */
@@ -554,7 +581,7 @@ class ProspectosIntegrationTest extends AbstractIntegrationTest {
 		Usuario facturista = llevarAFacturacion(vendedor, id);
 		// Desde ERP-1.3 la unidad se vende al emitir la factura.
 		ventaDeUnidades.vender(id, sentra, facturista.getId(), Instant.now());
-		mockMvc.perform(cambioDeEtapa(token(facturista), id, "ENTREGA")).andExpect(status().isOk());
+		autorizarEntrega(id, facturista);
 		mockMvc.perform(cambioDeEtapa(token(vendedor), id, "FINALIZADO")).andExpect(status().isOk());
 
 		mockMvc.perform(conToken(get(URL), token(vendedor))).andExpect(status().isOk())

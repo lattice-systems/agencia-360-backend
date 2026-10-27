@@ -200,17 +200,6 @@ public class Prospecto extends Auditable {
 	}
 
 	/**
-	 * Facturación emite la factura desde el ERP y el prospecto pasa a Entrega.
-	 *
-	 * @throws ConflictoException
-	 *             si el prospecto no está en Facturación
-	 */
-	public void confirmarFacturacion(Long usuarioId, Instant ahora) {
-		exigirEtapa(Etapa.FACTURACION, "Solo se factura un prospecto en Facturación");
-		moverA(Etapa.ENTREGA, OrigenCambio.ERP, usuarioId, ahora);
-	}
-
-	/**
 	 * La factura emitida autoriza la entrega (ERP-1.2, decisión del PO del 21 de
 	 * octubre): el prospecto pasa de Facturación a Entrega sin otra autorización.
 	 * El movimiento queda con origen ERP, a nombre de quien emitió la factura y con

@@ -358,14 +358,10 @@ class SeguimientoProspectosServiceTest {
 	}
 
 	@Test
-	void facturacionPasaDeFacturacionAEntrega() {
-		Prospecto ana = prospecto("Ana López", 7L);
-		DatosFiscalesDePrueba.pasarAPago(ana, 7L, REGISTRO);
-		ana.validarPago(30L, REGISTRO);
-		when(prospectoRepository.findById(1L)).thenReturn(Optional.of(ana));
-
-		assertThat(service.cambiarEtapa(1L, Etapa.ENTREGA, null, FACTURISTA).etapa()).isEqualTo(Etapa.ENTREGA);
-		verifyNoInteractions(eventos);
+	void facturacionYaNoPasaAEntregaAMano() {
+		assertThatThrownBy(() -> service.cambiarEtapa(1L, Etapa.ENTREGA, null, FACTURISTA))
+				.isInstanceOf(AccessDeniedException.class);
+		verifyNoInteractions(prospectoRepository, eventos);
 	}
 
 	@Test
@@ -394,7 +390,7 @@ class SeguimientoProspectosServiceTest {
 		ReflectionTestUtils.setField(ana, "id", 1L);
 		DatosFiscalesDePrueba.pasarAPago(ana, 7L, REGISTRO);
 		ana.validarPago(30L, REGISTRO);
-		ana.confirmarFacturacion(40L, REGISTRO);
+		ana.autorizarEntregaPorFactura(REGISTRO, 40L);
 		return ana;
 	}
 
