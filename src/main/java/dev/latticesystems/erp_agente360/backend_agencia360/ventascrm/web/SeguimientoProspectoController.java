@@ -53,14 +53,14 @@ public class SeguimientoProspectoController {
 	}
 
 	@PatchMapping("/{id}/etapa")
-	@PreAuthorize("hasAnyRole('VENTAS', 'FACTURACION')")
+	@PreAuthorize("hasRole('VENTAS')")
 	@Operation(summary = "Cambiar la etapa de un prospecto", description = "El vendedor dueño mueve Primer contacto, "
 			+ "Visita y Cotización entre sí, a Pago o a Cerrado (con motivo), y de Entrega a Finalizado. "
 			+ "Al pasar a Pago el vendedor manda precioTotal y datosFiscales (obligatorios). "
-			+ "Facturación pasa de Facturación a Entrega. De Pago a Facturación solo se pasa validando los pagos "
-			+ "(/api/v1/liquidaciones). Para finalizar hace falta el correo del cliente (correoCliente si "
-			+ "faltaba), salvo con clienteRechazaApp=true. Un cambio que no corresponde responde 409; un rol que "
-			+ "no puede hacerlo, 403; un prospecto ajeno, 404.")
+			+ "De Pago a Facturación solo se pasa validando los pagos (/api/v1/liquidaciones) y de Facturación a "
+			+ "Entrega, emitiendo la factura (/api/v1/facturas). Para finalizar hace falta el correo del cliente "
+			+ "(correoCliente si faltaba), salvo con clienteRechazaApp=true. Un cambio que no corresponde "
+			+ "responde 409; un rol que no puede hacerlo, 403; un prospecto ajeno, 404.")
 	public ProspectoVista cambiarEtapa(@PathVariable Long id, @Valid @RequestBody CambiarEtapaRequest request,
 			@AuthenticationPrincipal UsuarioAutenticado actor) {
 		return seguimientoProspectosService.cambiarEtapa(id, request.etapa(), request.motivoCierre(),

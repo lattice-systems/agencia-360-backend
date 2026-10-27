@@ -40,10 +40,11 @@ import org.springframework.transaction.annotation.Transactional;
  *
  * <p>
  * Quién mueve cada etapa (decisión del PO del 12 de octubre): el vendedor las
- * iniciales, Pago y Finalizado, y Facturación pasa de Facturación a Entrega al
- * emitir la factura. De Pago a Facturación solo se pasa cuando Contabilidad
- * valida los pagos en ERP-1.1 ({@link LiquidacionesService}); por aquí no, para
- * que nadie se salte la validación (acordado con Ricardo en el Sprint 2).
+ * iniciales, Pago y Finalizado. De Pago a Facturación solo se pasa cuando
+ * Contabilidad valida los pagos en ERP-1.1 ({@link LiquidacionesService}), y de
+ * Facturación a Entrega cuando se emite la factura (ERP-1.2,
+ * {@link EntregaAlFacturarService}); por aquí no, para que nadie se salte la
+ * validación ni la factura.
  *
  * <p>
  * Al finalizar publica {@link ProspectoFinalizado} (CRM-1.4) en la misma
@@ -190,11 +191,8 @@ public class SeguimientoProspectosService {
 			}
 			return ProspectoVista.de(prospecto);
 		}
-		if (actor.tieneRol(Role.FACTURACION) && etapa == Etapa.ENTREGA) {
-			Prospecto prospecto = buscarCualquiera(prospectoId);
-			prospecto.confirmarFacturacion(actor.id(), ahora);
-			return ProspectoVista.de(prospecto);
-		}
+		// Facturación ya no pasa a Entrega a mano: lo hace la factura emitida
+		// (ERP-1.2).
 		throw new AccessDeniedException("Tu rol no puede pasar el prospecto a esa etapa");
 	}
 
