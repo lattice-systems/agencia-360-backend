@@ -226,6 +226,7 @@ Estas credenciales son **solo para desarrollo local** y coinciden con los valore
 El perfil `proxy` agrega dos servicios: `api` (imagen del `Dockerfile`, perfil `dev`, conectada a `postgres`, `redis` y `mailpit` por nombre de servicio; **no** publica el 8080 al host) y `nginx` (`nginx/default.conf`), que publica el puerto **8089** y pasa `/api/` a `http://api:8080` con los encabezados `X-Forwarded-*`. `docker compose up -d` sin perfil sigue levantando solo la base, Redis y Mailpit.
 
 ```bash
+# Primera vez: cp .env.example .env (trae las variables ADMIN_INICIAL_* y GERENTE_INICIAL_* del script de datos)
 docker compose --profile proxy up -d --build
 curl http://localhost:8089/            # {"servicio":"API Agencia360","proxy":"Nginx",...}
 ip -4 addr                             # la IP de la PC en la red local, p. ej. 192.168.1.50
