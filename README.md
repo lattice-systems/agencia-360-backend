@@ -30,6 +30,9 @@
 
 API REST del **ERP Agencia360** y del backend de **CareCar** (CRM de prospectos y app postventa). Este documento resume el proyecto y el stack para quien llega al repositorio por primera vez; la fuente de verdad es `Agencia360_Stack_y_Arquitectura_v2.pdf` (versión 2) — este README es un extracto orientado a arrancar el backend, no lo reemplaza.
 
+> [!IMPORTANT]
+> **Antes de tu primer cambio:** lee [`AGENTS.md`](AGENTS.md) (reglas para personas, Claude Code, Codex y Antigravity) y corre `git config core.hooksPath .githooks`. Prioridad actual: backend de la **app CareCar v2** — ver [`plan/`](plan/README.md). CRM y ERP web están congelados.
+
 ## 1. Qué resuelve el proyecto
 
 La agencia automotriz no tiene sus sistemas centralizados. El proyecto los centraliza en dos productos que comparten este mismo backend:
@@ -445,6 +448,8 @@ Para ver la cobertura sin tocar el `pom.xml`:
 
 ## 7. Documentación y diagramas
 
+- `AGENTS.md`: reglas de trabajo para personas y agentes de código (ficha obligatoria, docs en cada PR, sin IA como co-autor, roles); `CLAUDE.md` y `GEMINI.md` apuntan ahí.
+- `plan/`: objetivos, módulos de Modulith y las 110 historias de backend de la app v2 (el plan maestro y el tablero viven en `carecar-mobile/plan/`).
 - `docs/TEC-1_modelo-datos_v1.md` y `docs/diagramas/agencia360-modelo-datos-v1.drawio`: modelo de datos v1.
 - `docs/api/`: contrato OpenAPI de la app CareCar (YAML y PDF).
 - `docs/datos-de-ejemplo.md`: los datos de ejemplo de TEC-3 y qué demuestra cada uno.
