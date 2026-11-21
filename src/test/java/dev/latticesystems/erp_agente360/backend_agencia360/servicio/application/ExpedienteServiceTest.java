@@ -57,8 +57,8 @@ class ExpedienteServiceTest {
 
 	@BeforeEach
 	void setUp() {
-		service = new ExpedienteService(vehiculos, servicioRepository, directorioUsuarios, evento -> {
-		}, Clock.fixed(AHORA, ExpedienteService.ZONA_AGENCIA));
+		service = new ExpedienteService(vehiculos, servicioRepository, directorioUsuarios,
+				Clock.fixed(AHORA, ExpedienteService.ZONA_AGENCIA));
 	}
 
 	private static Servicio servicio(LocalDate fecha, String precio) {

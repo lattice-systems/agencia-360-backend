@@ -60,12 +60,6 @@ public class Cita extends Auditable {
 	@Column(name = "cancelada_en")
 	private Instant canceladaEn;
 
-	@Column(name = "recordatorio_24h_en")
-	private Instant recordatorio24hEn;
-
-	@Column(name = "recordatorio_2h_en")
-	private Instant recordatorio2hEn;
-
 	protected Cita() {
 		// Requerido por JPA
 	}
@@ -116,32 +110,6 @@ public class Cita extends Auditable {
 		}
 		estado = EstadoCita.CANCELADA;
 		canceladaEn = en;
-	}
-
-	/** Ya se mandó (o ya no tiene caso mandar) el recordatorio del día antes. */
-	public void marcarRecordatorio24h(Instant en) {
-		if (recordatorio24hEn == null) {
-			recordatorio24hEn = en;
-		}
-	}
-
-	/** Ya se mandó el recordatorio de 2 horas antes; el del día antes ya no va. */
-	public void marcarRecordatorio2h(Instant en) {
-		marcarRecordatorio24h(en);
-		recordatorio2hEn = en;
-	}
-
-	/** Fecha y hora de inicio, hora local de la agencia. */
-	public LocalDateTime inicio() {
-		return fecha.atTime(horaInicio);
-	}
-
-	public Instant getRecordatorio24hEn() {
-		return recordatorio24hEn;
-	}
-
-	public Instant getRecordatorio2hEn() {
-		return recordatorio2hEn;
 	}
 
 	public Long getId() {
