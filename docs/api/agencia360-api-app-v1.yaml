@@ -495,6 +495,52 @@ paths:
         '403':
           $ref: '#/components/responses/CuentaDesactivada'
 
+  /dispositivos:
+    put:
+      tags: [Notificaciones]
+      summary: Registrar el token de FCM del teléfono
+      description: |
+        Tras iniciar sesión y cuando Firebase renueve el token. Idempotente; si el token era de
+        otro cliente, pasa a este. Push que manda el backend (campo `data`): `tipo=CITA, citaId`
+        (recordatorio 24 h y 2 h antes) y `tipo=SERVICIO, servicioId, vehiculoId` (vehículo listo).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Dispositivo'
+      responses:
+        '204':
+          description: Registrado
+        '400':
+          description: Token o plataforma no válidos
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Problema'
+        '401':
+          $ref: '#/components/responses/NoAutenticado'
+        '403':
+          $ref: '#/components/responses/CuentaDesactivada'
+    delete:
+      tags: [Notificaciones]
+      summary: Borrar el token del teléfono antes de cerrar sesión
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [token]
+              properties:
+                token:
+                  type: string
+      responses:
+        '204':
+          description: Borrado (también si no existía)
+        '401':
+          $ref: '#/components/responses/NoAutenticado'
+
 components:
   securitySchemes:
     bearerAuth:
@@ -731,7 +777,8 @@ components:
           format: date
         estatus:
           type: string
-          description: Valores pendientes de definir en ERP-3.1
+          enum: [RECIBIDO, EN_PROCESO, TERMINADO, ENTREGADO]
+          description: Conjunto cerrado (PO-5). Hoy el backend solo responde TERMINADO.
         total:
           type: number
           format: double
@@ -803,6 +850,10 @@ components:
         vehiculoId:
           type: integer
           format: int64
+        vehiculo:
+          type: string
+          nullable: true
+          description: Descripción corta del vehículo, p. ej. "Nissan March 2026 Advance"
         franjaId:
           type: integer
           format: int64
@@ -836,14 +887,47 @@ components:
 
     ModeloCatalogo:
       type: object
-      description: Atributos adicionales (versiones, precio, imágenes) pendientes de definir en APP-4.1
-      required: [id, modelo]
+      description: Lo que no es id, marca, modelo y año es opcional mientras el PO lo define (APP-4.1)
+      required: [id, marca, modelo, anio, activo]
       properties:
         id:
           type: integer
           format: int64
+        marca:
+          type: string
         modelo:
           type: string
+        anio:
+          type: integer
+        version:
+          type: string
+          nullable: true
+        precioDesde:
+          type: number
+          nullable: true
+          description: Precio de lista más bajo, con IVA
+        imagenUrl:
+          type: string
+          nullable: true
+          description: URL https
+        descripcion:
+          type: string
+          nullable: true
+        activo:
+          type: boolean
+          description: Siempre true en la app
+
+    Dispositivo:
+      type: object
+      required: [token, plataforma]
+      properties:
+        token:
+          type: string
+          maxLength: 4096
+          description: Token de Firebase Cloud Messaging
+        plataforma:
+          type: string
+          enum: [ANDROID, IOS]
 
     Problema:
       type: object
