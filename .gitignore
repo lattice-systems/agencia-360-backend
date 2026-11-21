@@ -210,3 +210,9 @@ buildNumber.properties
 SECURITY_REPORT.md
 .env
 scripts/manuales-generados/
+
+### Claude Code ###
+# Config personal; la compartida (.claude/settings.json y agents/) sí se versiona.
+.claude/settings.local.json
+.claude/context/
+CLAUDE.local.md
