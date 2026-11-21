@@ -46,6 +46,7 @@ public class AgendaAppService {
 	private final CitaRepository citaRepository;
 	private final VehiculosDeClientes vehiculos;
 	private final Clock reloj;
+	private final TicketCitaPdf ticketCitaPdf = new TicketCitaPdf();
 
 	@Autowired
 	public AgendaAppService(HorarioTaller horario, CitaRepository citaRepository, VehiculosDeClientes vehiculos) {
@@ -186,5 +187,20 @@ public class AgendaAppService {
 
 	private static String clave(LocalDate fecha, Long franjaId) {
 		return fecha + "#" + franjaId;
+	}
+
+	/**
+	 * PDF del comprobante de la cita.
+	 *
+	 * @throws RecursoNoEncontradoException
+	 *             si la cita no existe o no es del cliente (404)
+	 */
+	@Transactional(readOnly = true)
+	public byte[] ticket(Long clienteId, Long citaId) {
+		Cita cita = citaRepository.findByIdAndClienteId(citaId, clienteId)
+				.orElseThrow(() -> new RecursoNoEncontradoException("No existe la cita " + citaId));
+		VehiculoDeCliente vehiculo = vehiculos.buscarPorId(cita.getVehiculoClienteId())
+				.filter(propio -> propio.propietario().id().equals(clienteId)).orElse(null);
+		return ticketCitaPdf.armar(cita, vehiculo);
 	}
 }

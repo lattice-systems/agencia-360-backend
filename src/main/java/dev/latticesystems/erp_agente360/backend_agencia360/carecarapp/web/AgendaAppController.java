@@ -75,4 +75,18 @@ public class AgendaAppController {
 	public CitaApp cancelar(@PathVariable Long citaId, @AuthenticationPrincipal UsuarioAutenticado cliente) {
 		return agendaAppService.cancelar(cliente.id(), citaId);
 	}
+
+	@GetMapping(path = "/citas/{citaId}/ticket", produces = org.springframework.http.MediaType.APPLICATION_PDF_VALUE)
+	@PreAuthorize("hasRole('CLIENTE_CARECAR')")
+	@Operation(summary = "Descargar el comprobante de una cita", description = "PDF en el cuerpo. "
+			+ "Responde 404 si la cita no existe o es de otro cliente.")
+	public org.springframework.http.ResponseEntity<byte[]> ticket(@PathVariable Long citaId,
+			@AuthenticationPrincipal UsuarioAutenticado cliente) {
+		byte[] pdf = agendaAppService.ticket(cliente.id(), citaId);
+		return org.springframework.http.ResponseEntity.ok().contentType(org.springframework.http.MediaType.APPLICATION_PDF)
+				.header(org.springframework.http.HttpHeaders.CONTENT_DISPOSITION,
+						org.springframework.http.ContentDisposition.attachment().filename("ticket-cita-" + citaId + ".pdf")
+								.build().toString())
+				.body(pdf);
+	}
 }
