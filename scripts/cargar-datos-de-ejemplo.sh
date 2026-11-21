@@ -625,6 +625,22 @@ agregar_al_catalogo Kicks Exclusive 489900 "SUV compacta con tecnología de asis
 agregar_al_catalogo Sentra Advance 449900 "Sedán elegante con motor eficiente y pantalla táctil"
 agregar_al_catalogo X-Trail Advance 699900 "SUV familiar de tres filas con tracción integral"
 agregar_al_catalogo Frontier PRO-4X 899900 "Pick-up todoterreno para trabajo y aventura"
+agregar_al_catalogo Leaf "e+" 699900 "Hatchback eléctrico con gran autonomía y conducción silenciosa"
+agregar_al_catalogo Ariya Evolve+ 1099900 "SUV eléctrica con diseño futurista y tecnología avanzada"
+agregar_al_catalogo Z Performance 1399900 "Deportivo biturbo de tracción trasera con carácter clásico"
+agregar_al_catalogo GT-R Premium 3299900 "Superdeportivo legendario con tracción integral y motor V6 biturbo"
+agregar_al_catalogo Altima Platinum 649900 "Sedán mediano con tracción integral y asistencias de manejo"
+agregar_al_catalogo Pathfinder Platinum 1149900 "SUV de tres filas con espacio, potencia y gran confort"
+agregar_al_catalogo Murano Platinum 1099900 "SUV de lujo con interior refinado y manejo suave"
+agregar_al_catalogo Armada "Platinum Reserve" 1999900 "SUV grande con motor V8 y capacidad de remolque sobresaliente"
+agregar_al_catalogo Titan Pro-4X 1299900 "Pick-up grande y robusta para trabajo pesado y off-road"
+agregar_al_catalogo Urvan Panel 579900 "Van de carga con amplio espacio y bajo costo de operación"
+agregar_al_catalogo Maxima SR 799900 "Sedán deportivo de cuatro puertas con motor V6"
+agregar_al_catalogo Juke Exclusive 429900 "Crossover compacto de diseño atrevido y personalidad urbana"
+agregar_al_catalogo Qashqai Exclusive 599900 "Crossover versátil con tecnología e-Power y gran habitabilidad"
+agregar_al_catalogo Patrol Platinum 2699900 "SUV de lujo todoterreno con motor V6 biturbo y gran capacidad"
+agregar_al_catalogo Tiida Advance 299900 "Hatchback espacioso y práctico para la ciudad"
+agregar_al_catalogo Note e-Power 389900 "Compacto híbrido e-Power eficiente y de manejo ágil"
 
 # Citas de Laura Méndez, agendadas por la API de la app como lo hace el celular
 # (APP-3.3): una confirmada y una cancelada. Si ya tiene citas, no agrega más.
