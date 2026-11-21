@@ -53,6 +53,21 @@ ci(backend): ejecutar pruebas en cada push
 
 Escribe mensajes breves y concretos. Evita mensajes como `cambios`, `update` o `fix` sin contexto. El alcance entre paréntesis puede ser un módulo o área; se puede omitir si no aporta claridad.
 
+### Commits atómicos con intención
+
+- Un commit = un cambio con un porqué. Si el asunto necesita "y", probablemente son dos commits.
+- El asunto dice **qué**; el cuerpo explica **por qué**.
+- Historias de la app v2: el alcance es el módulo de Modulith (`feat(servicio): ...`) y el cuerpo menciona el ID (`V2-T05.07`).
+- Cada PR actualiza la documentación afectada (README, `docs/`, contrato OpenAPI, `plan/`), **siempre** (regla R2 de `AGENTS.md`).
+
+### Autoría: sin IA como autor ni co-autor
+
+El autor del commit es la persona dueña de la tarea, aunque el código lo haya escrito un agente (Claude, Codex, Antigravity, Copilot…). Prohibidas las líneas `Co-Authored-By:` de herramientas de IA y las firmas `Generated with …`. Los co-autores humanos sí se permiten.
+
+- Activa el hook una vez por clon: `git config core.hooksPath .githooks`.
+- El check `Autoría / Sin co-autor de IA` rechaza el PR si algún commit las trae.
+- Claude Code ya viene configurado sin atribución en `.claude/settings.json`.
+
 ## Pull requests
 
 El título del PR debe resumir el cambio. Puedes usar el mismo formato que un commit:
