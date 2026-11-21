@@ -103,6 +103,7 @@ class AgendaAppIntegrationTest extends AbstractIntegrationTest {
 		agendar(tokenDeAna, vehiculosDeAna.getFirst(), 1, diaHabil).andExpect(status().isCreated())
 				.andExpect(jsonPath("$.estado").value("CONFIRMADA"))
 				.andExpect(jsonPath("$.vehiculoId").value(vehiculosDeAna.getFirst()))
+				.andExpect(jsonPath("$.franjaId").value(1)).andExpect(jsonPath("$.vehiculo").value("Nissan March 2026"))
 				.andExpect(jsonPath("$.horaInicio").value("09:00")).andExpect(jsonPath("$.horaFin").value("10:00"));
 
 		disponibilidad(diaHabil, diaHabil).andExpect(jsonPath("$[0].cupoDisponible").value(2));
@@ -150,6 +151,7 @@ class AgendaAppIntegrationTest extends AbstractIntegrationTest {
 		mockMvc.perform(get("/api/v1/app/citas").header(HttpHeaders.AUTHORIZATION, "Bearer " + tokenDeAna))
 				.andExpect(status().isOk()).andExpect(jsonPath("$.contenido.length()").value(2))
 				.andExpect(jsonPath("$.contenido[0].franjaId").value(4))
+				.andExpect(jsonPath("$.contenido[0].vehiculo").value("Nissan March 2026"))
 				.andExpect(jsonPath("$.contenido[1].id").value(citaId))
 				.andExpect(jsonPath("$.totalElementos").value(2));
 
