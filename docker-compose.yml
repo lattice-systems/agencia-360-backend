@@ -23,5 +23,45 @@ services:
       - "1025:1025"
       - "8025:8025"
 
+  # API en un contenedor detras de Nginx, para entrar desde el telefono por la
+  # red local (http://IP-DE-LA-PC:8089/api/v1/app). Van en el perfil "proxy"
+  # para que `docker compose up -d` siga levantando solo la base, Redis y
+  # Mailpit. La API no publica el 8080 al host: solo Nginx la alcanza.
+  api:
+    profiles: [proxy]
+    build: .
+    restart: unless-stopped
+    depends_on: [postgres, redis, mailpit]
+    expose:
+      - "8080"
+    environment:
+      SPRING_PROFILES_ACTIVE: dev
+      DB_URL: jdbc:postgresql://postgres:5432/agencia360
+      DB_USERNAME: agencia360
+      DB_PASSWORD: agencia360
+      REDIS_HOST: redis
+      MAIL_HOST: mailpit
+      MAIL_PORT: "1025"
+      ADMIN_INICIAL_USUARIO: ${ADMIN_INICIAL_USUARIO:-}
+      ADMIN_INICIAL_CONTRASENA: ${ADMIN_INICIAL_CONTRASENA:-}
+      GERENTE_INICIAL_USUARIO: ${GERENTE_INICIAL_USUARIO:-}
+      GERENTE_INICIAL_CONTRASENA: ${GERENTE_INICIAL_CONTRASENA:-}
+      FCM_CREDENCIALES: ${FCM_CREDENCIALES:-}
+      MANUALES_DIRECTORIO: /home/api/manuales
+      SERVER_FORWARD_HEADERS_STRATEGY: framework
+    volumes:
+      - manuales:/home/api/manuales
+
+  nginx:
+    profiles: [proxy]
+    image: nginx:alpine
+    restart: unless-stopped
+    ports:
+      - "8089:80"   # desde el telefono (el firewall de Fedora permite 1025-65535)
+    volumes:
+      - ./nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on: [api]
+
 volumes:
   postgres-data:
+  manuales:

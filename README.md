@@ -158,6 +158,9 @@ Todos van bajo `/api/v1` y, salvo el login, piden el token en `Authorization: Be
 | `carecarapp` | `GET /app/vehiculos`, `GET /app/vehiculos/{id}/manuales` | Clientes de la app (rol `CLIENTE_CARECAR`) |
 | `carecarapp` | `GET /app/vehiculos/{id}/servicios?pagina=&tamano=` (historial, el más reciente primero), `GET /app/servicios/{id}/ticket` (PDF) | Clientes de la app (rol `CLIENTE_CARECAR`) |
 | `carecarapp` | `GET /app/agenda/disponibilidad?desde=&hasta=`, `GET /app/citas?estado=&desde=&hasta=&pagina=&tamano=`, `POST /app/citas`, `POST /app/citas/{id}/cancelar` (horario y cupo en `app.agenda.*`; plazo de cancelación provisional de 24 h, pendiente del PO) | Clientes de la app (rol `CLIENTE_CARECAR`) |
+| `carecarapp` | `GET /app/catalogo` (modelos activos) | Clientes de la app (rol `CLIENTE_CARECAR`) |
+| `carecarapp` | `GET /catalogo`, `POST /catalogo`, `POST /catalogo/{id}/retirar` | Administrador y Gerente de marketing |
+| `carecarapp` | `PUT /app/dispositivos` (`{token, plataforma}`), `DELETE /app/dispositivos` (`{token}`): token de FCM del teléfono; recordatorios de cita 24 h y 2 h antes y aviso de servicio terminado (sin `FCM_CREDENCIALES` solo se registran en el log) | Clientes de la app (rol `CLIENTE_CARECAR`) |
 | `carecarapp` | `GET /app/manuales/{id}/archivo?expira=&firma=` (URL temporal del PDF, vence a los 15 minutos) | Clientes de la app (sin token: la URL va firmada) |
 | `carecarapp` | `POST /manuales` (multipart: `marca`, `modelo`, `anio`, `archivo`; si ya hay uno, lo reemplaza) | Gerente de marketing |
 
@@ -218,6 +221,18 @@ Con **Podman** también funciona (`podman compose up -d`), siempre que tenga act
 | `mailpit` | `axllent/mailpit` | `1025` (SMTP) y `8025` (bandeja web) | Sin contraseña | No: atrapa los correos de desarrollo (códigos de recuperación de la app) |
 
 Estas credenciales son **solo para desarrollo local** y coinciden con los valores por defecto de `src/main/resources/application.properties`, así que no hay que configurar nada para que la API se conecte.
+
+### 5.2.1 API en Docker detrás de Nginx (para el teléfono)
+
+El perfil `proxy` agrega dos servicios: `api` (imagen del `Dockerfile`, perfil `dev`, conectada a `postgres`, `redis` y `mailpit` por nombre de servicio; **no** publica el 8080 al host) y `nginx` (`nginx/default.conf`), que publica el puerto **8089** y pasa `/api/` a `http://api:8080` con los encabezados `X-Forwarded-*`. `docker compose up -d` sin perfil sigue levantando solo la base, Redis y Mailpit.
+
+```bash
+docker compose --profile proxy up -d --build
+curl http://localhost:8089/            # {"servicio":"API Agencia360","proxy":"Nginx",...}
+ip -4 addr                             # la IP de la PC en la red local, p. ej. 192.168.1.50
+```
+
+Desde el teléfono (misma red Wi-Fi): `http://IP-DE-LA-PC:8089/api/v1/app`, por ejemplo `flutter run --dart-define=API_BASE_URL=http://192.168.1.50:8089/api/v1/app`. El firewall de Fedora permite 1025-65535. La API del contenedor usa la misma base que la que corre con `./mvnw`: no las corras con ramas de migraciones distintas a la vez.
 
 ### 5.3 Paso a paso
 
