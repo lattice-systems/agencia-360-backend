@@ -1,0 +1,164 @@
+package dev.latticesystems.erp_agente360.backend_agencia360.carecarapp;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+import dev.latticesystems.erp_agente360.backend_agencia360.acceso.domain.Usuario;
+import dev.latticesystems.erp_agente360.backend_agencia360.acceso.infrastructure.RolRepository;
+import dev.latticesystems.erp_agente360.backend_agencia360.acceso.infrastructure.UsuarioRepository;
+import dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.application.CuentasAppService;
+import dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.application.EnvioCorreos;
+import dev.latticesystems.erp_agente360.backend_agencia360.clientes.application.NuevoCliente;
+import dev.latticesystems.erp_agente360.backend_agencia360.clientes.application.RegistroClientesService;
+import dev.latticesystems.erp_agente360.backend_agencia360.clientes.application.VehiculoNuevo;
+import dev.latticesystems.erp_agente360.backend_agencia360.servicio.application.ExpedienteService;
+import dev.latticesystems.erp_agente360.backend_agencia360.servicio.application.NuevoServicio;
+import dev.latticesystems.erp_agente360.backend_agencia360.servicio.domain.RenglonNuevo;
+import dev.latticesystems.erp_agente360.backend_agencia360.servicio.domain.TipoRenglon;
+import dev.latticesystems.erp_agente360.backend_agencia360.shared.AbstractIntegrationTest;
+import dev.latticesystems.erp_agente360.backend_agencia360.shared.security.JwtService;
+import dev.latticesystems.erp_agente360.backend_agencia360.shared.security.Role;
+import dev.latticesystems.erp_agente360.backend_agencia360.shared.security.UsuarioAutenticado;
+import java.math.BigDecimal;
+import java.time.LocalDate;
+import java.time.ZoneId;
+import java.util.List;
+import java.util.Set;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
+import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.transaction.annotation.Transactional;
+
+/**
+ * Historial de servicios y ticket en PDF de la app (APP-3.2) de punta a punta,
+ * con los servicios registrados en el expediente del ERP y base de datos real
+ * (Testcontainers). Cada prueba se revierte al terminar.
+ */
+@AutoConfigureMockMvc
+@Transactional
+class ServiciosAppIntegrationTest extends AbstractIntegrationTest {
+
+	@Autowired
+	private MockMvc mockMvc;
+
+	@Autowired
+	private RegistroClientesService registroClientesService;
+
+	@Autowired
+	private CuentasAppService cuentasAppService;
+
+	@Autowired
+	private ExpedienteService expedienteService;
+
+	@Autowired
+	private UsuarioRepository usuarioRepository;
+
+	@Autowired
+	private RolRepository rolRepository;
+
+	@Autowired
+	private JwtService jwtService;
+
+	@MockitoBean
+	private EnvioCorreos envioCorreos;
+
+	private String tokenDeAna;
+	private Long marchDeAna;
+	private Long vehiculoDeBruno;
+	private UsuarioAutenticado servicio;
+
+	@BeforeEach
+	void registrarClientesYServicios() {
+		Long ana = registroClientesService.registrar(new NuevoCliente("Ana López", "ana@correo.com", null, null)).id();
+		marchDeAna = registroClientesService
+				.asignarVehiculo(ana, new VehiculoNuevo(null, "3N1CK3CD5RL000011", "Nissan", "March", 2026, "Sense"))
+				.vehiculos().getFirst().id();
+		cuentasAppService.abrir(ana, "Temporal123");
+		tokenDeAna = jwtService.generateToken(ana, "ana@correo.com", List.of(Role.CLIENTE_CARECAR));
+		Long bruno = registroClientesService.registrar(new NuevoCliente("Bruno Díaz", "bruno@correo.com", null, null))
+				.id();
+		vehiculoDeBruno = registroClientesService
+				.asignarVehiculo(bruno, new VehiculoNuevo(null, "3N1CK3CD5RL000012", "Nissan", "March", 2026, null))
+				.vehiculos().getFirst().id();
+		Usuario tecnico = usuarioRepository.save(new Usuario("servicio-app", "hash-de-prueba", "Técnico",
+				rolRepository.findByNombre("SERVICIO").orElseThrow()));
+		servicio = new UsuarioAutenticado(tecnico.getId(), tecnico.getUsuario(), Set.of(Role.SERVICIO));
+	}
+
+	@Test
+	void elClienteVeElHistorialDeSuVehiculoDelMasRecientePaginado() throws Exception {
+		Long viejo = registrar(marchDeAna, hoy().minusDays(60), "1200.00");
+		Long nuevo = registrar(marchDeAna, hoy().minusDays(1), "450.50");
+		registrar(vehiculoDeBruno, hoy(), "99.00");
+
+		mockMvc.perform(get("/api/v1/app/vehiculos/{id}/servicios", marchDeAna).header(HttpHeaders.AUTHORIZATION,
+				"Bearer " + tokenDeAna)).andExpect(status().isOk()).andExpect(jsonPath("$.contenido.length()").value(2))
+				.andExpect(jsonPath("$.contenido[0].id").value(nuevo))
+				.andExpect(jsonPath("$.contenido[0].estatus").value("TERMINADO"))
+				.andExpect(jsonPath("$.contenido[0].total").value(450.5))
+				.andExpect(jsonPath("$.contenido[1].id").value(viejo)).andExpect(jsonPath("$.pagina").value(0))
+				.andExpect(jsonPath("$.tamano").value(20)).andExpect(jsonPath("$.totalElementos").value(2))
+				.andExpect(jsonPath("$.totalPaginas").value(1));
+
+		mockMvc.perform(get("/api/v1/app/vehiculos/{id}/servicios", marchDeAna).param("pagina", "1")
+				.param("tamano", "1").header(HttpHeaders.AUTHORIZATION, "Bearer " + tokenDeAna))
+				.andExpect(status().isOk()).andExpect(jsonPath("$.contenido[0].id").value(viejo))
+				.andExpect(jsonPath("$.totalPaginas").value(2));
+	}
+
+	@Test
+	void unVehiculoAjenoResponde404YUnaPaginaInvalida400() throws Exception {
+		mockMvc.perform(get("/api/v1/app/vehiculos/{id}/servicios", vehiculoDeBruno).header(HttpHeaders.AUTHORIZATION,
+				"Bearer " + tokenDeAna)).andExpect(status().isNotFound());
+		mockMvc.perform(get("/api/v1/app/vehiculos/{id}/servicios", marchDeAna).param("tamano", "51")
+				.header(HttpHeaders.AUTHORIZATION, "Bearer " + tokenDeAna)).andExpect(status().isBadRequest())
+				.andExpect(jsonPath("$.codigo").value("DATOS_INVALIDOS"));
+	}
+
+	@Test
+	void elClienteDescargaElTicketDeSuServicioEnPdf() throws Exception {
+		Long servicioId = registrar(marchDeAna, hoy(), "1500.00");
+
+		byte[] pdf = mockMvc
+				.perform(get("/api/v1/app/servicios/{id}/ticket", servicioId).header(HttpHeaders.AUTHORIZATION,
+						"Bearer " + tokenDeAna))
+				.andExpect(status().isOk()).andExpect(content().contentType(MediaType.APPLICATION_PDF))
+				.andExpect(header().string(HttpHeaders.CONTENT_DISPOSITION,
+						"attachment; filename=\"ticket-" + servicioId + ".pdf\""))
+				.andReturn().getResponse().getContentAsByteArray();
+		assertThat(new String(pdf, 0, 5, java.nio.charset.StandardCharsets.US_ASCII)).isEqualTo("%PDF-");
+	}
+
+	@Test
+	void elTicketDeUnServicioAjenoOInexistenteResponde404() throws Exception {
+		Long deBruno = registrar(vehiculoDeBruno, hoy(), "300.00");
+
+		mockMvc.perform(get("/api/v1/app/servicios/{id}/ticket", deBruno).header(HttpHeaders.AUTHORIZATION,
+				"Bearer " + tokenDeAna)).andExpect(status().isNotFound());
+		mockMvc.perform(get("/api/v1/app/servicios/{id}/ticket", 999_999).header(HttpHeaders.AUTHORIZATION,
+				"Bearer " + tokenDeAna)).andExpect(status().isNotFound());
+		mockMvc.perform(get("/api/v1/app/servicios/{id}/ticket", deBruno)).andExpect(status().isUnauthorized());
+	}
+
+	private static LocalDate hoy() {
+		return LocalDate.now(ZoneId.of("America/Mexico_City"));
+	}
+
+	private static RenglonNuevo afinacion(String precio) {
+		return new RenglonNuevo(TipoRenglon.MANO_DE_OBRA, "Afinación", 1, new BigDecimal(precio));
+	}
+
+	private Long registrar(Long vehiculoId, LocalDate fecha, String precio) {
+		return expedienteService
+				.registrar(vehiculoId, new NuevoServicio(fecha, 15000, List.of(afinacion(precio))), servicio).id();
+	}
+}

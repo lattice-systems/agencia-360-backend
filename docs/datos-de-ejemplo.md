@@ -110,7 +110,8 @@ Qué se puede probar:
 - Con `servicio1`, buscar `900001` en Expediente, abrir los detalles de cada servicio y corregir placas y kilometraje.
 - Con `admin`, que el expediente se puede consultar pero no corregir.
 - En la app, con `laura.mendez@example.com`: el primer ingreso con cambio de contraseña, los 2 vehículos y el manual del March, que se abre con su URL temporal. El Sentra regresa una lista de manuales vacía.
+- En la app, con `laura.mendez@example.com`: el historial de servicios del vehículo que tenga servicios en el expediente y su ticket en PDF; la disponibilidad de la agenda (lunes a sábado de 9:00 a 17:00, cupo de 3 por franja), agendar una cita y cancelarla (hasta 24 h antes).
 
 ## Lo que no incluye todavía
 
-Ventas, pagos, facturas, clientes, órdenes de servicio y citas: llegan en S2 a S4. El criterio de TEC-3 los pide, pero se agregan al script cuando existan sus endpoints.
+Ventas, pagos, facturas, clientes y órdenes de servicio: llegan en S2 a S4. Las citas ya existen, pero el script no las crea: las agenda el cliente desde la app. El criterio de TEC-3 los pide, pero se agregan al script cuando existan sus endpoints.
