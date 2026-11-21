@@ -23,7 +23,7 @@ Idioma: **español** en docs, commits, PR, nombres de dominio y comentarios.
 | R2 | **Documentación siempre, sin excepción.** Todo PR actualiza las docs afectadas (README, `docs/`, contrato OpenAPI, `plan/`) y el estado de la historia en `carecar-mobile/plan/tablero.md` (PR aparte en ese repo si hace falta). |
 | R3 | **Sin IA como autor o co-autor.** Prohibido `Co-Authored-By:` de Claude/Codex/Gemini/Copilot/Antigravity y firmas "Generated with". El autor es la persona dueña de la tarea. Lo vigilan `.githooks/commit-msg` y el workflow `Autoría`. |
 | R4 | **Commits atómicos con intención** — `<tipo>(<modulo>): <verbo + cambio>`; el cuerpo explica el porqué ([`docs/convenciones-commits.md`](docs/convenciones-commits.md)). |
-| R5 | **Nada directo a `main`.** Rama `<tipo>/<id-historia>-<descripcion>` → PR → 1 aprobación humana + checks verdes → merge commit. |
+| R5 | **Nada directo a `main`.** Rama `<tipo>/<id-historia>-<descripcion>` → PR → checks verdes (incluido `Sin co-autor de IA`) → merge commit. La revisión de otra persona se recomienda pero **no es obligatoria** (por ahora). |
 | R6 | **Todos contribuyen** (las 6 personas, sin importar rol Scrum). Reparto en `carecar-mobile/plan/equipo-y-reparto.md`. |
 | R7 | **Sin fechas en el plan**: objetivos, hitos, criterios de salida. |
 | R8 | **Seguridad primero** (sección final). |

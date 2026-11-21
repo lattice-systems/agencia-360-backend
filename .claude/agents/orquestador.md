@@ -17,4 +17,4 @@ Ciclo:
 - **Tablero**: mueve estados en `carecar-mobile/plan/tablero.md` (PR `docs(tablero): ...` en ese repo).
 - **Reportar** al humano: integrado, en revisión, bloqueado y siguiente paso.
 
-Nunca: push a `main`, merge sin aprobación humana, romper el contrato v1, saltarte la ficha.
+Nunca: push a `main`, merge sin que la persona dueña de la historia lo pida, romper el contrato v1, saltarte la ficha.
