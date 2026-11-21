@@ -493,6 +493,46 @@ echo "Catálogo de la app (Gerente de marketing):"
 agregar_al_catalogo March Advance 289900 "Hatchback urbano, económico y fácil de estacionar"
 agregar_al_catalogo Versa Sense 339900 "Sedán con amplio espacio interior"
 agregar_al_catalogo Kicks Exclusive 489900 "SUV compacta con tecnología de asistencia al conductor"
+agregar_al_catalogo Sentra Advance 449900 "Sedán elegante con motor eficiente y pantalla táctil"
+agregar_al_catalogo X-Trail Advance 699900 "SUV familiar de tres filas con tracción integral"
+agregar_al_catalogo Frontier PRO-4X 899900 "Pick-up todoterreno para trabajo y aventura"
+
+# Citas de Laura Méndez, agendadas por la API de la app como lo hace el celular
+# (APP-3.3): una confirmada y una cancelada. Si ya tiene citas, no agrega más.
+# Su contraseña es LAURA_CONTRASENA (por defecto la que usa la app en desarrollo).
+echo "Citas de Laura Méndez (app):"
+LAURA_CONTRASENA="${LAURA_CONTRASENA:-CareCar2026!}"
+pedir POST /api/v1/app/auth/login "" "{\"correo\":\"$CLIENTE_APP_CORREO\",\"contrasena\":\"$LAURA_CONTRASENA\"}"
+TOKEN_LAURA=$(printf '%s' "$RESPUESTA" | sed -n 's/.*"accessToken":"\([^"]*\)".*/\1/p')
+if [ -z "$TOKEN_LAURA" ]; then
+  echo "  omitido     Laura no inicia sesión con LAURA_CONTRASENA (¿cambió su contraseña?). Pásala: LAURA_CONTRASENA=... $0"
+else
+  pedir GET /api/v1/app/citas "$TOKEN_LAURA"
+  [ "$CODIGO" = 200 ] || fallar "listar las citas de Laura"
+  if grep -q '"totalElementos":0' <<<"$RESPUESTA"; then
+    pedir GET "/api/v1/app/agenda/disponibilidad?desde=$(date -d '+3 days' +%F)&hasta=$(date -d '+9 days' +%F)" "$TOKEN_LAURA"
+    [ "$CODIGO" = 200 ] || fallar "ver la disponibilidad"
+    mapfile -t HUECOS < <(printf '%s' "$RESPUESTA" | grep -o '"fecha":"[^"]*","franjaId":[0-9]*' | sed 's/"fecha":"\(.*\)","franjaId":\(.*\)/\1 \2/')
+    [ "${#HUECOS[@]}" -ge 2 ] || fallar "encontrar horarios con cupo"
+    FECHA1="${HUECOS[0]% *}"; FRANJA1="${HUECOS[0]#* }"
+    FECHA2=""
+    for hueco in "${HUECOS[@]}"; do
+      if [ "${hueco% *}" != "$FECHA1" ]; then FECHA2="${hueco% *}"; FRANJA2="${hueco#* }"; break; fi
+    done
+    [ -n "$FECHA2" ] || fallar "encontrar un segundo día con cupo"
+    pedir POST /api/v1/app/citas "$TOKEN_LAURA" "{\"vehiculoId\":$ID_MARCH,\"franjaId\":$FRANJA1,\"fecha\":\"$FECHA1\"}"
+    [ "$CODIGO" = 201 ] || fallar "agendar la cita confirmada"
+    echo "  confirmada  March el $FECHA1 (franja $FRANJA1)"
+    pedir POST /api/v1/app/citas "$TOKEN_LAURA" "{\"vehiculoId\":$ID_SENTRA,\"franjaId\":$FRANJA2,\"fecha\":\"$FECHA2\"}"
+    [ "$CODIGO" = 201 ] || fallar "agendar la cita a cancelar"
+    ID_CITA=$(id_de_la_respuesta)
+    pedir POST "/api/v1/app/citas/$ID_CITA/cancelar" "$TOKEN_LAURA"
+    [ "$CODIGO" = 200 ] || fallar "cancelar la cita"
+    echo "  cancelada   Sentra el $FECHA2 (franja $FRANJA2)"
+  else
+    echo "  ya existían las citas de Laura"
+  fi
+fi
 
 echo
 echo "Listo. Qué demuestra cada dato: docs/datos-de-ejemplo.md. Contraseñas: README, sección 5.6."

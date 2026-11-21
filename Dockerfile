@@ -10,7 +10,8 @@ RUN ./mvnw -q -B package -DskipTests -Dspotless.check.skip=true -Dcheckstyle.ski
     && cp target/backend-agencia360-*-exec.jar /api.jar
 
 FROM eclipse-temurin:25-jre
-RUN useradd --system --create-home api
+RUN useradd --system --create-home api \
+    && mkdir -p /home/api/manuales && chown -R api:api /home/api
 USER api
 WORKDIR /home/api
 COPY --from=construccion /api.jar api.jar

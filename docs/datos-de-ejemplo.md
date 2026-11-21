@@ -111,7 +111,8 @@ Qué se puede probar:
 - Con `admin`, que el expediente se puede consultar pero no corregir.
 - En la app, con `laura.mendez@example.com`: el primer ingreso con cambio de contraseña, los 2 vehículos y el manual del March, que se abre con su URL temporal. El Sentra regresa una lista de manuales vacía.
 - En la app, con `laura.mendez@example.com`: el historial de servicios del vehículo que tenga servicios en el expediente y su ticket en PDF; la disponibilidad de la agenda (lunes a sábado de 9:00 a 17:00, cupo de 3 por franja), agendar una cita y cancelarla (hasta 24 h antes).
-- Catálogo de la app: Nissan March, Versa y Kicks 2026 con precio desde y descripción (`GET /api/v1/app/catalogo`).
+- Catálogo de la app: 6 modelos Nissan 2026 (March, Versa, Kicks, Sentra, X-Trail, Frontier PRO-4X) con precio desde y descripción, sin imagen (`GET /api/v1/app/catalogo`).
+- Citas de Laura (por la API de la app, con `LAURA_CONTRASENA`, por defecto `CareCar2026!`): una CONFIRMADA del March a los 3+ días y una CANCELADA del Sentra (`GET /api/v1/app/citas`). Si Laura ya tiene citas no agrega más; si no inicia sesión, omite este paso.
 
 ## Lo que no incluye todavía
 
