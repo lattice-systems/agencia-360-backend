@@ -75,8 +75,8 @@ public class ExpedienteService {
 	 * @throws IllegalArgumentException
 	 *             si las placas o el kilometraje no son válidos (400)
 	 */
-	public Expediente.Vehiculo corregir(Long vehiculoId, String placas, Integer kilometraje) {
-		return Expediente.Vehiculo.de(vehiculos.corregir(vehiculoId, placas, kilometraje));
+	public Expediente.Vehiculo corregir(Long vehiculoId, String placas, Integer kilometraje, String color) {
+		return Expediente.Vehiculo.de(vehiculos.corregir(vehiculoId, placas, kilometraje, color));
 	}
 
 	/**

@@ -369,6 +369,14 @@ fecha_hace_dias() {
   date -d "$1 days ago" +%Y-%m-%d 2>/dev/null || date -v-"$1"d +%Y-%m-%d
 }
 
+# Color del vehículo según el modelo (el de la foto que usa la app). $1 modelo.
+color_del_modelo() {
+  case "$1" in
+    March) echo "Blanco" ;; Versa) echo "Rojo" ;; Kicks) echo "Gris plata" ;;
+    Sentra) echo "Azul eléctrico" ;; X-Trail) echo "Beige champagne" ;; *) echo "Gris cemento" ;;
+  esac
+}
+
 # Id del vehículo con ese VIN en el expediente. $1 VIN.
 vehiculo_por_vin() {
   pedir GET "/api/v1/expedientes?vin=$1" "$TOKEN_SERVICIO"
@@ -419,10 +427,13 @@ TOKEN_SERVICIO=$(iniciar_sesion servicio1 Servicio123 ERP)
 ID_MARCH=$(vehiculo_por_vin "$VIN_MARCH")
 ID_SENTRA=$(vehiculo_por_vin "$VIN_SENTRA")
 [ -n "$ID_MARCH" ] && [ -n "$ID_SENTRA" ] || fallar "encontrar los vehículos de Laura Méndez"
+# Placas, kilometraje y color: se fijan siempre (es idempotente).
+pedir PATCH "/api/v1/expedientes/$ID_MARCH" "$TOKEN_SERVICIO" '{"placas":"GTO-123-A","kilometraje":10250,"color":"Blanco"}'
+[ "$CODIGO" = 200 ] || fallar "corregir el March de Laura Méndez"
+pedir PATCH "/api/v1/expedientes/$ID_SENTRA" "$TOKEN_SERVICIO" '{"placas":"GTO-456-B","kilometraje":14800,"color":"Azul eléctrico"}'
+[ "$CODIGO" = 200 ] || fallar "corregir el Sentra de Laura Méndez"
 pedir GET "/api/v1/expedientes/$ID_MARCH" "$TOKEN_SERVICIO"
 if grep -q '"servicios":\[\]' <<<"$RESPUESTA"; then
-  pedir PATCH "/api/v1/expedientes/$ID_MARCH" "$TOKEN_SERVICIO" '{"placas":"GTO-123-A","kilometraje":10250}'
-  [ "$CODIGO" = 200 ] || fallar "corregir el March de Laura Méndez"
   registrar_servicio "$ID_MARCH" 150 5100 \
     '[{"tipo":"MANO_DE_OBRA","concepto":"Servicio de 5,000 km","cantidad":1,"precioUnitario":1450.00},
       {"tipo":"REFACCION","concepto":"Filtro de aceite","cantidad":1,"precioUnitario":149.00},
@@ -507,10 +518,11 @@ crear_cliente_con_vehiculos() {
     [ "$CODIGO" = 200 ] || fallar "asignar el $modelo $anio a $nombre"
     id_veh=$(vehiculo_por_vin "$vin")
     [ -n "$id_veh" ] || fallar "encontrar el vehículo $vin"
+    pedir PATCH "/api/v1/expedientes/$id_veh" "$TOKEN_SERVICIO" \
+      "{\"placas\":\"$placas\",\"kilometraje\":$km,\"color\":\"$(color_del_modelo "$modelo")\"}"
+    [ "$CODIGO" = 200 ] || fallar "corregir placas, kilometraje y color de $vin"
     pedir GET "/api/v1/expedientes/$id_veh" "$TOKEN_SERVICIO"
     if grep -q '"servicios":\[\]' <<<"$RESPUESTA"; then
-      pedir PATCH "/api/v1/expedientes/$id_veh" "$TOKEN_SERVICIO" "{\"placas\":\"$placas\",\"kilometraje\":$km}"
-      [ "$CODIGO" = 200 ] || fallar "corregir placas y kilometraje de $vin"
       for ((i = 1; i <= nserv; i++)); do
         dias=$((60 + (nserv - i) * 130 + SERIE_VIN % 40))
         kmserv=$((km * (i * 3 + nserv - 1) / (nserv * 3 + nserv - 1)))

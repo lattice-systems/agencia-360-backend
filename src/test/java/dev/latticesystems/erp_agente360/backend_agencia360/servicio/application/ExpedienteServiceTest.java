@@ -40,7 +40,7 @@ class ExpedienteServiceTest {
 	private static final LocalDate HOY_EN_LA_AGENCIA = LocalDate.of(2026, 10, 26);
 
 	private static final VehiculoDeCliente SENTRA = new VehiculoDeCliente(3L, "3N1AB8CV5RY000001", "Nissan", "Sentra",
-			2026, "Advance", "ABC-123-D", 15_000, new Propietario(9L, "Ana López", "ana@correo.com", "4775550101"));
+			2026, "Advance", "ABC-123-D", 15_000, "Azul", new Propietario(9L, "Ana López", "ana@correo.com", "4775550101"));
 
 	private static final UsuarioAutenticado TECNICO = new UsuarioAutenticado(7L, "tecnico", Set.of(Role.SERVICIO));
 

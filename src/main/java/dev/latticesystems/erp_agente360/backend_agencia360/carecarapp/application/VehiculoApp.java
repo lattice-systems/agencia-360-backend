@@ -9,10 +9,10 @@ import dev.latticesystems.erp_agente360.backend_agencia360.clientes.VehiculosDeC
  * antes.
  */
 public record VehiculoApp(Long id, String vin, String marca, String modelo, int anio, String version, String placas,
-		Integer kilometraje) {
+		Integer kilometraje, String color) {
 
 	static VehiculoApp de(VehiculoDeCliente vehiculo) {
 		return new VehiculoApp(vehiculo.id(), vehiculo.vin(), vehiculo.marca(), vehiculo.modelo(), vehiculo.anio(),
-				vehiculo.version(), vehiculo.placas(), vehiculo.kilometraje());
+				vehiculo.version(), vehiculo.placas(), vehiculo.kilometraje(), vehiculo.color());
 	}
 }
