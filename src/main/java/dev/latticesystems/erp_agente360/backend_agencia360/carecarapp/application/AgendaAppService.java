@@ -5,6 +5,7 @@ import dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.domain.Est
 import dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.infrastructure.CitaRepository;
 import dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.infrastructure.FranjaOcupada;
 import dev.latticesystems.erp_agente360.backend_agencia360.clientes.VehiculosDeClientes;
+import dev.latticesystems.erp_agente360.backend_agencia360.clientes.VehiculosDeClientes.VehiculoDeCliente;
 import dev.latticesystems.erp_agente360.backend_agencia360.shared.exception.CodigosError;
 import dev.latticesystems.erp_agente360.backend_agencia360.shared.exception.ConflictoException;
 import dev.latticesystems.erp_agente360.backend_agencia360.shared.exception.RecursoNoEncontradoException;
@@ -110,8 +111,12 @@ public class AgendaAppService {
 	public Pagina<CitaApp> citas(Long clienteId, EstadoCita estado, LocalDate desde, LocalDate hasta, Integer pagina,
 			Integer tamano) {
 		Set<EstadoCita> estados = estado == null ? EnumSet.allOf(EstadoCita.class) : EnumSet.of(estado);
-		return Pagina.de(citaRepository.delCliente(clienteId, estados, desde == null ? SIN_INICIO : desde,
-				hasta == null ? SIN_FIN : hasta, Pagina.pedir(pagina, tamano)), CitaApp::de);
+		Map<Long, String> descripciones = vehiculos.deCliente(clienteId).stream()
+				.collect(Collectors.toMap(VehiculoDeCliente::id, CitaApp::describir, (a, b) -> a));
+		return Pagina.de(
+				citaRepository.delCliente(clienteId, estados, desde == null ? SIN_INICIO : desde,
+						hasta == null ? SIN_FIN : hasta, Pagina.pedir(pagina, tamano)),
+				cita -> CitaApp.de(cita, descripciones.get(cita.getVehiculoClienteId())));
 	}
 
 	/**
@@ -131,7 +136,8 @@ public class AgendaAppService {
 		if (vehiculoId == null || franjaId == null || fecha == null) {
 			throw new IllegalArgumentException("El vehículo, la franja y la fecha son obligatorios");
 		}
-		vehiculos.buscarPorId(vehiculoId).filter(vehiculo -> vehiculo.propietario().id().equals(clienteId))
+		VehiculoDeCliente vehiculo = vehiculos.buscarPorId(vehiculoId)
+				.filter(propio -> propio.propietario().id().equals(clienteId))
 				.orElseThrow(() -> new RecursoNoEncontradoException("No existe el vehículo " + vehiculoId));
 		if (!horario.abre(fecha)) {
 			throw new IllegalArgumentException("El taller no abre ese día");
@@ -155,8 +161,10 @@ public class AgendaAppService {
 				.cupoPorFranja()) {
 			throw new ConflictoException("La franja ya no tiene cupo", CodigosError.FRANJA_SIN_CUPO);
 		}
-		return CitaApp.de(citaRepository
-				.save(Cita.confirmar(clienteId, vehiculoId, fecha, franjaId, franja.inicio(), franja.fin())));
+		return CitaApp.de(
+				citaRepository
+						.save(Cita.confirmar(clienteId, vehiculoId, fecha, franjaId, franja.inicio(), franja.fin())),
+				CitaApp.describir(vehiculo));
 	}
 
 	/**
@@ -170,7 +178,10 @@ public class AgendaAppService {
 		Cita cita = citaRepository.findByIdAndClienteId(citaId, clienteId)
 				.orElseThrow(() -> new RecursoNoEncontradoException("No existe la cita " + citaId));
 		cita.cancelar(LocalDateTime.now(reloj), horario.plazoParaCancelar(), reloj.instant());
-		return CitaApp.de(cita);
+		return CitaApp.de(cita,
+				vehiculos.buscarPorId(cita.getVehiculoClienteId())
+						.filter(vehiculo -> vehiculo.propietario().id().equals(clienteId)).map(CitaApp::describir)
+						.orElse(null));
 	}
 
 	private static String clave(LocalDate fecha, Long franjaId) {
