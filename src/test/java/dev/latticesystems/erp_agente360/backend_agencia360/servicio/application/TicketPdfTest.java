@@ -25,7 +25,7 @@ class TicketPdfTest {
 								new BigDecimal("348.00"), new BigDecimal("348.00"))),
 				new BigDecimal("2100.00"), new BigDecimal("336.00"), new BigDecimal("2436.00"));
 		VehiculoDeCliente v = new VehiculoDeCliente(11L, "3N1AB7AP5KY123456", "Nissan", "X-Trail", 2023, "Exclusive",
-				"ABC-123-D", 28450, null);
+				"ABC-123-D", 28450, null, null);
 		byte[] pdf = new TicketPdf().armar(servicio, v);
 		assertThat(new String(pdf, 0, 4)).isEqualTo("%PDF");
 		assertThat(FotosDeAutos.de("X-Trail")).isNotNull();
@@ -34,6 +34,6 @@ class TicketPdfTest {
 		Files.write(Path.of("target/ticket-muestra.pdf"), pdf);
 		Files.write(Path.of("target/ticket-sinfoto.pdf"),
 				new TicketPdf().armar(servicio, new VehiculoDeCliente(12L, "VIN2", null, "Otro", 2020, null, null,
-						null, null)));
+						null, null, null)));
 	}
 }
