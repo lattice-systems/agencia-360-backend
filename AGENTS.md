@@ -4,7 +4,7 @@ Archivo canónico para **cualquier** agente de código (Claude Code, Codex, Anti
 
 Orden de verdad si algo choca:
 
-1. **Ficha técnica CareCar v1.1** — vive en `carecar-mobile/docs/ficha-tecnica/`. Sus tablas y campos se cumplen sí o sí.
+1. **Ficha técnica CareCar v2.0** — vive en `carecar-mobile/docs/ficha-tecnica/` (`.docx` + transcripción). Cada funcionalidad lista las tablas que participan; todas existen sí o sí.
 2. **Este archivo**.
 3. **Plan maestro v2** — `carecar-mobile/plan/` (fuente única de módulos e historias). El espejo backend está en [`plan/`](plan/README.md).
 4. `README.md`, `docs/` y el contrato OpenAPI en `docs/api/`.
@@ -19,7 +19,7 @@ Idioma: **español** en docs, commits, PR, nombres de dominio y comentarios.
 
 | # | Regla |
 | --- | --- |
-| R1 | **La ficha se cumple.** Las tablas `cliente`, `cuenta_app`, `token_recuperacion`, `vehiculo_cliente`, `manual`, `orden_servicio`, `orden_refaccion`, `franja_horario`, `cita` y `modelo_catalogo` existen con los campos de la ficha. Se pueden agregar campos; nunca quitar ni renombrar los de la ficha. Brechas actuales: historias `V2-T05.03`–`V2-T05.07`. |
+| R1 | **La ficha se cumple.** Toda tabla que la ficha técnica v2.0 nombra existe con ese nombre (58 funcionalidades, ver su transcripción y `carecar-mobile/plan/cumplimiento-ficha.md`). Se pueden agregar campos; nunca quitar ni renombrar los de la ficha. Primeras brechas: `V2-T05.03`–`V2-T05.07`. |
 | R2 | **Documentación siempre, sin excepción.** Todo PR actualiza las docs afectadas (README, `docs/`, contrato OpenAPI, `plan/`) y el estado de la historia en `carecar-mobile/plan/tablero.md` (PR aparte en ese repo si hace falta). |
 | R3 | **Sin IA como autor o co-autor.** Prohibido `Co-Authored-By:` de Claude/Codex/Gemini/Copilot/Antigravity y firmas "Generated with". El autor es la persona dueña de la tarea. Lo vigilan `.githooks/commit-msg` y el workflow `Autoría`. |
 | R4 | **Commits atómicos con intención** — `<tipo>(<modulo>): <verbo + cambio>`; el cuerpo explica el porqué ([`docs/convenciones-commits.md`](docs/convenciones-commits.md)). |

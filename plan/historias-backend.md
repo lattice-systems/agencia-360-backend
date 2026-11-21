@@ -6,7 +6,7 @@ Al tomar una historia, el planificador o el implementador agrega bajo su secció
 
 Total: **110 historias B**.
 
-## Alineación con la ficha técnica (prioridad máxima)
+## Alineación con la ficha técnica v2.0 (prioridad máxima)
 
 Antes que cualquier módulo nuevo: `V2-T05.03`–`V2-T05.07` dejan las tablas con los nombres y campos de la ficha. Ver la matriz en [`carecar-mobile/plan/cumplimiento-ficha.md`](https://github.com/lattice-systems/carecar-mobile/blob/main/plan/cumplimiento-ficha.md).
 
