@@ -574,38 +574,34 @@ March|Exclusive|2023|GTO-218-T|27600|2
 Sentra|Advance|2020|GTO-776-V|74100|3
 DATOS
 
-echo "Manual del March 2026 (Gerente de marketing):"
-# Con MANUAL_MARCH_PDF se sube un PDF real; si no, uno de ejemplo de una página.
-MANUAL_TMP=$(mktemp)
-trap 'rm -f "$RESPUESTA_TMP" "$CUERPO_TMP" "$MANUAL_TMP"' EXIT
-if [ -n "${MANUAL_MARCH_PDF:-}" ]; then
-  cp "$MANUAL_MARCH_PDF" "$MANUAL_TMP"
-else
-  base64 -d >"$MANUAL_TMP" <<'PDF'
-JVBERi0xLjQKMSAwIG9iago8PCAvVHlwZSAvQ2F0YWxvZyAvUGFnZXMgMiAwIFIgPj4KZW5kb2Jq
-CjIgMCBvYmoKPDwgL1R5cGUgL1BhZ2VzIC9LaWRzIFszIDAgUl0gL0NvdW50IDEgPj4KZW5kb2Jq
-CjMgMCBvYmoKPDwgL1R5cGUgL1BhZ2UgL1BhcmVudCAyIDAgUiAvTWVkaWFCb3ggWzAgMCA2MTIg
-NzkyXSAvQ29udGVudHMgNCAwIFIgL1Jlc291cmNlcyA8PCAvRm9udCA8PCAvRjEgNSAwIFIgPj4g
-Pj4gPj4KZW5kb2JqCjQgMCBvYmoKPDwgL0xlbmd0aCAxNDggPj4Kc3RyZWFtCkJUIC9GMSAxOCBU
-ZiA3MiA3MjAgVGQgKE5pc3NhbiBNYXJjaCAyMDI2IE1hbnVhbCBkZSBwcm9waWV0YXJpbykgVGog
-MCAtMjggVGQgL0YxIDEyIFRmIChFamVtcGxvIHBhcmEgZGVzYXJyb2xsby4gUmVlbXBsYXphbG8g
-cG9yIGVsIFBERiByZWFsLikgVGogRVQKZW5kc3RyZWFtCmVuZG9iago1IDAgb2JqCjw8IC9UeXBl
-IC9Gb250IC9TdWJ0eXBlIC9UeXBlMSAvQmFzZUZvbnQgL0hlbHZldGljYSA+PgplbmRvYmoKeHJl
-ZgowIDYKMDAwMDAwMDAwMCA2NTUzNSBmIAowMDAwMDAwMDA5IDAwMDAwIG4gCjAwMDAwMDAwNTgg
-MDAwMDAgbiAKMDAwMDAwMDExNSAwMDAwMCBuIAowMDAwMDAwMjQxIDAwMDAwIG4gCjAwMDAwMDA0
-NDAgMDAwMDAgbiAKdHJhaWxlcgo8PCAvU2l6ZSA2IC9Sb290IDEgMCBSID4+CnN0YXJ0eHJlZgo1
-MTAKJSVFT0YK
-PDF
+echo "Manuales de propietario (Gerente de marketing):"
+# Los PDF se generan con scripts/generar-manuales.py (Chrome headless): ficha técnica,
+# tablero, mantenimiento, seguridad y la foto del coche. Un manual es único por marca,
+# modelo y año, y la API reemplaza el que ya exista, así que repetir la carga no duplica.
+# Con MANUALES_DIR se usan PDF ya generados en otra carpeta.
+DIR_SCRIPT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+MANUALES_DIR="${MANUALES_DIR:-$DIR_SCRIPT/manuales-generados}"
+if [ ! -f "$MANUALES_DIR/indice.txt" ]; then
+  python3 "$DIR_SCRIPT/generar-manuales.py" --salida "$MANUALES_DIR" >/dev/null \
+    || fallar "generar los manuales (necesita python3 y Google Chrome)"
 fi
-if ! CODIGO=$(curl -sS -o "$RESPUESTA_TMP" -w '%{http_code}' -X POST "$API/api/v1/manuales" \
-  -H "Authorization: Bearer $TOKEN_GERENTE" -F marca=Nissan -F modelo=March -F anio=2026 \
-  -F "archivo=@$(ruta_para_curl "$MANUAL_TMP");type=application/pdf;filename=nissan-march-2026.pdf"); then
-  echo "No hubo respuesta de la API en $API. ¿Está corriendo?" >&2
-  exit 1
-fi
-RESPUESTA=$(cat "$RESPUESTA_TMP")
-[ "$CODIGO" = 200 ] || fallar "subir el manual del March 2026"
-echo "  subido      Nissan March 2026 Manual de propietario"
+SUBIDOS=0
+while IFS='|' read -r modelo anio archivo; do
+  [ -n "$modelo" ] || continue
+  if ! CODIGO=$(curl -sS -o "$RESPUESTA_TMP" -w '%{http_code}' -X POST "$API/api/v1/manuales" \
+    -H "Authorization: Bearer $TOKEN_GERENTE" -F marca=Nissan -F "modelo=$modelo" -F "anio=$anio" \
+    -F "archivo=@$(ruta_para_curl "$MANUALES_DIR/$archivo");type=application/pdf;filename=$archivo"); then
+    echo "No hubo respuesta de la API en $API. ¿Está corriendo?" >&2
+    exit 1
+  fi
+  RESPUESTA=$(cat "$RESPUESTA_TMP")
+  # 409: ya existía, no es error.
+  if [ "$CODIGO" != 200 ] && [ "$CODIGO" != 409 ]; then
+    fallar "subir el manual de $modelo $anio"
+  fi
+  SUBIDOS=$((SUBIDOS + 1))
+done <"$MANUALES_DIR/indice.txt"
+echo "  subidos     $SUBIDOS manuales de propietario (Nissan, título «Manual de propietario»)"
 
 # Catálogo de la app (APP-4.1). $1 modelo, $2 versión, $3 precio desde, $4 descripción.
 agregar_al_catalogo() {

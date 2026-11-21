@@ -209,3 +209,4 @@ buildNumber.properties
 # viven en Security → Advisories (borradores privados). No versionar.
 SECURITY_REPORT.md
 .env
+scripts/manuales-generados/
