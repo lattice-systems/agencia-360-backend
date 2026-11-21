@@ -369,6 +369,14 @@ fecha_hace_dias() {
   date -d "$1 days ago" +%Y-%m-%d 2>/dev/null || date -v-"$1"d +%Y-%m-%d
 }
 
+# Color del vehículo según el modelo (el de la foto que usa la app). $1 modelo.
+color_del_modelo() {
+  case "$1" in
+    March) echo "Blanco" ;; Versa) echo "Rojo" ;; Kicks) echo "Gris plata" ;;
+    Sentra) echo "Azul eléctrico" ;; X-Trail) echo "Beige champagne" ;; *) echo "Gris cemento" ;;
+  esac
+}
+
 # Id del vehículo con ese VIN en el expediente. $1 VIN.
 vehiculo_por_vin() {
   pedir GET "/api/v1/expedientes?vin=$1" "$TOKEN_SERVICIO"
@@ -419,10 +427,13 @@ TOKEN_SERVICIO=$(iniciar_sesion servicio1 Servicio123 ERP)
 ID_MARCH=$(vehiculo_por_vin "$VIN_MARCH")
 ID_SENTRA=$(vehiculo_por_vin "$VIN_SENTRA")
 [ -n "$ID_MARCH" ] && [ -n "$ID_SENTRA" ] || fallar "encontrar los vehículos de Laura Méndez"
+# Placas, kilometraje y color: se fijan siempre (es idempotente).
+pedir PATCH "/api/v1/expedientes/$ID_MARCH" "$TOKEN_SERVICIO" '{"placas":"GTO-123-A","kilometraje":10250,"color":"Blanco"}'
+[ "$CODIGO" = 200 ] || fallar "corregir el March de Laura Méndez"
+pedir PATCH "/api/v1/expedientes/$ID_SENTRA" "$TOKEN_SERVICIO" '{"placas":"GTO-456-B","kilometraje":14800,"color":"Azul eléctrico"}'
+[ "$CODIGO" = 200 ] || fallar "corregir el Sentra de Laura Méndez"
 pedir GET "/api/v1/expedientes/$ID_MARCH" "$TOKEN_SERVICIO"
 if grep -q '"servicios":\[\]' <<<"$RESPUESTA"; then
-  pedir PATCH "/api/v1/expedientes/$ID_MARCH" "$TOKEN_SERVICIO" '{"placas":"GTO-123-A","kilometraje":10250}'
-  [ "$CODIGO" = 200 ] || fallar "corregir el March de Laura Méndez"
   registrar_servicio "$ID_MARCH" 150 5100 \
     '[{"tipo":"MANO_DE_OBRA","concepto":"Servicio de 5,000 km","cantidad":1,"precioUnitario":1450.00},
       {"tipo":"REFACCION","concepto":"Filtro de aceite","cantidad":1,"precioUnitario":149.00},
@@ -445,38 +456,236 @@ else
   echo "  ya existía  el servicio del Sentra ($VIN_SENTRA)"
 fi
 
-echo "Manual del March 2026 (Gerente de marketing):"
-# Con MANUAL_MARCH_PDF se sube un PDF real; si no, uno de ejemplo de una página.
-MANUAL_TMP=$(mktemp)
-trap 'rm -f "$RESPUESTA_TMP" "$CUERPO_TMP" "$MANUAL_TMP"' EXIT
-if [ -n "${MANUAL_MARCH_PDF:-}" ]; then
-  cp "$MANUAL_MARCH_PDF" "$MANUAL_TMP"
+# Más clientes de la app CareCar, cada uno con 3 a 5 vehículos, cuenta abierta y
+# la contraseña conocida CLIENTES_CONTRASENA. La contraseña temporal solo llega a
+# Mailpit, así que se restablece con el código de 6 dígitos del correo (el mismo
+# flujo "Olvidé mi contraseña" de la app). Todo por la API; no duplica al repetirse.
+MAILPIT="${MAILPIT:-http://localhost:8025}"
+CLIENTES_CONTRASENA="${CLIENTES_CONTRASENA:-CareCar2026!}"
+SERIE_VIN=90000
+
+# Lleva la cuenta del cliente a CLIENTES_CONTRASENA con el código de Mailpit.
+# $1 correo.
+restablecer_con_mailpit() {
+  pedir POST /api/v1/app/auth/recuperar-contrasena "" "{\"correo\":\"$1\"}"
+  [ "$CODIGO" = 202 ] || fallar "pedir el código de $1"
+  local codigo="" intento id
+  sleep 1
+  for intento in 1 2 3 4 5 6 7 8 9 10; do
+    id=$(curl -sS "$MAILPIT/api/v1/search?query=to:$1%20subject:restablecer&limit=1" |
+      sed -n 's/.*"messages":\[{"ID":"\([^"]*\)".*/\1/p')
+    if [ -n "$id" ]; then
+      codigo=$(curl -sS "$MAILPIT/api/v1/message/$id" | sed -n 's/.*es: \([0-9]\{6\}\).*/\1/p')
+      [ -n "$codigo" ] && break
+    fi
+    sleep 0.5
+  done
+  [ -n "$codigo" ] || { echo "No llegó el código de $1 a Mailpit ($MAILPIT)" >&2; exit 1; }
+  pedir POST /api/v1/app/auth/restablecer-contrasena "" \
+    "{\"correo\":\"$1\",\"codigo\":\"$codigo\",\"contrasenaNueva\":\"$CLIENTES_CONTRASENA\"}"
+  [ "$CODIGO" = 204 ] || fallar "restablecer la contraseña de $1"
+}
+
+# Crea (o encuentra) un cliente con sus vehículos y su cuenta de app.
+# $1 nombre, $2 correo, $3 teléfono; los vehículos llegan por la entrada
+# estándar, uno por línea: modelo|versión|año|placas|kilometraje|servicios(0-3).
+crear_cliente_con_vehiculos() {
+  local nombre="$1" correo="$2" id_cliente linea lineas=()
+  while IFS= read -r linea; do [ -n "$linea" ] && lineas+=("$linea"); done
+  pedir POST /api/v1/clientes "$TOKEN_GERENTE" \
+    "{\"nombre\":\"$nombre\",\"correo\":\"$correo\",\"telefono\":\"$3\"}"
+  case "$CODIGO" in
+    201) id_cliente=$(id_de_la_respuesta); echo "  creado      $nombre ($correo)" ;;
+    409)
+      pedir GET "/api/v1/clientes?buscar=$correo" "$TOKEN_GERENTE"
+      id_cliente=$(printf '%s' "$RESPUESTA" | sed -n 's/^\[{"id":\([0-9][0-9]*\).*/\1/p')
+      [ -n "$id_cliente" ] || fallar "encontrar a $nombre"
+      echo "  ya existía  $nombre ($correo)"
+      ;;
+    *) fallar "registrar a $nombre" ;;
+  esac
+  local modelo version anio placas km nserv vin codigo_modelo id_veh i dias kmserv renglones
+  for linea in "${lineas[@]}"; do
+    IFS='|' read -r modelo version anio placas km nserv <<<"$linea"
+    SERIE_VIN=$((SERIE_VIN + 1))
+    case "$modelo" in
+      March) codigo_modelo=MAR ;; Versa) codigo_modelo=VER ;; Kicks) codigo_modelo=KIC ;;
+      Sentra) codigo_modelo=SEN ;; X-Trail) codigo_modelo=XTR ;; *) codigo_modelo=FRO ;;
+    esac
+    vin="3N1${codigo_modelo}CD5RL9${SERIE_VIN}"
+    pedir POST "/api/v1/clientes/$id_cliente/vehiculos" "$TOKEN_GERENTE" \
+      "{\"vin\":\"$vin\",\"marca\":\"Nissan\",\"modelo\":\"$modelo\",\"anio\":$anio,\"version\":\"$version\"}"
+    [ "$CODIGO" = 200 ] || fallar "asignar el $modelo $anio a $nombre"
+    id_veh=$(vehiculo_por_vin "$vin")
+    [ -n "$id_veh" ] || fallar "encontrar el vehículo $vin"
+    pedir PATCH "/api/v1/expedientes/$id_veh" "$TOKEN_SERVICIO" \
+      "{\"placas\":\"$placas\",\"kilometraje\":$km,\"color\":\"$(color_del_modelo "$modelo")\"}"
+    [ "$CODIGO" = 200 ] || fallar "corregir placas, kilometraje y color de $vin"
+    pedir GET "/api/v1/expedientes/$id_veh" "$TOKEN_SERVICIO"
+    if grep -q '"servicios":\[\]' <<<"$RESPUESTA"; then
+      for ((i = 1; i <= nserv; i++)); do
+        dias=$((60 + (nserv - i) * 130 + SERIE_VIN % 40))
+        kmserv=$((km * (i * 3 + nserv - 1) / (nserv * 3 + nserv - 1)))
+        case $((i % 3)) in
+          1) renglones='[{"tipo":"MANO_DE_OBRA","concepto":"Servicio de mantenimiento","cantidad":1,"precioUnitario":1650.00},
+              {"tipo":"REFACCION","concepto":"Filtro de aceite","cantidad":1,"precioUnitario":149.00},
+              {"tipo":"REFACCION","concepto":"Aceite sintético 5W-30 (litro)","cantidad":4,"precioUnitario":239.00}]' ;;
+          2) renglones='[{"tipo":"MANO_DE_OBRA","concepto":"Cambio de balatas delanteras","cantidad":1,"precioUnitario":650.00},
+              {"tipo":"REFACCION","concepto":"Balatas delanteras","cantidad":1,"precioUnitario":890.00}]' ;;
+          0) renglones='[{"tipo":"MANO_DE_OBRA","concepto":"Afinación mayor","cantidad":1,"precioUnitario":2350.00},
+              {"tipo":"REFACCION","concepto":"Filtro de aire","cantidad":1,"precioUnitario":199.00},
+              {"tipo":"REFACCION","concepto":"Bujía de iridio","cantidad":4,"precioUnitario":259.00}]' ;;
+        esac
+        registrar_servicio "$id_veh" "$dias" "$kmserv" "$renglones"
+      done
+      echo "              + $modelo $version $anio $placas, $km km, $nserv servicio(s)"
+    else
+      echo "              ya existía $modelo $anio $placas"
+    fi
+  done
+  pedir POST "/api/v1/clientes/$id_cliente/cuenta-app" "$TOKEN_GERENTE"
+  case "$CODIGO" in
+    201 | 409) ;;
+    *) fallar "abrir la cuenta de la app de $nombre" ;;
+  esac
+  pedir POST /api/v1/app/auth/login "" "{\"correo\":\"$correo\",\"contrasena\":\"$CLIENTES_CONTRASENA\"}"
+  if [ "$CODIGO" != 200 ]; then
+    restablecer_con_mailpit "$correo"
+    echo "              contraseña de prueba definida con el código de Mailpit"
+  fi
+}
+
+echo "Más clientes de la app con 3 a 5 vehículos (Gerente de marketing y Servicio):"
+crear_cliente_con_vehiculos "Carlos Ramírez" carlos.ramirez@example.com "477 555 0131" <<'DATOS'
+Sentra|Advance|2024|GTO-482-B|18400|3
+Versa|Sense|2022|GTO-715-C|42150|2
+Kicks|Exclusive|2025|GTO-309-D|6200|1
+March|Sense|2019|GTO-864-A|78900|3
+DATOS
+crear_cliente_con_vehiculos "Ana Torres" ana.torres@example.com "477 555 0132" <<'DATOS'
+X-Trail|Exclusive|2023|MXP-27-83|29700|2
+Kicks|Advance|2021|GTO-157-F|51300|3
+Versa|Advance|2026|GTO-921-G|2100|1
+DATOS
+crear_cliente_con_vehiculos "Luis Hernández" luis.hernandez@example.com "462 555 0133" <<'DATOS'
+Frontier|PRO-4X|2024|GTO-603-H|23800|2
+Frontier|LE|2020|GTO-248-J|96500|3
+Sentra|Exclusive|2023|GTO-376-K|35200|2
+March|Advance|2018|GTO-590-L|112400|3
+X-Trail|Sense|2025|GTO-834-M|8900|1
+DATOS
+crear_cliente_con_vehiculos "Sofía Morales" sofia.morales@example.com "477 555 0134" <<'DATOS'
+Kicks|Sense|2022|NMR-48-19|47800|2
+Sentra|Sense|2021|GTO-662-N|61200|3
+Versa|Exclusive|2024|GTO-127-P|15300|1
+X-Trail|Advance|2019|GTO-945-R|88700|2
+DATOS
+crear_cliente_con_vehiculos "Diego Castillo" diego.castillo@example.com "462 555 0135" <<'DATOS'
+Frontier|PRO-4X|2026|GTO-501-S|3400|1
+March|Exclusive|2023|GTO-218-T|27600|2
+Sentra|Advance|2020|GTO-776-V|74100|3
+DATOS
+
+echo "Manuales de propietario (Gerente de marketing):"
+# Los PDF se generan con scripts/generar-manuales.py (Chrome headless): ficha técnica,
+# tablero, mantenimiento, seguridad y la foto del coche. Un manual es único por marca,
+# modelo y año, y la API reemplaza el que ya exista, así que repetir la carga no duplica.
+# Con MANUALES_DIR se usan PDF ya generados en otra carpeta.
+DIR_SCRIPT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+MANUALES_DIR="${MANUALES_DIR:-$DIR_SCRIPT/manuales-generados}"
+if [ ! -f "$MANUALES_DIR/indice.txt" ]; then
+  python3 "$DIR_SCRIPT/generar-manuales.py" --salida "$MANUALES_DIR" >/dev/null \
+    || fallar "generar los manuales (necesita python3 y Google Chrome)"
+fi
+SUBIDOS=0
+while IFS='|' read -r modelo anio archivo; do
+  [ -n "$modelo" ] || continue
+  if ! CODIGO=$(curl -sS -o "$RESPUESTA_TMP" -w '%{http_code}' -X POST "$API/api/v1/manuales" \
+    -H "Authorization: Bearer $TOKEN_GERENTE" -F marca=Nissan -F "modelo=$modelo" -F "anio=$anio" \
+    -F "archivo=@$(ruta_para_curl "$MANUALES_DIR/$archivo");type=application/pdf;filename=$archivo"); then
+    echo "No hubo respuesta de la API en $API. ¿Está corriendo?" >&2
+    exit 1
+  fi
+  RESPUESTA=$(cat "$RESPUESTA_TMP")
+  # 409: ya existía, no es error.
+  if [ "$CODIGO" != 200 ] && [ "$CODIGO" != 409 ]; then
+    fallar "subir el manual de $modelo $anio"
+  fi
+  SUBIDOS=$((SUBIDOS + 1))
+done <"$MANUALES_DIR/indice.txt"
+echo "  subidos     $SUBIDOS manuales de propietario (Nissan, título «Manual de propietario»)"
+
+# Catálogo de la app (APP-4.1). $1 modelo, $2 versión, $3 precio desde, $4 descripción.
+agregar_al_catalogo() {
+  pedir POST /api/v1/catalogo "$TOKEN_GERENTE" \
+    "{\"marca\":\"Nissan\",\"modelo\":\"$1\",\"anio\":2026,\"version\":\"$2\",\"precioDesde\":$3,\"descripcion\":\"$4\"}"
+  case "$CODIGO" in
+    201) echo "  agregado    Nissan $1 2026 $2" ;;
+    409) echo "  ya existía  Nissan $1 2026 $2" ;;
+    *) fallar "agregar el $1 al catálogo" ;;
+  esac
+}
+
+echo "Catálogo de la app (Gerente de marketing):"
+agregar_al_catalogo March Advance 289900 "Hatchback urbano, económico y fácil de estacionar"
+agregar_al_catalogo Versa Sense 339900 "Sedán con amplio espacio interior"
+agregar_al_catalogo Kicks Exclusive 489900 "SUV compacta con tecnología de asistencia al conductor"
+agregar_al_catalogo Sentra Advance 449900 "Sedán elegante con motor eficiente y pantalla táctil"
+agregar_al_catalogo X-Trail Advance 699900 "SUV familiar de tres filas con tracción integral"
+agregar_al_catalogo Frontier PRO-4X 899900 "Pick-up todoterreno para trabajo y aventura"
+agregar_al_catalogo Leaf "e+" 699900 "Hatchback eléctrico con gran autonomía y conducción silenciosa"
+agregar_al_catalogo Ariya Evolve+ 1099900 "SUV eléctrica con diseño futurista y tecnología avanzada"
+agregar_al_catalogo Z Performance 1399900 "Deportivo biturbo de tracción trasera con carácter clásico"
+agregar_al_catalogo GT-R Premium 3299900 "Superdeportivo legendario con tracción integral y motor V6 biturbo"
+agregar_al_catalogo Altima Platinum 649900 "Sedán mediano con tracción integral y asistencias de manejo"
+agregar_al_catalogo Pathfinder Platinum 1149900 "SUV de tres filas con espacio, potencia y gran confort"
+agregar_al_catalogo Murano Platinum 1099900 "SUV de lujo con interior refinado y manejo suave"
+agregar_al_catalogo Armada "Platinum Reserve" 1999900 "SUV grande con motor V8 y capacidad de remolque sobresaliente"
+agregar_al_catalogo Titan Pro-4X 1299900 "Pick-up grande y robusta para trabajo pesado y off-road"
+agregar_al_catalogo Urvan Panel 579900 "Van de carga con amplio espacio y bajo costo de operación"
+agregar_al_catalogo Maxima SR 799900 "Sedán deportivo de cuatro puertas con motor V6"
+agregar_al_catalogo Juke Exclusive 429900 "Crossover compacto de diseño atrevido y personalidad urbana"
+agregar_al_catalogo Qashqai Exclusive 599900 "Crossover versátil con tecnología e-Power y gran habitabilidad"
+agregar_al_catalogo Patrol Platinum 2699900 "SUV de lujo todoterreno con motor V6 biturbo y gran capacidad"
+agregar_al_catalogo Tiida Advance 299900 "Hatchback espacioso y práctico para la ciudad"
+agregar_al_catalogo Note e-Power 389900 "Compacto híbrido e-Power eficiente y de manejo ágil"
+
+# Citas de Laura Méndez, agendadas por la API de la app como lo hace el celular
+# (APP-3.3): una confirmada y una cancelada. Si ya tiene citas, no agrega más.
+# Su contraseña es LAURA_CONTRASENA (por defecto la que usa la app en desarrollo).
+echo "Citas de Laura Méndez (app):"
+LAURA_CONTRASENA="${LAURA_CONTRASENA:-CareCar2026!}"
+pedir POST /api/v1/app/auth/login "" "{\"correo\":\"$CLIENTE_APP_CORREO\",\"contrasena\":\"$LAURA_CONTRASENA\"}"
+TOKEN_LAURA=$(printf '%s' "$RESPUESTA" | sed -n 's/.*"accessToken":"\([^"]*\)".*/\1/p')
+if [ -z "$TOKEN_LAURA" ]; then
+  echo "  omitido     Laura no inicia sesión con LAURA_CONTRASENA (¿cambió su contraseña?). Pásala: LAURA_CONTRASENA=... $0"
 else
-  base64 -d >"$MANUAL_TMP" <<'PDF'
-JVBERi0xLjQKMSAwIG9iago8PCAvVHlwZSAvQ2F0YWxvZyAvUGFnZXMgMiAwIFIgPj4KZW5kb2Jq
-CjIgMCBvYmoKPDwgL1R5cGUgL1BhZ2VzIC9LaWRzIFszIDAgUl0gL0NvdW50IDEgPj4KZW5kb2Jq
-CjMgMCBvYmoKPDwgL1R5cGUgL1BhZ2UgL1BhcmVudCAyIDAgUiAvTWVkaWFCb3ggWzAgMCA2MTIg
-NzkyXSAvQ29udGVudHMgNCAwIFIgL1Jlc291cmNlcyA8PCAvRm9udCA8PCAvRjEgNSAwIFIgPj4g
-Pj4gPj4KZW5kb2JqCjQgMCBvYmoKPDwgL0xlbmd0aCAxNDggPj4Kc3RyZWFtCkJUIC9GMSAxOCBU
-ZiA3MiA3MjAgVGQgKE5pc3NhbiBNYXJjaCAyMDI2IE1hbnVhbCBkZSBwcm9waWV0YXJpbykgVGog
-MCAtMjggVGQgL0YxIDEyIFRmIChFamVtcGxvIHBhcmEgZGVzYXJyb2xsby4gUmVlbXBsYXphbG8g
-cG9yIGVsIFBERiByZWFsLikgVGogRVQKZW5kc3RyZWFtCmVuZG9iago1IDAgb2JqCjw8IC9UeXBl
-IC9Gb250IC9TdWJ0eXBlIC9UeXBlMSAvQmFzZUZvbnQgL0hlbHZldGljYSA+PgplbmRvYmoKeHJl
-ZgowIDYKMDAwMDAwMDAwMCA2NTUzNSBmIAowMDAwMDAwMDA5IDAwMDAwIG4gCjAwMDAwMDAwNTgg
-MDAwMDAgbiAKMDAwMDAwMDExNSAwMDAwMCBuIAowMDAwMDAwMjQxIDAwMDAwIG4gCjAwMDAwMDA0
-NDAgMDAwMDAgbiAKdHJhaWxlcgo8PCAvU2l6ZSA2IC9Sb290IDEgMCBSID4+CnN0YXJ0eHJlZgo1
-MTAKJSVFT0YK
-PDF
+  pedir GET /api/v1/app/citas "$TOKEN_LAURA"
+  [ "$CODIGO" = 200 ] || fallar "listar las citas de Laura"
+  if grep -q '"totalElementos":0' <<<"$RESPUESTA"; then
+    pedir GET "/api/v1/app/agenda/disponibilidad?desde=$(date -d '+3 days' +%F)&hasta=$(date -d '+9 days' +%F)" "$TOKEN_LAURA"
+    [ "$CODIGO" = 200 ] || fallar "ver la disponibilidad"
+    mapfile -t HUECOS < <(printf '%s' "$RESPUESTA" | grep -o '"fecha":"[^"]*","franjaId":[0-9]*' | sed 's/"fecha":"\(.*\)","franjaId":\(.*\)/\1 \2/')
+    [ "${#HUECOS[@]}" -ge 2 ] || fallar "encontrar horarios con cupo"
+    FECHA1="${HUECOS[0]% *}"; FRANJA1="${HUECOS[0]#* }"
+    FECHA2=""
+    for hueco in "${HUECOS[@]}"; do
+      if [ "${hueco% *}" != "$FECHA1" ]; then FECHA2="${hueco% *}"; FRANJA2="${hueco#* }"; break; fi
+    done
+    [ -n "$FECHA2" ] || fallar "encontrar un segundo día con cupo"
+    pedir POST /api/v1/app/citas "$TOKEN_LAURA" "{\"vehiculoId\":$ID_MARCH,\"franjaId\":$FRANJA1,\"fecha\":\"$FECHA1\"}"
+    [ "$CODIGO" = 201 ] || fallar "agendar la cita confirmada"
+    echo "  confirmada  March el $FECHA1 (franja $FRANJA1)"
+    pedir POST /api/v1/app/citas "$TOKEN_LAURA" "{\"vehiculoId\":$ID_SENTRA,\"franjaId\":$FRANJA2,\"fecha\":\"$FECHA2\"}"
+    [ "$CODIGO" = 201 ] || fallar "agendar la cita a cancelar"
+    ID_CITA=$(id_de_la_respuesta)
+    pedir POST "/api/v1/app/citas/$ID_CITA/cancelar" "$TOKEN_LAURA"
+    [ "$CODIGO" = 200 ] || fallar "cancelar la cita"
+    echo "  cancelada   Sentra el $FECHA2 (franja $FRANJA2)"
+  else
+    echo "  ya existían las citas de Laura"
+  fi
 fi
-if ! CODIGO=$(curl -sS -o "$RESPUESTA_TMP" -w '%{http_code}' -X POST "$API/api/v1/manuales" \
-  -H "Authorization: Bearer $TOKEN_GERENTE" -F marca=Nissan -F modelo=March -F anio=2026 \
-  -F "archivo=@$(ruta_para_curl "$MANUAL_TMP");type=application/pdf;filename=nissan-march-2026.pdf"); then
-  echo "No hubo respuesta de la API en $API. ¿Está corriendo?" >&2
-  exit 1
-fi
-RESPUESTA=$(cat "$RESPUESTA_TMP")
-[ "$CODIGO" = 200 ] || fallar "subir el manual del March 2026"
-echo "  subido      Nissan March 2026 Manual de propietario"
 
 echo
 echo "Listo. Qué demuestra cada dato: docs/datos-de-ejemplo.md. Contraseñas: README, sección 5.6."

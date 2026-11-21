@@ -3,6 +3,8 @@ package dev.latticesystems.erp_agente360.backend_agencia360.servicio.infrastruct
 import dev.latticesystems.erp_agente360.backend_agencia360.servicio.domain.Servicio;
 import java.util.List;
 import java.util.Optional;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
@@ -16,4 +18,9 @@ public interface ServicioRepository extends JpaRepository<Servicio, Long> {
 	@EntityGraph(attributePaths = "renglones")
 	@Query("select s from Servicio s where s.id = :id and s.vehiculoClienteId = :vehiculoClienteId")
 	Optional<Servicio> obtenerConRenglones(@Param("vehiculoClienteId") Long vehiculoClienteId, @Param("id") Long id);
+
+	Page<Servicio> findByVehiculoClienteId(Long vehiculoClienteId, Pageable pagina);
+
+	@EntityGraph(attributePaths = "renglones")
+	Optional<Servicio> findConRenglonesById(Long id);
 }

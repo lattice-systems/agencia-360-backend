@@ -56,10 +56,13 @@ public class VehiculosDeClientesService implements VehiculosDeClientes {
 
 	@Override
 	@Transactional
-	public VehiculoDeCliente corregir(Long vehiculoId, String placas, Integer kilometraje) {
+	public VehiculoDeCliente corregir(Long vehiculoId, String placas, Integer kilometraje, String color) {
 		VehiculoCliente vehiculo = vehiculoRepository.obtener(vehiculoId)
 				.orElseThrow(() -> new RecursoNoEncontradoException("No existe el vehículo " + vehiculoId));
 		vehiculo.corregir(placas, kilometraje);
+		if (color != null) {
+			vehiculo.corregirColor(color);
+		}
 		vehiculoRepository.flush();
 		return vista(vehiculo);
 	}
@@ -68,6 +71,7 @@ public class VehiculosDeClientesService implements VehiculosDeClientes {
 		Cliente cliente = vehiculo.getCliente();
 		return new VehiculoDeCliente(vehiculo.getId(), vehiculo.getVin(), vehiculo.getMarca(), vehiculo.getModelo(),
 				vehiculo.getAnio(), vehiculo.getVersion(), vehiculo.getPlacas(), vehiculo.getKilometraje(),
+				vehiculo.getColor(),
 				new Propietario(cliente.getId(), cliente.getNombre(), cliente.getCorreo(), cliente.getTelefono()));
 	}
 }
