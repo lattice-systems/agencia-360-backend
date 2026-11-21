@@ -60,8 +60,8 @@ public class ExpedienteController {
 	@PatchMapping("/{vehiculoId}")
 	@PreAuthorize("hasRole('SERVICIO')")
 	@Operation(summary = "Corregir las placas, el kilometraje y el color", description = "Un valor vacío lo deja sin "
-			+ "capturar (el color omitido se deja como está). Responde 400 si el color pasa de 40 caracteres, las placas pasan de 15 caracteres o el kilometraje es negativo, y 404 si "
-			+ "el vehículo no existe.")
+			+ "capturar (el color omitido se deja como está). Responde 400 si el color pasa de 40 caracteres, "
+			+ "las placas pasan de 15 caracteres o el kilometraje es negativo, y 404 si el vehículo no existe.")
 	public Expediente.Vehiculo corregir(@PathVariable Long vehiculoId,
 			@Valid @RequestBody CorregirVehiculoRequest request) {
 		return expedienteService.corregir(vehiculoId, request.placas(), request.kilometraje(), request.color());

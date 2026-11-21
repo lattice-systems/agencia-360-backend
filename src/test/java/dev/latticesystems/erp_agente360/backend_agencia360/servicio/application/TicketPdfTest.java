@@ -32,8 +32,7 @@ class TicketPdfTest {
 		assertThat(FotosDeAutos.de("Desconocido")).isNull();
 		Files.createDirectories(Path.of("target"));
 		Files.write(Path.of("target/ticket-muestra.pdf"), pdf);
-		Files.write(Path.of("target/ticket-sinfoto.pdf"),
-				new TicketPdf().armar(servicio, new VehiculoDeCliente(12L, "VIN2", null, "Otro", 2020, null, null,
-						null, null, null)));
+		Files.write(Path.of("target/ticket-sinfoto.pdf"), new TicketPdf().armar(servicio,
+				new VehiculoDeCliente(12L, "VIN2", null, "Otro", 2020, null, null, null, null, null)));
 	}
 }

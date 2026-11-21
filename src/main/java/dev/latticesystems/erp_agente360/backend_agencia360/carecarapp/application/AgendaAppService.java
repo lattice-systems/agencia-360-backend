@@ -162,10 +162,8 @@ public class AgendaAppService {
 				.cupoPorFranja()) {
 			throw new ConflictoException("La franja ya no tiene cupo", CodigosError.FRANJA_SIN_CUPO);
 		}
-		return CitaApp.de(
-				citaRepository
-						.save(Cita.confirmar(clienteId, vehiculoId, fecha, franjaId, franja.inicio(), franja.fin())),
-				CitaApp.describir(vehiculo));
+		Cita nueva = Cita.confirmar(clienteId, vehiculoId, fecha, franjaId, franja.inicio(), franja.fin());
+		return CitaApp.de(citaRepository.save(nueva), CitaApp.describir(vehiculo));
 	}
 
 	/**

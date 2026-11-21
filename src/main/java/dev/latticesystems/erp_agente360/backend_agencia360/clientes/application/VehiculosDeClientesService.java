@@ -70,7 +70,8 @@ public class VehiculosDeClientesService implements VehiculosDeClientes {
 	private static VehiculoDeCliente vista(VehiculoCliente vehiculo) {
 		Cliente cliente = vehiculo.getCliente();
 		return new VehiculoDeCliente(vehiculo.getId(), vehiculo.getVin(), vehiculo.getMarca(), vehiculo.getModelo(),
-				vehiculo.getAnio(), vehiculo.getVersion(), vehiculo.getPlacas(), vehiculo.getKilometraje(), vehiculo.getColor(),
+				vehiculo.getAnio(), vehiculo.getVersion(), vehiculo.getPlacas(), vehiculo.getKilometraje(),
+				vehiculo.getColor(),
 				new Propietario(cliente.getId(), cliente.getNombre(), cliente.getCorreo(), cliente.getTelefono()));
 	}
 }

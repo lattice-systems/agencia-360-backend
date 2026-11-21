@@ -24,7 +24,10 @@ import java.time.format.TextStyle;
 import java.util.Locale;
 import org.springframework.stereotype.Component;
 
-/** PDF del comprobante de una cita (APP-3.3): mismo estilo que el ticket de servicio, con la foto del coche. */
+/**
+ * PDF del comprobante de una cita (APP-3.3): mismo estilo que el ticket de
+ * servicio, con la foto del coche.
+ */
 @Component
 public class TicketCitaPdf {
 
@@ -101,7 +104,8 @@ public class TicketCitaPdf {
 		PdfPCell b = base(AZUL, Rectangle.BOTTOM, TURQUESA, 4, 14);
 		b.addElement(der("Folio de cita " + cita.getId(), f(FontFactory.HELVETICA_BOLD, 14, Color.WHITE)));
 		boolean ok = cita.getEstado() == EstadoCita.CONFIRMADA;
-		b.addElement(der(ok ? "CONFIRMADA" : "CANCELADA", f(FontFactory.HELVETICA_BOLD, 10, ok ? new Color(0x7B, 0xF0, 0xB8) : new Color(0xFF, 0xA8, 0x9E))));
+		b.addElement(der(ok ? "CONFIRMADA" : "CANCELADA",
+				f(FontFactory.HELVETICA_BOLD, 10, ok ? new Color(0x7B, 0xF0, 0xB8) : new Color(0xFF, 0xA8, 0x9E))));
 		t.addCell(b);
 		return t;
 	}
@@ -115,8 +119,9 @@ public class TicketCitaPdf {
 		String dia = cita.getFecha().getDayOfWeek().getDisplayName(TextStyle.FULL, MEXICO);
 		String mes = cita.getFecha().getMonth().getDisplayName(TextStyle.FULL, MEXICO);
 		c.addElement(new Paragraph(ok ? "TU CITA" : "CITA CANCELADA", f(FontFactory.HELVETICA_BOLD, 9, color)));
-		c.addElement(new Paragraph(Character.toUpperCase(dia.charAt(0)) + dia.substring(1) + " " + cita.getFecha().getDayOfMonth()
-				+ " de " + mes + " de " + cita.getFecha().getYear(), f(FontFactory.HELVETICA_BOLD, 20, AZUL)));
+		String fecha = Character.toUpperCase(dia.charAt(0)) + dia.substring(1) + " " + cita.getFecha().getDayOfMonth()
+				+ " de " + mes + " de " + cita.getFecha().getYear();
+		c.addElement(new Paragraph(fecha, f(FontFactory.HELVETICA_BOLD, 20, AZUL)));
 		c.addElement(new Paragraph(HORA.format(cita.getHoraInicio()) + " a " + HORA.format(cita.getHoraFin()) + " h",
 				f(FontFactory.HELVETICA_BOLD, 26, ok ? AZUL : GRIS)));
 		t.addCell(c);
@@ -163,8 +168,8 @@ public class TicketCitaPdf {
 		c.setPaddingLeft(0);
 		c.setPaddingBottom(5);
 		c.addElement(new Paragraph(etiqueta, f(FontFactory.HELVETICA, 8, GRIS)));
-		c.addElement(new Paragraph(valor == null || valor.isBlank() ? "—" : valor,
-				f(FontFactory.HELVETICA_BOLD, 9, AZUL)));
+		c.addElement(
+				new Paragraph(valor == null || valor.isBlank() ? "—" : valor, f(FontFactory.HELVETICA_BOLD, 9, AZUL)));
 		r.addCell(c);
 	}
 
@@ -174,7 +179,8 @@ public class TicketCitaPdf {
 		PdfPCell c = base(Color.WHITE, Rectangle.LEFT, TURQUESA, 4, 10);
 		c.addElement(new Paragraph("LUGAR", f(FontFactory.HELVETICA_BOLD, 9, TURQUESA.darker())));
 		c.addElement(new Paragraph("Taller de servicio Agencia360 · CareCar", f(FontFactory.HELVETICA_BOLD, 11, AZUL)));
-		c.addElement(new Paragraph("Av. Ejemplo 123, Col. Centro, Ciudad de México", f(FontFactory.HELVETICA, 10, Color.BLACK)));
+		c.addElement(new Paragraph("Av. Ejemplo 123, Col. Centro, Ciudad de México",
+				f(FontFactory.HELVETICA, 10, Color.BLACK)));
 		t.addCell(c);
 		return t;
 	}
