@@ -156,6 +156,14 @@
 			<version>${openpdf.version}</version>
 		</dependency>
 
+		<!-- Notificaciones push (FCM HTTP v1): solo la autenticacion de Google, sin
+		     el SDK completo de Firebase. Las credenciales llegan por variable de entorno. -->
+		<dependency>
+			<groupId>com.google.auth</groupId>
+			<artifactId>google-auth-library-oauth2-http</artifactId>
+			<version>1.30.0</version>
+		</dependency>
+
 		<!-- Observabilidad -->
 		<dependency>
 			<groupId>org.springframework.boot</groupId>

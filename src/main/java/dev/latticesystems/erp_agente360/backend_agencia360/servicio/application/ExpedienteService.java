@@ -3,6 +3,7 @@ package dev.latticesystems.erp_agente360.backend_agencia360.servicio.application
 import dev.latticesystems.erp_agente360.backend_agencia360.acceso.DirectorioUsuarios;
 import dev.latticesystems.erp_agente360.backend_agencia360.clientes.VehiculosDeClientes;
 import dev.latticesystems.erp_agente360.backend_agencia360.clientes.VehiculosDeClientes.VehiculoDeCliente;
+import dev.latticesystems.erp_agente360.backend_agencia360.servicio.ServicioRegistrado;
 import dev.latticesystems.erp_agente360.backend_agencia360.servicio.domain.Servicio;
 import dev.latticesystems.erp_agente360.backend_agencia360.servicio.infrastructure.ServicioRepository;
 import dev.latticesystems.erp_agente360.backend_agencia360.shared.exception.RecursoNoEncontradoException;
@@ -13,6 +14,7 @@ import java.time.ZoneId;
 import java.util.List;
 import java.util.Map;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -32,16 +34,18 @@ public class ExpedienteService {
 	private final VehiculosDeClientes vehiculos;
 	private final ServicioRepository servicioRepository;
 	private final DirectorioUsuarios directorioUsuarios;
+	private final ApplicationEventPublisher eventos;
 	private final Clock reloj;
 
 	@Autowired
 	public ExpedienteService(VehiculosDeClientes vehiculos, ServicioRepository servicioRepository,
-			DirectorioUsuarios directorioUsuarios) {
-		this(vehiculos, servicioRepository, directorioUsuarios, Clock.system(ZONA_AGENCIA));
+			DirectorioUsuarios directorioUsuarios, ApplicationEventPublisher eventos) {
+		this(vehiculos, servicioRepository, directorioUsuarios, eventos, Clock.system(ZONA_AGENCIA));
 	}
 
 	ExpedienteService(VehiculosDeClientes vehiculos, ServicioRepository servicioRepository,
-			DirectorioUsuarios directorioUsuarios, Clock reloj) {
+			DirectorioUsuarios directorioUsuarios, ApplicationEventPublisher eventos, Clock reloj) {
+		this.eventos = eventos;
 		this.vehiculos = vehiculos;
 		this.servicioRepository = servicioRepository;
 		this.directorioUsuarios = directorioUsuarios;
@@ -92,6 +96,7 @@ public class ExpedienteService {
 		vehiculo(vehiculoId);
 		Servicio servicio = servicioRepository.save(Servicio.registrar(vehiculoId, nuevo.fecha(), nuevo.kilometraje(),
 				actor.id(), nuevo.renglones(), LocalDate.now(reloj)));
+		eventos.publishEvent(new ServicioRegistrado(servicio.getId(), vehiculoId));
 		return ServicioDetalle.de(servicio, nombreDe(directorioUsuarios.nombresDe(List.of(actor.id())), servicio));
 	}
 
