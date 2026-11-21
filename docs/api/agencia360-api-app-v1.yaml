@@ -689,6 +689,12 @@ components:
         kilometraje:
           type: integer
           nullable: true
+        color:
+          type: string
+          nullable: true
+          maxLength: 40
+          description: Color del vehículo; lo fija Servicio.
+          example: Blanco
 
     Manual:
       type: object
