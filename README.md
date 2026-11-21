@@ -156,6 +156,8 @@ Todos van bajo `/api/v1` y, salvo el login, piden el token en `Authorization: Be
 | `carecarapp` | `POST /app/auth/login`, `/refrescar`, `/cerrar-sesion`, `/recuperar-contrasena`, `/restablecer-contrasena` | Clientes de la app (sin token) |
 | `carecarapp` | `POST /app/auth/cambiar-contrasena`, `GET /app/perfil` | Clientes de la app (rol `CLIENTE_CARECAR`) |
 | `carecarapp` | `GET /app/vehiculos`, `GET /app/vehiculos/{id}/manuales` | Clientes de la app (rol `CLIENTE_CARECAR`) |
+| `carecarapp` | `GET /app/vehiculos/{id}/servicios?pagina=&tamano=` (historial, el más reciente primero), `GET /app/servicios/{id}/ticket` (PDF) | Clientes de la app (rol `CLIENTE_CARECAR`) |
+| `carecarapp` | `GET /app/agenda/disponibilidad?desde=&hasta=`, `GET /app/citas?estado=&desde=&hasta=&pagina=&tamano=`, `POST /app/citas`, `POST /app/citas/{id}/cancelar` (horario y cupo en `app.agenda.*`; plazo de cancelación provisional de 24 h, pendiente del PO) | Clientes de la app (rol `CLIENTE_CARECAR`) |
 | `carecarapp` | `GET /app/manuales/{id}/archivo?expira=&firma=` (URL temporal del PDF, vence a los 15 minutos) | Clientes de la app (sin token: la URL va firmada) |
 | `carecarapp` | `POST /manuales` (multipart: `marca`, `modelo`, `anio`, `archivo`; si ya hay uno, lo reemplaza) | Gerente de marketing |
 
