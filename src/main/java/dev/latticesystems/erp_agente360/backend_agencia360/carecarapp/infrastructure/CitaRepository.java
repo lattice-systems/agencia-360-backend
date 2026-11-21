@@ -31,12 +31,6 @@ public interface CitaRepository extends JpaRepository<Cita, Long> {
 	Page<Cita> delCliente(@Param("clienteId") Long clienteId, @Param("estados") Collection<EstadoCita> estados,
 			@Param("desde") LocalDate desde, @Param("hasta") LocalDate hasta, Pageable pagina);
 
-	/** Citas confirmadas del rango que aún deben su recordatorio de 2 horas. */
-	@Query("select c from Cita c where c.estado = :confirmada and c.fecha between :desde and :hasta "
-			+ "and c.recordatorio2hEn is null")
-	List<Cita> sinRecordatorio(@Param("confirmada") EstadoCita confirmada, @Param("desde") LocalDate desde,
-			@Param("hasta") LocalDate hasta);
-
 	Optional<Cita> findByIdAndClienteId(Long id, Long clienteId);
 
 	/**

@@ -495,52 +495,6 @@ paths:
         '403':
           $ref: '#/components/responses/CuentaDesactivada'
 
-  /dispositivos:
-    put:
-      tags: [Notificaciones]
-      summary: Registrar el token de FCM del teléfono
-      description: |
-        Tras iniciar sesión y cuando Firebase renueve el token. Idempotente; si el token era de
-        otro cliente, pasa a este. Push que manda el backend (campo `data`): `tipo=CITA, citaId`
-        (recordatorio 24 h y 2 h antes) y `tipo=SERVICIO, servicioId, vehiculoId` (vehículo listo).
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/Dispositivo'
-      responses:
-        '204':
-          description: Registrado
-        '400':
-          description: Token o plataforma no válidos
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Problema'
-        '401':
-          $ref: '#/components/responses/NoAutenticado'
-        '403':
-          $ref: '#/components/responses/CuentaDesactivada'
-    delete:
-      tags: [Notificaciones]
-      summary: Borrar el token del teléfono antes de cerrar sesión
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [token]
-              properties:
-                token:
-                  type: string
-      responses:
-        '204':
-          description: Borrado (también si no existía)
-        '401':
-          $ref: '#/components/responses/NoAutenticado'
-
 components:
   securitySchemes:
     bearerAuth:
@@ -916,18 +870,6 @@ components:
         activo:
           type: boolean
           description: Siempre true en la app
-
-    Dispositivo:
-      type: object
-      required: [token, plataforma]
-      properties:
-        token:
-          type: string
-          maxLength: 4096
-          description: Token de Firebase Cloud Messaging
-        plataforma:
-          type: string
-          enum: [ANDROID, IOS]
 
     Problema:
       type: object

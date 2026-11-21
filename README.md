@@ -160,7 +160,6 @@ Todos van bajo `/api/v1` y, salvo el login, piden el token en `Authorization: Be
 | `carecarapp` | `GET /app/agenda/disponibilidad?desde=&hasta=`, `GET /app/citas?estado=&desde=&hasta=&pagina=&tamano=`, `POST /app/citas`, `POST /app/citas/{id}/cancelar` (horario y cupo en `app.agenda.*`; plazo de cancelación provisional de 24 h, pendiente del PO) | Clientes de la app (rol `CLIENTE_CARECAR`) |
 | `carecarapp` | `GET /app/catalogo` (modelos activos) | Clientes de la app (rol `CLIENTE_CARECAR`) |
 | `carecarapp` | `GET /catalogo`, `POST /catalogo`, `POST /catalogo/{id}/retirar` | Administrador y Gerente de marketing |
-| `carecarapp` | `PUT /app/dispositivos` (`{token, plataforma}`), `DELETE /app/dispositivos` (`{token}`): token de FCM del teléfono; recordatorios de cita 24 h y 2 h antes y aviso de servicio terminado (sin `FCM_CREDENCIALES` solo se registran en el log) | Clientes de la app (rol `CLIENTE_CARECAR`) |
 | `carecarapp` | `GET /app/manuales/{id}/archivo?expira=&firma=` (URL temporal del PDF, vence a los 15 minutos) | Clientes de la app (sin token: la URL va firmada) |
 | `carecarapp` | `POST /manuales` (multipart: `marca`, `modelo`, `anio`, `archivo`; si ya hay uno, lo reemplaza) | Gerente de marketing |
 
