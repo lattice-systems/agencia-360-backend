@@ -11,6 +11,7 @@ public record VehiculoClienteVista(Long id, String vin, String marca, String mod
 
 	static VehiculoClienteVista de(VehiculoCliente vehiculo) {
 		return new VehiculoClienteVista(vehiculo.getId(), vehiculo.getVin(), vehiculo.getMarca(), vehiculo.getModelo(),
-				vehiculo.getAnio(), vehiculo.getVersion(), vehiculo.getPlacas(), vehiculo.getKilometraje(), vehiculo.getColor());
+				vehiculo.getAnio(), vehiculo.getVersion(), vehiculo.getPlacas(), vehiculo.getKilometraje(),
+				vehiculo.getColor());
 	}
 }

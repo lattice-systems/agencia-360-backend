@@ -6,12 +6,15 @@ import java.text.Normalizer;
 import java.util.Locale;
 import java.util.Set;
 
-/** Foto de un modelo desde el classpath ({@code /fotos-autos/<clave>.jpg}) para los PDF. */
+/**
+ * Foto de un modelo desde el classpath ({@code /fotos-autos/<clave>.jpg}) para
+ * los PDF.
+ */
 public final class FotosDeAutos {
 
-	private static final Set<String> MODELOS = Set.of("march", "versa", "kicks", "sentra", "xtrail", "frontier",
-			"leaf", "ariya", "z", "gtr", "altima", "pathfinder", "murano", "armada", "titan", "urvan", "maxima",
-			"juke", "qashqai", "patrol", "tiida", "note");
+	private static final Set<String> MODELOS = Set.of("march", "versa", "kicks", "sentra", "xtrail", "frontier", "leaf",
+			"ariya", "z", "gtr", "altima", "pathfinder", "murano", "armada", "titan", "urvan", "maxima", "juke",
+			"qashqai", "patrol", "tiida", "note");
 
 	private FotosDeAutos() {
 	}

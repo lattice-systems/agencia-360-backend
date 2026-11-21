@@ -83,10 +83,11 @@ public class AgendaAppController {
 	public org.springframework.http.ResponseEntity<byte[]> ticket(@PathVariable Long citaId,
 			@AuthenticationPrincipal UsuarioAutenticado cliente) {
 		byte[] pdf = agendaAppService.ticket(cliente.id(), citaId);
-		return org.springframework.http.ResponseEntity.ok().contentType(org.springframework.http.MediaType.APPLICATION_PDF)
+		return org.springframework.http.ResponseEntity.ok()
+				.contentType(org.springframework.http.MediaType.APPLICATION_PDF)
 				.header(org.springframework.http.HttpHeaders.CONTENT_DISPOSITION,
-						org.springframework.http.ContentDisposition.attachment().filename("ticket-cita-" + citaId + ".pdf")
-								.build().toString())
+						org.springframework.http.ContentDisposition.attachment()
+								.filename("ticket-cita-" + citaId + ".pdf").build().toString())
 				.body(pdf);
 	}
 }
