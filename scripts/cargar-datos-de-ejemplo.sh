@@ -478,5 +478,21 @@ RESPUESTA=$(cat "$RESPUESTA_TMP")
 [ "$CODIGO" = 200 ] || fallar "subir el manual del March 2026"
 echo "  subido      Nissan March 2026 Manual de propietario"
 
+# Catálogo de la app (APP-4.1). $1 modelo, $2 versión, $3 precio desde, $4 descripción.
+agregar_al_catalogo() {
+  pedir POST /api/v1/catalogo "$TOKEN_GERENTE" \
+    "{\"marca\":\"Nissan\",\"modelo\":\"$1\",\"anio\":2026,\"version\":\"$2\",\"precioDesde\":$3,\"descripcion\":\"$4\"}"
+  case "$CODIGO" in
+    201) echo "  agregado    Nissan $1 2026 $2" ;;
+    409) echo "  ya existía  Nissan $1 2026 $2" ;;
+    *) fallar "agregar el $1 al catálogo" ;;
+  esac
+}
+
+echo "Catálogo de la app (Gerente de marketing):"
+agregar_al_catalogo March Advance 289900 "Hatchback urbano, económico y fácil de estacionar"
+agregar_al_catalogo Versa Sense 339900 "Sedán con amplio espacio interior"
+agregar_al_catalogo Kicks Exclusive 489900 "SUV compacta con tecnología de asistencia al conductor"
+
 echo
 echo "Listo. Qué demuestra cada dato: docs/datos-de-ejemplo.md. Contraseñas: README, sección 5.6."
