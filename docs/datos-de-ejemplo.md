@@ -117,3 +117,15 @@ Qué se puede probar:
 ## Lo que no incluye todavía
 
 Ventas, pagos, facturas, clientes y órdenes de servicio: llegan en S2 a S4. Las citas ya existen, pero el script no las crea: solo el cliente puede agendarlas con su token, y su contraseña temporal solo está en Mailpit. El criterio de TEC-3 los pide, pero se agregan al script cuando existan sus endpoints.
+
+## Clientes de la app con vehículos
+
+El script también da de alta 5 clientes más de la app CareCar (además de Laura), cada uno con 3 a 5 vehículos Nissan, 1 a 3 servicios por vehículo (fechas pasadas, mano de obra y refacciones) y cuenta de app abierta. Su contraseña de prueba es `CareCar2026!` (`CLIENTES_CONTRASENA`): el script la define con el flujo de recuperación, leyendo el código de 6 dígitos de Mailpit, así que no piden cambiarla. Si se corre otra vez, no duplica nada.
+
+| Correo | Contraseña | Vehículos (modelo versión año, placas, km) |
+|---|---|---|
+| carlos.ramirez@example.com | `CareCar2026!` | Sentra Advance 2024 GTO-482-B 18,400; Versa Sense 2022 GTO-715-C 42,150; Kicks Exclusive 2025 GTO-309-D 6,200; March Sense 2019 GTO-864-A 78,900 |
+| ana.torres@example.com | `CareCar2026!` | X-Trail Exclusive 2023 MXP-27-83 29,700; Kicks Advance 2021 GTO-157-F 51,300; Versa Advance 2026 GTO-921-G 2,100 |
+| luis.hernandez@example.com | `CareCar2026!` | Frontier PRO-4X 2024 GTO-603-H 23,800; Frontier LE 2020 GTO-248-J 96,500; Sentra Exclusive 2023 GTO-376-K 35,200; March Advance 2018 GTO-590-L 112,400; X-Trail Sense 2025 GTO-834-M 8,900 |
+| sofia.morales@example.com | `CareCar2026!` | Kicks Sense 2022 NMR-48-19 47,800; Sentra Sense 2021 GTO-662-N 61,200; Versa Exclusive 2024 GTO-127-P 15,300; X-Trail Advance 2019 GTO-945-R 88,700 |
+| diego.castillo@example.com | `CareCar2026!` | Frontier PRO-4X 2026 GTO-501-S 3,400; March Exclusive 2023 GTO-218-T 27,600; Sentra Advance 2020 GTO-776-V 74,100 |
