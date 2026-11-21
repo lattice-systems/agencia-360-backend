@@ -15,11 +15,11 @@ public record Expediente(Vehiculo vehiculo, Propietario cliente, List<ServicioRe
 	 * Tipo (Sentra) y {@code anio} el Modelo (2026).
 	 */
 	public record Vehiculo(Long id, String vin, String marca, String modelo, int anio, String version, String placas,
-			Integer kilometraje) {
+			Integer kilometraje, String color) {
 
 		static Vehiculo de(VehiculoDeCliente vehiculo) {
 			return new Vehiculo(vehiculo.id(), vehiculo.vin(), vehiculo.marca(), vehiculo.modelo(), vehiculo.anio(),
-					vehiculo.version(), vehiculo.placas(), vehiculo.kilometraje());
+					vehiculo.version(), vehiculo.placas(), vehiculo.kilometraje(), vehiculo.color());
 		}
 	}
 

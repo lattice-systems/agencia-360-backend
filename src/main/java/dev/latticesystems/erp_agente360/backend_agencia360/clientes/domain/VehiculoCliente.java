@@ -31,6 +31,7 @@ public class VehiculoCliente extends Auditable {
 	private static final int LARGO_MAXIMO_MARCA = 40;
 	private static final int LARGO_MAXIMO_VERSION = 80;
 	private static final int LARGO_MAXIMO_PLACAS = 15;
+	private static final int LARGO_MAXIMO_COLOR = 40;
 
 	@Id
 	@GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -62,6 +63,9 @@ public class VehiculoCliente extends Auditable {
 	private String placas;
 
 	private Integer kilometraje;
+
+	@Column(length = LARGO_MAXIMO_COLOR)
+	private String color;
 
 	protected VehiculoCliente() {
 		// Requerido por JPA
@@ -122,6 +126,16 @@ public class VehiculoCliente extends Auditable {
 		this.kilometraje = kilometraje;
 	}
 
+	/**
+	 * Fija o corrige el color. Un valor vacío lo deja sin capturar.
+	 *
+	 * @throws IllegalArgumentException
+	 *             si pasa de 40 caracteres (400)
+	 */
+	public void corregirColor(String color) {
+		this.color = opcional(color, LARGO_MAXIMO_COLOR, "El color admite");
+	}
+
 	private static String opcional(String valor, int largoMaximo, String mensaje) {
 		if (valor == null || valor.isBlank()) {
 			return null;
@@ -171,5 +185,9 @@ public class VehiculoCliente extends Auditable {
 
 	public Integer getKilometraje() {
 		return kilometraje;
+	}
+
+	public String getColor() {
+		return color;
 	}
 }

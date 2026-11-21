@@ -7,10 +7,11 @@ import dev.latticesystems.erp_agente360.backend_agencia360.clientes.domain.Vehic
  * (Sentra) y {@code anio} el Modelo (2026).
  */
 public record VehiculoClienteVista(Long id, String vin, String marca, String modelo, int anio, String version,
-		String placas, Integer kilometraje) {
+		String placas, Integer kilometraje, String color) {
 
 	static VehiculoClienteVista de(VehiculoCliente vehiculo) {
 		return new VehiculoClienteVista(vehiculo.getId(), vehiculo.getVin(), vehiculo.getMarca(), vehiculo.getModelo(),
-				vehiculo.getAnio(), vehiculo.getVersion(), vehiculo.getPlacas(), vehiculo.getKilometraje());
+				vehiculo.getAnio(), vehiculo.getVersion(), vehiculo.getPlacas(), vehiculo.getKilometraje(),
+				vehiculo.getColor());
 	}
 }

@@ -99,18 +99,39 @@ Qué se puede probar:
 
 ## Clienta de la app CareCar y su expediente
 
-La registra el Gerente de marketing desde el CRM con sus dos vehículos y le abre la cuenta de la app; la contraseña temporal llega a Mailpit (`http://localhost:8025`). Servicio corrige placas y kilometraje del March y registra sus servicios; el Gerente sube el manual del March 2026.
+La registra el Gerente de marketing desde el CRM con sus dos vehículos y le abre la cuenta de la app; la contraseña temporal llega a Mailpit (`http://localhost:8025`). Servicio corrige placas y kilometraje del March y registra sus servicios; el Gerente sube los manuales de propietario (ver más abajo).
 
 | Vehículo | VIN | Placas y kilometraje | Servicios | Manual |
 |---|---|---|---|---|
-| Nissan March 2026 Advance | `3N1CK3CD7RL900001` | GTO-123-A, 10,250 km | Servicio de 5,000 km (hace 150 días) y de 10,000 km (hace 10 días) | Sí, uno de ejemplo de una página (o el real con `MANUAL_MARCH_PDF`) |
-| Nissan Sentra 2025 Sense | `3N1AB8CV9RY900002` | Sin capturar | Cambio de balatas (hace 30 días) | No |
+| Nissan March 2026 Advance | `3N1CK3CD7RL900001` | GTO-123-A, 10,250 km | Servicio de 5,000 km (hace 150 días) y de 10,000 km (hace 10 días) | Sí, manual completo de 12 páginas con la foto del coche |
+| Nissan Sentra 2025 Sense | `3N1AB8CV9RY900002` | Sin capturar | Cambio de balatas (hace 30 días) | Sí |
 
 Qué se puede probar:
 - Con `servicio1`, buscar `900001` en Expediente, abrir los detalles de cada servicio y corregir placas y kilometraje.
 - Con `admin`, que el expediente se puede consultar pero no corregir.
-- En la app, con `laura.mendez@example.com`: el primer ingreso con cambio de contraseña, los 2 vehículos y el manual del March, que se abre con su URL temporal. El Sentra regresa una lista de manuales vacía.
+- En la app, con `laura.mendez@example.com`: el primer ingreso con cambio de contraseña, los 2 vehículos y el manual del March y el del Sentra, que se abren con su URL temporal.
+- En la app, con `laura.mendez@example.com`: el historial de servicios del vehículo que tenga servicios en el expediente y su ticket en PDF; la disponibilidad de la agenda (lunes a sábado de 9:00 a 17:00, cupo de 3 por franja), agendar una cita y cancelarla (hasta 24 h antes).
+- Catálogo de la app: 22 modelos Nissan 2026, todos distintos, con versión, precio desde (MXN) y descripción, sin imagen (las fotos van en la app): March, Versa, Kicks, Sentra, X-Trail, Frontier PRO-4X, Leaf e+, Ariya Evolve+, Z Performance, GT-R Premium, Altima Platinum, Pathfinder Platinum, Murano Platinum, Armada Platinum Reserve, Titan Pro-4X, Urvan Panel, Maxima SR, Juke Exclusive, Qashqai Exclusive, Patrol Platinum, Tiida Advance, Note e-Power (`GET /api/v1/app/catalogo`).
+- Citas de Laura (por la API de la app, con `LAURA_CONTRASENA`, por defecto `CareCar2026!`): una CONFIRMADA del March a los 3+ días y una CANCELADA del Sentra (`GET /api/v1/app/citas`). Si Laura ya tiene citas no agrega más; si no inicia sesión, omite este paso.
 
 ## Lo que no incluye todavía
 
-Ventas, pagos, facturas, clientes, órdenes de servicio y citas: llegan en S2 a S4. El criterio de TEC-3 los pide, pero se agregan al script cuando existan sus endpoints.
+Ventas, pagos, facturas, clientes y órdenes de servicio: llegan en S2 a S4. Las citas ya existen, pero el script no las crea: solo el cliente puede agendarlas con su token, y su contraseña temporal solo está en Mailpit. El criterio de TEC-3 los pide, pero se agregan al script cuando existan sus endpoints.
+
+## Clientes de la app con vehículos
+
+El script también da de alta 5 clientes más de la app CareCar (además de Laura), cada uno con 3 a 5 vehículos Nissan, 1 a 3 servicios por vehículo (fechas pasadas, mano de obra y refacciones) y cuenta de app abierta. Su contraseña de prueba es `CareCar2026!` (`CLIENTES_CONTRASENA`): el script la define con el flujo de recuperación, leyendo el código de 6 dígitos de Mailpit, así que no piden cambiarla. Si se corre otra vez, no duplica nada.
+
+| Correo | Contraseña | Vehículos (modelo versión año, placas, km) |
+|---|---|---|
+| carlos.ramirez@example.com | `CareCar2026!` | Sentra Advance 2024 GTO-482-B 18,400; Versa Sense 2022 GTO-715-C 42,150; Kicks Exclusive 2025 GTO-309-D 6,200; March Sense 2019 GTO-864-A 78,900 |
+| ana.torres@example.com | `CareCar2026!` | X-Trail Exclusive 2023 MXP-27-83 29,700; Kicks Advance 2021 GTO-157-F 51,300; Versa Advance 2026 GTO-921-G 2,100 |
+| luis.hernandez@example.com | `CareCar2026!` | Frontier PRO-4X 2024 GTO-603-H 23,800; Frontier LE 2020 GTO-248-J 96,500; Sentra Exclusive 2023 GTO-376-K 35,200; March Advance 2018 GTO-590-L 112,400; X-Trail Sense 2025 GTO-834-M 8,900 |
+| sofia.morales@example.com | `CareCar2026!` | Kicks Sense 2022 NMR-48-19 47,800; Sentra Sense 2021 GTO-662-N 61,200; Versa Exclusive 2024 GTO-127-P 15,300; X-Trail Advance 2019 GTO-945-R 88,700 |
+| diego.castillo@example.com | `CareCar2026!` | Frontier PRO-4X 2026 GTO-501-S 3,400; March Exclusive 2023 GTO-218-T 27,600; Sentra Advance 2020 GTO-776-V 74,100 |
+
+## Manuales de propietario
+
+`scripts/generar-manuales.py` genera un PDF de 12 páginas por cada modelo y año (portada con la foto del coche, índice, ficha técnica de referencia, identificación con VIN y placas, tablero, mantenimiento, fluidos y llantas, seguridad, conducción eficiente, solución de problemas, garantía y contacto). Arma un HTML y lo imprime con Google Chrome headless (`/usr/bin/google-chrome`, variable `CHROME`), usa las fotos de `carecar-mobile/assets/autos/` (variable `FOTOS_AUTOS` o `--fotos`) y deja los PDF en `scripts/manuales-generados/` (ignorada por git) junto con `indice.txt`.
+
+Cubre la unión de los vehículos de `cargar-datos-de-ejemplo.sh` y los 22 modelos del catálogo en 2026 (42 manuales). `cargar-datos-de-ejemplo.sh` los genera si faltan y los sube como Gerente de marketing; la API reemplaza el manual de la misma marca, modelo y año, así que se puede repetir. Los datos técnicos son valores de referencia, y el contacto (+52 000 000 0000, contacto@agencia.example.com) es de ejemplo. Para regenerar: `python3 scripts/generar-manuales.py --forzar`.

@@ -11,6 +11,9 @@ public final class CodigosError {
 	public static final String DEMASIADOS_INTENTOS = "DEMASIADOS_INTENTOS";
 	public static final String CODIGO_INVALIDO = "CODIGO_INVALIDO";
 	public static final String DATOS_INVALIDOS = "DATOS_INVALIDOS";
+	public static final String FRANJA_SIN_CUPO = "FRANJA_SIN_CUPO";
+	public static final String FUERA_DE_PLAZO = "FUERA_DE_PLAZO";
+	public static final String CITA_NO_CANCELABLE = "CITA_NO_CANCELABLE";
 
 	private CodigosError() {
 	}

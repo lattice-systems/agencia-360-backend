@@ -12,8 +12,10 @@ import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 /**
@@ -89,8 +91,8 @@ public class GlobalExceptionHandler {
 
 	@ExceptionHandler(ConflictoException.class)
 	public ResponseEntity<ApiError> handleConflicto(ConflictoException ex, HttpServletRequest request) {
-		return ResponseEntity.status(HttpStatus.CONFLICT)
-				.body(ApiError.of(HttpStatus.CONFLICT.value(), "Conflict", ex.getMessage(), request.getRequestURI()));
+		return ResponseEntity.status(HttpStatus.CONFLICT).body(ApiError.of(HttpStatus.CONFLICT.value(), "Conflict",
+				ex.getMessage(), request.getRequestURI(), ex.getCodigo()));
 	}
 
 	@ExceptionHandler(DataIntegrityViolationException.class)
@@ -103,6 +105,21 @@ public class GlobalExceptionHandler {
 	public ResponseEntity<ApiError> handleIllegalArgument(IllegalArgumentException ex, HttpServletRequest request) {
 		return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(ApiError.of(HttpStatus.BAD_REQUEST.value(),
 				"Bad Request", ex.getMessage(), request.getRequestURI(), CodigosError.DATOS_INVALIDOS));
+	}
+
+	/**
+	 * Un parámetro que falta o no tiene el tipo esperado (por ejemplo una fecha mal
+	 * escrita) es 400, no un error del servidor.
+	 */
+	@ExceptionHandler({MissingServletRequestParameterException.class, MethodArgumentTypeMismatchException.class})
+	public ResponseEntity<ApiError> handleParametroInvalido(Exception ex, HttpServletRequest request) {
+		String parametro = ex instanceof MissingServletRequestParameterException falta
+				? falta.getParameterName()
+				: ((MethodArgumentTypeMismatchException) ex).getName();
+		return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+				.body(ApiError.of(HttpStatus.BAD_REQUEST.value(), "Bad Request",
+						"Falta el parámetro " + parametro + " o no es válido", request.getRequestURI(),
+						CodigosError.DATOS_INVALIDOS));
 	}
 
 	/**

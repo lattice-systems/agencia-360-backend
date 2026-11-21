@@ -26,7 +26,7 @@ public interface VehiculosDeClientes {
 
 	/**
 	 * Corrige las placas y el kilometraje (ERP-3.0). Un valor vacío los deja sin
-	 * capturar.
+	 * capturar; el color, si viene {@code null}, se deja como está.
 	 *
 	 * @throws dev.latticesystems.erp_agente360.backend_agencia360.shared.exception.RecursoNoEncontradoException
 	 *             si no existe (404)
@@ -34,7 +34,7 @@ public interface VehiculosDeClientes {
 	 *             si las placas pasan de 15 caracteres o el kilometraje es negativo
 	 *             (400)
 	 */
-	VehiculoDeCliente corregir(Long vehiculoId, String placas, Integer kilometraje);
+	VehiculoDeCliente corregir(Long vehiculoId, String placas, Integer kilometraje, String color);
 
 	/**
 	 * Vehículo de un cliente. Como en el inventario y la factura, {@code modelo} es
@@ -42,7 +42,7 @@ public interface VehiculosDeClientes {
 	 * pueden faltar en los vehículos registrados antes de que se guardaran.
 	 */
 	record VehiculoDeCliente(Long id, String vin, String marca, String modelo, int anio, String version, String placas,
-			Integer kilometraje, Propietario propietario) {
+			Integer kilometraje, String color, Propietario propietario) {
 	}
 
 	/** El cliente dueño del vehículo. El correo y el teléfono pueden faltar. */
