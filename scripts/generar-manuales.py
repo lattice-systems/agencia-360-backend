@@ -15,8 +15,9 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 AQUI = Path(__file__).resolve().parent
+# Por defecto busca las fotos en el repo carecar-mobile, clonado junto a este.
 FOTOS = Path(os.environ.get("FOTOS_AUTOS",
-    "/home/pablodev24/School-Projects/proyecto-agencia360/carecar-mobile/assets/autos"))
+    AQUI.parent.parent / "carecar-mobile" / "assets" / "autos"))
 CHROME = os.environ.get("CHROME", "/usr/bin/google-chrome")
 VER = "Ver ficha de tu unidad"
 
