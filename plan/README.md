@@ -4,7 +4,7 @@ El plan maestro (propósito, objetivos, hitos, módulos, reparto y tablero) vive
 
 | Documento | Para qué |
 | --- | --- |
-| [`historias-backend.md`](historias-backend.md) | Las 110 historias **B** agrupadas por módulo de Modulith, con su diseño técnico |
+| [`historias-backend.md`](historias-backend.md) | Las 111 historias **B** agrupadas por módulo de Modulith, con su diseño técnico |
 | [Plan maestro](https://github.com/lattice-systems/carecar-mobile/blob/main/plan/README.md) | Propósito, hitos H0–H7, catálogo de módulos |
 | [Tablero](https://github.com/lattice-systems/carecar-mobile/blob/main/plan/tablero.md) | Estado de todas las historias (única fuente) |
 | [Reparto](https://github.com/lattice-systems/carecar-mobile/blob/main/plan/equipo-y-reparto.md) | Quién es dueño de qué |
