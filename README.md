@@ -450,6 +450,7 @@ Para ver la cobertura sin tocar el `pom.xml`:
 
 - `AGENTS.md`: reglas de trabajo para personas y agentes de código (ficha obligatoria, docs en cada PR, sin IA como co-autor, roles); `CLAUDE.md` y `GEMINI.md` apuntan ahí.
 - `plan/`: objetivos, módulos de Modulith y las 110 historias de backend de la app v2 (el plan maestro y el tablero viven en `carecar-mobile/plan/`).
+- `docs/despliegue-azure-neon.md`: el backend en la nube (Azure Container Apps + Neon), URL pública, variables y secretos, cómo publicar una versión nueva y limitaciones.
 - `docs/TEC-1_modelo-datos_v1.md` y `docs/diagramas/agencia360-modelo-datos-v1.drawio`: modelo de datos v1.
 - `docs/api/`: contrato OpenAPI de la app CareCar (YAML y PDF).
 - `docs/datos-de-ejemplo.md`: los datos de ejemplo de TEC-3 y qué demuestra cada uno.
