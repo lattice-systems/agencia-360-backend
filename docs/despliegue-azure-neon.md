@@ -37,13 +37,14 @@ Perfil `prod`. Los valores sensibles son **secretos de la Container App** (nunca
 | `MANAGEMENT_HEALTH_REDIS_ENABLED` | `false` |
 | `JAVA_TOOL_OPTIONS` | `-XX:MaxRAMPercentage=75` |
 
-Cambiar un secreto (p. ej. la contraseña de aplicación de Gmail) y aplicarlo:
+Cambiar un secreto (p. ej. la contraseña de aplicación de Gmail, que son 16 letras) y aplicarlo. Los entornos *express* no permiten `revision restart`; se crea una revisión nueva cambiando una variable inofensiva, y la revisión nueva lee los secretos al arrancar:
 
 ```bash
 az containerapp secret set -n ca-agencia360-api -g rg-agencia360 --secrets smtp-password=<valor>
-az containerapp revision restart -n ca-agencia360-api -g rg-agencia360 \
-  --revision $(az containerapp revision list -n ca-agencia360-api -g rg-agencia360 --query "[0].name" -o tsv)
+az containerapp update -n ca-agencia360-api -g rg-agencia360 --set-env-vars REINICIO_SECRETOS=$(date +%s)
 ```
+
+Para ver los registros (no hay Log Analytics): `az containerapp logs show -n ca-agencia360-api -g rg-agencia360 --tail 100 --format text`.
 
 ## Publicar una versión nueva de la API
 
