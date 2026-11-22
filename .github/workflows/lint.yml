@@ -1,9 +1,9 @@
 name: Lint
 
-# Igual que CI: corre en cada push a cualquier rama y en cada PR hacia main.
+# Igual que CI: corre en cada PR hacia main y en cada push a main.
 on:
   push:
-    branches: ["**"]
+    branches: [main]
   pull_request:
     branches: [main]
   workflow_dispatch: {}
@@ -16,8 +16,46 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # Decide si el PR toca código. Si solo cambia documentación (docs/ salvo el
+  # contrato en docs/api/, plan/, .claude/, .githooks/ o archivos .md), los demás
+  # jobs se saltan: un job saltado cuenta como aprobado para los checks
+  # requeridos. En push a main y en ejecución manual siempre corre todo.
+  cambios:
+    name: Detectar cambios de código
+    runs-on: ubuntu-latest
+    outputs:
+      codigo: ${{ steps.revisar.outputs.codigo }}
+    steps:
+      - name: Descargar el código
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 2
+
+      - name: Revisar qué archivos cambiaron
+        id: revisar
+        env:
+          EVENTO: ${{ github.event_name }}
+        run: |
+          if [ "$EVENTO" != "pull_request" ]; then
+            echo "codigo=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          # En un PR, HEAD es el merge de prueba: su primer padre es main.
+          archivos=$(git diff --name-only HEAD^1 HEAD)
+          echo "$archivos"
+          if [ -z "$archivos" ] \
+            || echo "$archivos" | grep -q '^docs/api/' \
+            || echo "$archivos" | grep -Evq '^(docs/|plan/|\.claude/|\.githooks/)|\.md$'; then
+            echo "codigo=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "Solo documentación: se saltan los demás jobs."
+            echo "codigo=false" >> "$GITHUB_OUTPUT"
+          fi
+
   formato:
     name: Formato (Spotless)
+    needs: cambios
+    if: needs.cambios.outputs.codigo == 'true'
     runs-on: ubuntu-latest
     steps:
       - name: Descargar el código
@@ -35,6 +73,8 @@ jobs:
 
   linting:
     name: Linting (Checkstyle)
+    needs: cambios
+    if: needs.cambios.outputs.codigo == 'true'
     runs-on: ubuntu-latest
     steps:
       - name: Descargar el código

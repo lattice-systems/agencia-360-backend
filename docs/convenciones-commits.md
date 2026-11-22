@@ -88,18 +88,18 @@ Antes de pedir revisión, comprueba que el PR tiene un alcance claro, que CI ter
 
 - Por ahora **no se exige aprobación**; la revisión de otra persona se recomienda.
 - Todos los checks requeridos deben terminar correctamente.
-- Los workflows deben ejecutarse en cada push y en los PRs dirigidos a `main`.
+- Los workflows corren en los PRs dirigidos a `main` y en cada push a `main`; el push a una rama sin PR no corre CI.
 - Backend: build y pruebas, incluidas las pruebas con Testcontainers.
 - ERP frontend: lint, build y pruebas con Vitest y React Testing Library.
 - CRM: ejecutar los checks definidos para su repositorio.
 
 Los nombres exactos de los checks requeridos se configuran en GitHub después de que los workflows hayan corrido al menos una vez.
 
-### Backend: CI en cada push
+### Backend: CI en cada PR
 
-El workflow `.github/workflows/ci.yml` (check **`CI / Build y pruebas (JDK 25)`**) corre `./mvnw verify` en cada push a cualquier rama y en cada PR hacia `main`. Compila el proyecto y ejecuta las pruebas unitarias, las de Spring Modulith y las de integración con Testcontainers (PostgreSQL real en Docker). Si falla, los reportes de pruebas quedan como artefacto de la corrida en la pestaña **Actions**.
+El workflow `.github/workflows/ci.yml` (check **`CI / Build y pruebas (JDK 25)`**) corre `./mvnw verify` en cada PR hacia `main` y en cada push a `main`. Si el PR solo cambia documentación (salvo el contrato en `docs/api/`), se salta y cuenta como aprobado. Compila el proyecto y ejecuta las pruebas unitarias, las de Spring Modulith y las de integración con Testcontainers (PostgreSQL real en Docker). Si falla, los reportes de pruebas quedan como artefacto de la corrida en la pestaña **Actions**.
 
-El workflow `.github/workflows/lint.yml` (checks **`Lint / Formato (Spotless)`** y **`Lint / Linting (Checkstyle)`**) también corre en cada push a cualquier rama y en cada PR hacia `main`.
+El workflow `.github/workflows/lint.yml` (checks **`Lint / Formato (Spotless)`** y **`Lint / Linting (Checkstyle)`**) corre igual que CI: en cada PR hacia `main`, en cada push a `main` y se salta en PR de solo documentación.
 
 Antes de hacer push, corre lo mismo en local (necesitas Docker o Podman activo para Testcontainers):
 
