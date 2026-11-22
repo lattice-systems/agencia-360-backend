@@ -1,5 +1,5 @@
-# Created by https://www.toptal.com/developers/gitignore/api/git,java,visualstudiocode,intellij,redis,maven,azurefunctions
-# Edit at https://www.toptal.com/developers/gitignore?templates=git,java,visualstudiocode,intellij,redis,maven,azurefunctions
+# Created by https://www.toptal.com/developers/gitignore/api/git,java,visualstudiocode,intellij,maven,azurefunctions
+# Edit at https://www.toptal.com/developers/gitignore?templates=git,java,visualstudiocode,intellij,maven,azurefunctions
 
 ### AzureFunctions ###
 # Azure Functions localsettings file
@@ -178,11 +178,6 @@ buildNumber.properties
 # JDT-specific (Eclipse Java Development Tools)
 .classpath
 
-### Redis ###
-# Ignore redis binary dump (dump.rdb) files
-
-*.rdb
-
 ### VisualStudioCode ###
 .vscode/*
 !.vscode/settings.json
@@ -202,7 +197,7 @@ buildNumber.properties
 .history
 .ionide
 
-# End of https://www.toptal.com/developers/gitignore/api/git,java,visualstudiocode,intellij,redis,maven,azurefunctions
+# End of https://www.toptal.com/developers/gitignore/api/git,java,visualstudiocode,intellij,maven,azurefunctions
 
 ### Seguridad ###
 # Reporte de la auditoría AppSec: el repositorio es público y los hallazgos abiertos

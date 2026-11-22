@@ -10,11 +10,6 @@ services:
     volumes:
       - postgres-data:/var/lib/postgresql/data
 
-  redis:
-    image: redis:7-alpine
-    ports:
-      - "6379:6379"
-
   # Recibe los correos de desarrollo (códigos de recuperación de la app).
   # Bandeja en http://localhost:8025; la API envía por SMTP al puerto 1025.
   mailpit:
@@ -25,13 +20,13 @@ services:
 
   # API en un contenedor detras de Nginx, para entrar desde el telefono por la
   # red local (http://IP-DE-LA-PC:8089/api/v1/app). Van en el perfil "proxy"
-  # para que `docker compose up -d` siga levantando solo la base, Redis y
+  # para que `docker compose up -d` siga levantando solo la base y
   # Mailpit. La API no publica el 8080 al host: solo Nginx la alcanza.
   api:
     profiles: [proxy]
     build: .
     restart: unless-stopped
-    depends_on: [postgres, redis, mailpit]
+    depends_on: [postgres, mailpit]
     expose:
       - "8080"
     environment:
@@ -39,7 +34,6 @@ services:
       DB_URL: jdbc:postgresql://postgres:5432/agencia360
       DB_USERNAME: agencia360
       DB_PASSWORD: agencia360
-      REDIS_HOST: redis
       MAIL_HOST: mailpit
       MAIL_PORT: "1025"
       ADMIN_INICIAL_USUARIO: ${ADMIN_INICIAL_USUARIO:-}
