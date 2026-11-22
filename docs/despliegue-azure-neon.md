@@ -15,7 +15,7 @@ La app móvil usa `API_BASE_URL=https://ca-agencia360-api.calmcliff-d0e7fc3b.eas
 
 - **Se apaga sin uso**: entra en la capa gratuita de Container Apps. La primera petición después de un rato tarda 20–40 s en despertar (arranque de Spring Boot); después responde normal.
 - **Conexión directa a Neon, no el pooler**: la API ya tiene su pool (HikariCP) y Flyway usa bloqueos de sesión que el pooler en modo transacción no garantiza.
-- **Sin Redis**: hoy ningún código usa Redis (solo la dependencia y su configuración; `AvisosDeVehiculos` lo menciona como mejora futura). La suscripción de estudiante solo permite entornos *express*, que no aceptan un segundo contenedor. Se apaga su revisión de salud con `MANAGEMENT_HEALTH_REDIS_ENABLED=false`. Si un módulo llega a necesitar Redis, hay que usar uno administrado (p. ej. Upstash) con `SPRING_DATA_REDIS_URL`.
+- **Sin Redis**: se descartó del proyecto ([ADR 0001](decisiones/0001-descartar-redis.md)); la variable `MANAGEMENT_HEALTH_REDIS_ENABLED` ya no hace falta y se puede quitar de la Container App.
 - **Regiones**: la suscripción "Azure for Students" solo permite `southcentralus`, `canadacentral`, `centralus`, `mexicocentral` y `eastus2`; `eastus2` es la más cercana a Neon `us-east-2`.
 
 ## Variables y secretos
@@ -34,7 +34,6 @@ Perfil `prod`. Los valores sensibles son **secretos de la Container App** (nunca
 | `SPRING_MAIL_PROPERTIES_MAIL_SMTP_AUTH`, `..._STARTTLS_ENABLE` | `true` |
 | `CORREO_REMITENTE` | `CareCar <cuenta de Gmail>` (Gmail exige que coincida con la cuenta) |
 | `MANUALES_DIRECTORIO` | `/home/api/manuales` |
-| `MANAGEMENT_HEALTH_REDIS_ENABLED` | `false` |
 | `JAVA_TOOL_OPTIONS` | `-XX:MaxRAMPercentage=75` |
 
 Cambiar un secreto (p. ej. la contraseña de aplicación de Gmail, que son 16 letras) y aplicarlo. Los entornos *express* no permiten `revision restart`; se crea una revisión nueva cambiando una variable inofensiva, y la revisión nueva lee los secretos al arrancar:

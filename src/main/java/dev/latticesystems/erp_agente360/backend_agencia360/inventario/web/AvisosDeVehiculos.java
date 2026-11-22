@@ -22,8 +22,8 @@ import org.springframework.web.servlet.mvc.method.annotation.SseEmitter.SseEvent
  *
  * <p>
  * Las conexiones viven en la memoria de esta instancia. Si la API llega a
- * correr en varias instancias, el aviso tendrá que pasar entre ellas (por
- * ejemplo, con Redis).
+ * correr en varias instancias, el aviso tendrá que pasar entre ellas (si hay
+ * varias réplicas, usar un bus externo).
  */
 @Component
 class AvisosDeVehiculos {

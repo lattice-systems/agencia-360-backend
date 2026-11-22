@@ -46,7 +46,7 @@ Iguales en todas las herramientas; en Claude Code son subagentes en [`.claude/ag
 Maven viene incluido (`./mvnw`). Docker debe estar activo: las pruebas usan Testcontainers (PostgreSQL propio), no el `docker-compose.yml`.
 
 ```bash
-docker compose up -d                                          # PostgreSQL, Redis y Mailpit locales
+docker compose up -d                                          # PostgreSQL y Mailpit locales
 ./mvnw spring-boot:run -Dspring-boot.run.profiles=dev         # API en :8080 (perfil dev: SQL + logs DEBUG)
 ./mvnw clean compile                                          # solo compilar
 ./mvnw test                                                   # pruebas

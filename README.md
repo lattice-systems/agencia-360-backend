@@ -8,7 +8,6 @@
 </p>
 <p align="center">
   <img src="https://img.shields.io/badge/PostgreSQL-4169E1?style=for-the-badge&logo=postgresql&logoColor=white" alt="PostgreSQL" />
-  <img src="https://img.shields.io/badge/Redis-DC382D?style=for-the-badge&logo=redis&logoColor=white" alt="Redis" />
   <img src="https://img.shields.io/badge/Flyway-CC0200?style=for-the-badge&logo=flyway&logoColor=white" alt="Flyway" />
   <img src="https://img.shields.io/badge/Hibernate-59666C?style=for-the-badge&logo=hibernate&logoColor=white" alt="Hibernate" />
 </p>
@@ -61,11 +60,10 @@ La agencia automotriz no tiene sus sistemas centralizados. El proyecto los centr
 | Acceso a datos | Spring Data JPA (Hibernate) |
 | Migraciones de BD | Flyway |
 | Base de datos | PostgreSQL |
-| Caché y colas | Redis (Spring Data Redis) |
 | Seguridad | Spring Security + JWT (`io.jsonwebtoken`/jjwt), roles vía `ROLE_*`; el principal de cada petición es `UsuarioAutenticado(id, usuario, roles)` |
 | Contrato de API | springdoc-openapi (Swagger UI en `/swagger-ui.html`) — de aquí se generan los clientes TypeScript (React) y Dart (Flutter) con openapi-generator |
 | Notificaciones push | Firebase Cloud Messaging (consumido desde el módulo que corresponda, pendiente de definir) |
-| Nube objetivo | Microsoft Azure (Container Apps, Database for PostgreSQL, Managed Redis, Blob Storage, Key Vault — ver sección 5 del PDF; servicios aún no confirmados) |
+| Nube objetivo | Microsoft Azure (Container Apps, Database for PostgreSQL, Blob Storage, Key Vault — ver sección 5 del PDF; servicios aún no confirmados) |
 | Repositorio y CI/CD | GitHub + GitHub Actions: build/pruebas, lint (Spotless + Checkstyle), CodeQL + Dependency Review y publicación a GitHub Packages (ver `docs/workflows-ci-cd.md`) |
 | Pruebas | JUnit 5, Mockito, Testcontainers, Spring Modulith tests |
 
@@ -84,7 +82,7 @@ ERP web (React)   CRM web (React)   App CareCar (Flutter)
           API REST · Spring Boot 3 + Spring Modulith
           (monolito modular, eventos de dominio internos)
         /        |         |         |        \
-  PostgreSQL   Redis   Archivos   PAC CFDI   Firebase FCM
+  PostgreSQL   Archivos   PAC CFDI   Firebase FCM
 ```
 
 La comunicación **entre módulos** es por eventos de dominio de Spring Modulith (no llamadas directas a servicios de otro módulo). Ejemplos tomados del backlog:
@@ -199,9 +197,9 @@ Reglas de los manuales de la app (APP-3.1):
 - **Una sola API con OpenAPI**: de ella se generan los clientes React y Flutter — evitar romper el contrato sin versionarlo.
 - **App CareCar sin registro público**: el acceso es con usuario/contraseña emitidos por la agencia tras validar la compra.
 
-## 5. Entorno local (PostgreSQL y Redis)
+## 5. Entorno local (PostgreSQL)
 
-Para correr la API en tu máquina necesitas una base de datos PostgreSQL y un Redis. No hace falta instalarlos: el `docker-compose.yml` de la raíz los levanta en contenedores con la configuración que la API espera por defecto.
+Para correr la API en tu máquina necesitas una base de datos PostgreSQL. No hace falta instalarla: el `docker-compose.yml` de la raíz la levanta en un contenedor con la configuración que la API espera por defecto.
 
 > Las **pruebas** no usan este entorno: Testcontainers levanta su propio PostgreSQL temporal (ver sección 6). Puedes correr `./mvnw verify` sin haber hecho `docker compose up`, solo necesitas Docker activo.
 
@@ -210,7 +208,7 @@ Para correr la API en tu máquina necesitas una base de datos PostgreSQL y un Re
 | Herramienta | Versión | Para qué |
 |---|---|---|
 | JDK | 25 | Compilar y correr la API (Maven viene incluido con `./mvnw`, no hay que instalarlo) |
-| Docker con Docker Compose | Docker Engine o Docker Desktop reciente (Compose v2: comando `docker compose`, sin guion) | Levantar PostgreSQL y Redis, y correr Testcontainers en las pruebas |
+| Docker con Docker Compose | Docker Engine o Docker Desktop reciente (Compose v2: comando `docker compose`, sin guion) | Levantar PostgreSQL y correr Testcontainers en las pruebas |
 
 Con **Podman** también funciona (`podman compose up -d`), siempre que tenga activo el socket compatible con Docker para Testcontainers.
 
@@ -219,14 +217,13 @@ Con **Podman** también funciona (`podman compose up -d`), siempre que tenga act
 | Servicio | Imagen | Puerto local | Datos de conexión | ¿Los datos se conservan? |
 |---|---|---|---|---|
 | `postgres` | `postgres:16-alpine` | `5432` | BD `agencia360`, usuario `agencia360`, contraseña `agencia360` | Sí, en el volumen `postgres-data` (sobreviven a `docker compose down`) |
-| `redis` | `redis:7-alpine` | `6379` | Sin contraseña | No hay que confiar en ellos: es caché y se puede vaciar en cualquier momento |
 | `mailpit` | `axllent/mailpit` | `1025` (SMTP) y `8025` (bandeja web) | Sin contraseña | No: atrapa los correos de desarrollo (códigos de recuperación de la app) |
 
 Estas credenciales son **solo para desarrollo local** y coinciden con los valores por defecto de `src/main/resources/application.properties`, así que no hay que configurar nada para que la API se conecte.
 
 ### 5.2.1 API en Docker detrás de Nginx (para el teléfono)
 
-El perfil `proxy` agrega dos servicios: `api` (imagen del `Dockerfile`, perfil `dev`, conectada a `postgres`, `redis` y `mailpit` por nombre de servicio; **no** publica el 8080 al host) y `nginx` (`nginx/default.conf`), que publica el puerto **8089** y pasa `/api/` a `http://api:8080` con los encabezados `X-Forwarded-*`. `docker compose up -d` sin perfil sigue levantando solo la base, Redis y Mailpit.
+El perfil `proxy` agrega dos servicios: `api` (imagen del `Dockerfile`, perfil `dev`, conectada a `postgres` y `mailpit` por nombre de servicio; **no** publica el 8080 al host) y `nginx` (`nginx/default.conf`), que publica el puerto **8089** y pasa `/api/` a `http://api:8080` con los encabezados `X-Forwarded-*`. `docker compose up -d` sin perfil sigue levantando solo la base y Mailpit.
 
 ```bash
 # Primera vez: cp .env.example .env (trae las variables ADMIN_INICIAL_* y GERENTE_INICIAL_* del script de datos)
@@ -240,10 +237,10 @@ Desde el teléfono (misma red Wi-Fi): `http://IP-DE-LA-PC:8089/api/v1/app`, por 
 ### 5.3 Paso a paso
 
 ```bash
-# 1. Levantar PostgreSQL y Redis en segundo plano
+# 1. Levantar PostgreSQL y Mailpit en segundo plano
 docker compose up -d
 
-# 2. Revisar que los dos contenedores estén "Up"
+# 2. Revisar que los contenedores estén "Up"
 docker compose ps
 
 # 3. Levantar la API con el perfil dev
@@ -259,7 +256,7 @@ Started BackendAgencia360Application in ... seconds
 
 Hibernate está en modo `validate`: **nunca crea ni modifica tablas por su cuenta**. Cualquier cambio al esquema va en una nueva migración `V<n>__descripcion.sql`.
 
-Para comprobar que la API se conectó a PostgreSQL y a Redis:
+Para comprobar que la API se conectó a PostgreSQL:
 
 ```bash
 curl http://localhost:8080/actuator/health
@@ -268,14 +265,14 @@ curl http://localhost:8080/actuator/health
 
 | URL | Qué es |
 |---|---|
-| `http://localhost:8080/actuator/health` | Estado de la API, la base de datos y Redis (`UP` / `DOWN`) |
+| `http://localhost:8080/actuator/health` | Estado de la API, la base de datos (`UP` / `DOWN`) |
 | `http://localhost:8080/swagger-ui.html` | Swagger UI para probar los endpoints |
 | `http://localhost:8080/v3/api-docs` | Contrato OpenAPI en JSON |
 | `http://localhost:8025` | Mailpit: correos que envía la API en el perfil `dev` (por ejemplo, el código de recuperación de la app) |
 
 **Perfil `dev`**: muestra el SQL que ejecuta Hibernate (`spring.jpa.show-sql=true`) y sube el nivel de log del proyecto a `DEBUG`. Ver `src/main/resources/application-dev.properties`.
 
-### 5.4 Conectarse a la base de datos y a Redis
+### 5.4 Conectarse a la base de datos
 
 Desde la terminal, sin instalar clientes (se usan los que vienen dentro de los contenedores):
 
@@ -283,10 +280,6 @@ Desde la terminal, sin instalar clientes (se usan los que vienen dentro de los c
 # Consola de PostgreSQL
 docker compose exec postgres psql -U agencia360 -d agencia360
 #   \dt   lista las tablas      \q   sale
-
-# Consola de Redis
-docker compose exec redis redis-cli
-#   PING  responde PONG       KEYS *   lista las llaves (solo en local)
 ```
 
 Desde un cliente gráfico (IntelliJ Database, DBeaver, pgAdmin): host `localhost`, puerto `5432`, base `agencia360`, usuario `agencia360`, contraseña `agencia360`. URL JDBC: `jdbc:postgresql://localhost:5432/agencia360`.
@@ -300,8 +293,6 @@ La API lee su configuración de variables de entorno. Si no defines ninguna, usa
 | `DB_URL` | `jdbc:postgresql://localhost:5432/agencia360` | URL JDBC de PostgreSQL |
 | `DB_USERNAME` | `agencia360` | Usuario de la base de datos |
 | `DB_PASSWORD` | `agencia360` | Contraseña de la base de datos |
-| `REDIS_HOST` | `localhost` | Host de Redis |
-| `REDIS_PORT` | `6379` | Puerto de Redis |
 | `CORS_ALLOWED_ORIGINS` | `http://localhost:5173`; con el perfil `dev`, también `http://localhost:5174` | Orígenes de los frontends que pueden llamar a la API, separados por comas |
 | `JWT_SECRET` | Valor de solo-desarrollo | Llave para firmar los JWT |
 | `JWT_EXPIRATION_MINUTES` | `60` | Duración del token |
@@ -405,7 +396,7 @@ Para borrar también el volumen de la base y empezar desde cero, incluidas las m
 | Comando | Qué hace |
 |---|---|
 | `docker compose ps` | Muestra si los contenedores están corriendo |
-| `docker compose logs -f postgres` | Muestra el log de PostgreSQL en vivo (igual con `redis`) |
+| `docker compose logs -f postgres` | Muestra el log de PostgreSQL en vivo (igual con `mailpit`) |
 | `docker compose stop` | Detiene los contenedores sin borrarlos |
 | `docker compose down` | Detiene y borra los contenedores; **los datos de PostgreSQL se conservan** |
 | `docker compose down -v` | Borra también el volumen: **base de datos vacía** la próxima vez que levantes (Flyway vuelve a crear las tablas) |
@@ -415,8 +406,7 @@ Para borrar también el volumen de la base y empezar desde cero, incluidas las m
 | Síntoma | Causa | Solución |
 |---|---|---|
 | La API no arranca y el log dice `Connection to localhost:5432 refused` | PostgreSQL no está corriendo | `docker compose up -d` y vuelve a levantar la API |
-| `docker compose up` falla con `port is already allocated` o `address already in use` | Ya tienes otro PostgreSQL o Redis usando el puerto `5432` o `6379` | Detén el servicio local (por ejemplo `sudo systemctl stop postgresql`) o cambia el puerto de la izquierda en `docker-compose.yml` (`"5433:5432"`) y usa `DB_URL` con ese puerto |
-| La API arranca pero `/actuator/health` responde `{"status":"DOWN"}` (HTTP 503) | Redis no está corriendo: la API no lo necesita para arrancar, pero el health check lo revisa | `docker compose up -d redis` |
+| `docker compose up` falla con `port is already allocated` o `address already in use` | Ya tienes otro PostgreSQL usando el puerto `5432` | Detén el servicio local (por ejemplo `sudo systemctl stop postgresql`) o cambia el puerto de la izquierda en `docker-compose.yml` (`"5433:5432"`) y usa `DB_URL` con ese puerto |
 | La API no arranca por un error de Flyway (`Validate failed`, `checksum mismatch`) | Se editó una migración que ya se había aplicado en tu base local | No edites migraciones ya integradas a `main`: crea una nueva. Si solo fue en tu máquina, reinicia la base con `docker compose down -v && docker compose up -d` |
 | La API no arranca con `Schema-validation: missing table` | Una entidad JPA no tiene su migración | Agrega la migración `V<n>__...sql` que crea esa tabla |
 | El ERP dice "No se pudo conectar con el servidor" o el CRM "Ocurrió un error inesperado" al iniciar sesión | CORS: el frontend corre en un origen que no está permitido. Con el perfil `dev` se permiten `5173` y `5174`, el par que usa Vite al levantar el ERP y el CRM a la vez | Revisa en qué puerto quedó el frontend. Si es otro, o si no usas el perfil `dev`, agrégalo: `CORS_ALLOWED_ORIGINS=http://localhost:5173,http://localhost:5175` |
@@ -429,7 +419,7 @@ Para borrar también el volumen de la base y empezar desde cero, incluidas las m
 | Capa | Herramientas | Qué prueba |
 |---|---|---|
 | Unitarias | JUnit 5 + Mockito | Servicios y reglas de negocio aisladas |
-| Integración | Testcontainers | Acceso a datos y transacciones contra PostgreSQL/Redis reales en Docker (ver `shared/AbstractIntegrationTest` en tests) |
+| Integración | Testcontainers | Acceso a datos y transacciones contra PostgreSQL real en Docker (ver `shared/AbstractIntegrationTest` en tests) |
 | Módulos | Spring Modulith tests | Cada módulo aislado y la publicación de eventos (ver `ModularityTests`) |
 
 El mayor esfuerzo de pruebas debe ir en pagos, facturación, inventario y contabilidad: ahí un error significa dinero mal registrado.
