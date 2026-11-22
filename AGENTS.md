@@ -80,10 +80,13 @@ Cada módulo con código tiene pruebas de dominio, de servicio (Mockito) y de in
 
 1. Toma la historia del tablero (`carecar-mobile/plan/tablero.md`) y su detalle en `carecar-mobile/plan/modulos/`.
 2. Rama desde `main` actualizado: `feat/v2-t05-07-franja-horario`.
-3. TDD: migración + entidad + servicio + controlador + pruebas, un commit por intención.
-4. Contrato OpenAPI, README/`docs/` y `plan/` actualizados en el mismo PR.
-5. `./mvnw spotless:apply checkstyle:check verify` en verde.
-6. PR con la plantilla; actualiza el tablero en `carecar-mobile`.
+3. **Diseño en el primer commit.** No hace falta que alguien la haya diseñado antes: tú escribes en [`plan/historias-backend.md`](plan/historias-backend.md), bajo su sección, las tablas, la migración, los eventos y los endpoints con sus errores (`docs(plan): diseñar V2-T05.07`), y el endpoint en `docs/api/agencia360-api-app-v2.yaml` antes de programarlo. Así la app arranca contra `mock_api` sin esperar a este repo: una dependencia de la app hacia una historia B **no la bloquea**.
+4. TDD: migración + entidad + servicio + controlador + pruebas, un commit por intención.
+5. Contrato OpenAPI, README/`docs/` y `plan/` actualizados en el mismo PR.
+6. `./mvnw spotless:apply checkstyle:check verify` en verde.
+7. PR con la plantilla; actualiza el tablero en `carecar-mobile`.
+
+Las reglas para trabajar los seis a la vez (contrato primero, propiedad por paquete, WIP, archivos calientes) están en [`carecar-mobile/plan/trabajo-en-paralelo.md`](https://github.com/lattice-systems/carecar-mobile/blob/main/plan/trabajo-en-paralelo.md).
 
 ## Seguridad
 
