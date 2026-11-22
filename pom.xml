@@ -34,8 +34,6 @@
 		<jackson-bom.version>2.21.7</jackson-bom.version>
 		<!-- CVE-2026-54291 -->
 		<postgresql.version>42.7.14</postgresql.version>
-		<!-- CVE-2026-75595, CVE-2026-75596, CVE-2026-59901 (transitiva de Lettuce/Redis) -->
-		<netty.version>4.1.139.Final</netty.version>
 		<!-- CVE-2025-48924 (transitiva de springdoc) -->
 		<commons-lang3.version>3.21.0</commons-lang3.version>
 		<!-- CVE-2026-49844 (log4j-api llega como puente; el proyecto usa Logback) -->
@@ -95,12 +93,6 @@
 		<dependency>
 			<groupId>org.flywaydb</groupId>
 			<artifactId>flyway-database-postgresql</artifactId>
-		</dependency>
-
-		<!-- Caché -->
-		<dependency>
-			<groupId>org.springframework.boot</groupId>
-			<artifactId>spring-boot-starter-data-redis</artifactId>
 		</dependency>
 
 		<!-- Correo (recuperación de contraseña de la app; en desarrollo, Mailpit) -->
