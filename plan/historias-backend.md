@@ -4,7 +4,7 @@ Espejo de las historias marcadas **B** en el plan maestro de `carecar-mobile`. *
 
 Al tomar una historia, el planificador o el implementador agrega bajo su sección: migración(es), entidades, eventos publicados/escuchados y endpoints con sus errores.
 
-Total: **110 historias B**.
+Total: **111 historias B**.
 
 ## Alineación con la ficha técnica v2.0 (prioridad máxima)
 
@@ -37,8 +37,9 @@ Detalle: [`carecar-mobile/plan/modulos/M02-vehiculos-y-postventa.md`](https://gi
 | ID | Historia | Criterios de aceptación | Dueño |
 | --- | --- | --- | --- |
 | V2-M02.04 | Como cliente quiero la ficha técnica de mi vehículo para conocer sus especificaciones | Datos desde la API por modelo/año · secciones plegables · respaldo local mientras el backend no los tenga | Juan Pablo |
-| V2-M02.08 | Como cliente quiero agendar una cita eligiendo vehículo, fecha, franja y motivo | Confirmación con resumen · 409 por cupo lleno → ofrece franjas cercanas · 409 por cita duplicada → muestra la existente | Juan Pablo |
-| V2-M02.11 | Como cliente quiero un comprobante con QR de mi cita para recepción rápida | QR con id firmado · PDF · agregable a Wallet (M25) | Juan Pablo |
+| V2-M02.05 | Como cliente quiero el historial de servicios de mi auto para saber qué se le ha hecho | `GET /vehiculos/{id}/servicios` suma el filtro `anio` a la paginación · cada orden trae fecha de cierre, estatus y total | Ricardo |
+| V2-M02.08 | Como cliente quiero agendar una cita eligiendo vehículo, fecha, franja y motivo | Confirmación con resumen · 409 `FRANJA_SIN_CUPO` → ofrece franjas cercanas · 409 `CITA_DUPLICADA` (hoy sin código) → muestra la existente · `cita.motivo` | Juan Pablo |
+| V2-M02.11 | Como cliente quiero un comprobante con QR de mi cita para recepción rápida | QR con id firmado en el PDF que ya entrega `GET /citas/{id}/ticket` · agregable a Wallet (M25) | Juan Pablo |
 | V2-M02.13 | Como cliente quiero reprogramar una cita sin cancelarla | Elige nueva franja; la anterior se libera en la misma operación | Juan Pablo |
 
 ### M03 · Catálogo y calculadora de toma a cuenta — H2 — módulo `carecarapp`
