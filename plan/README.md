@@ -4,7 +4,7 @@ El plan maestro (propósito, objetivos, hitos, módulos, reparto y tablero) vive
 
 | Documento | Para qué |
 | --- | --- |
-| [`historias-backend.md`](historias-backend.md) | Las 110 historias **B** agrupadas por módulo de Modulith, con su diseño técnico |
+| [`historias-backend.md`](historias-backend.md) | Las 111 historias **B** agrupadas por módulo de Modulith, con su diseño técnico |
 | [Plan maestro](https://github.com/lattice-systems/carecar-mobile/blob/main/plan/README.md) | Propósito, hitos H0–H7, catálogo de módulos |
 | [Tablero](https://github.com/lattice-systems/carecar-mobile/blob/main/plan/tablero.md) | Estado de todas las historias (única fuente) |
 | [Reparto](https://github.com/lattice-systems/carecar-mobile/blob/main/plan/equipo-y-reparto.md) | Quién es dueño de qué |
@@ -44,6 +44,7 @@ Los módulos nuevos se crean solo cuando su primera historia se implementa (no s
 
 ## Cómo se mantiene
 
-- Cada PR de una historia **B** actualiza su sección en `historias-backend.md` con el diseño final (migraciones, eventos, endpoints) y el contrato OpenAPI.
+- **Una historia B se toma sin diseño previo.** Quien la toma escribe el diseño (tablas, migración, entidades, eventos publicados y escuchados, endpoints con sus errores) en su **primer commit** bajo su sección de `historias-backend.md` (`docs(plan): diseñar V2-xxx`), y el endpoint en el contrato OpenAPI v2 antes de programarlo. Al cerrar, el PR deja esa sección con el diseño final.
+- **La app no espera al backend.** Con el contrato escrito, la app avanza contra `carecar-mobile/mock_api`; en el tablero esas dependencias llevan la marca `(simulable)`. Las estrategias completas están en [`carecar-mobile/plan/trabajo-en-paralelo.md`](https://github.com/lattice-systems/carecar-mobile/blob/main/plan/trabajo-en-paralelo.md).
 - El estado se mueve en el tablero de `carecar-mobile`, no aquí.
 - Si se agrega o cambia una historia **B**, se cambia primero en `carecar-mobile/plan/modulos/` y luego se refleja aquí.
