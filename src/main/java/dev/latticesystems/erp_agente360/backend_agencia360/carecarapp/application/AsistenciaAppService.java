@@ -47,8 +47,8 @@ public class AsistenciaAppService {
 	 * @throws RecursoNoEncontradoException
 	 *             si el vehículo no existe o no es del cliente (404)
 	 * @throws IllegalArgumentException
-	 *             si falta el vehículo o el tipo, la ubicación es incompleta o
-	 *             está fuera de rango o el comentario es muy largo (400)
+	 *             si falta el vehículo o el tipo, la ubicación es incompleta o está
+	 *             fuera de rango o el comentario es muy largo (400)
 	 * @throws ConflictoException
 	 *             con {@code SOLICITUD_ABIERTA} si el cliente ya tiene una
 	 *             solicitud abierta (409)
