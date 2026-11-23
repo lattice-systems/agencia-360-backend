@@ -1,0 +1,128 @@
+name: Despliegue a Azure
+
+# V2-T05.11: cada merge a main construye la imagen de la API, la publica en GHCR
+# y actualiza la Container App ca-agencia360-api. Ver docs/despliegue-azure-neon.md.
+# Las pruebas no se repiten aquí: el PR ya pasó CI antes de integrarse.
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - "docs/**"
+      - "plan/**"
+      - "**/*.md"
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+  packages: write
+  id-token: write # token OIDC para entrar a Azure sin secretos guardados
+
+# Un solo despliegue a la vez. No se cancela el que está en curso (dejaría la app
+# a medio actualizar); si llegan más merges, solo espera el más nuevo.
+concurrency:
+  group: despliegue-azure
+  cancel-in-progress: false
+
+env:
+  REGISTRO: ghcr.io
+  REPO_IMAGEN: ghcr.io/lattice-systems/agencia-360-backend
+  GRUPO: rg-agencia360
+  APP: ca-agencia360-api
+  URL_API: https://ca-agencia360-api.calmcliff-d0e7fc3b.eastus2.azurecontainerapps.io
+
+jobs:
+  desplegar:
+    name: Construir, publicar y desplegar
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Descargar el código
+        uses: actions/checkout@v7
+
+      - name: Calcular la etiqueta de la imagen (sha corto)
+        id: imagen
+        run: |
+          etiqueta="${GITHUB_SHA::7}"
+          echo "etiqueta=$etiqueta" >> "$GITHUB_OUTPUT"
+          echo "imagen=$REPO_IMAGEN:$etiqueta" >> "$GITHUB_OUTPUT"
+
+      - name: Preparar Buildx
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+      - name: Entrar a GHCR
+        uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
+        with:
+          registry: ${{ env.REGISTRO }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # El entorno express de Azure rechaza un manifiesto OCI con capas de tipo
+      # Docker. Se fuerza OCI puro: manifiesto y capas OCI, todas recomprimidas
+      # en gzip, y sin provenance/SBOM (que convertirían el resultado en un índice).
+      - name: Construir y publicar la imagen (OCI puro)
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          provenance: false
+          sbom: false
+          outputs: type=image,push=true,oci-mediatypes=true,compression=gzip,force-compression=true
+          tags: |
+            ${{ steps.imagen.outputs.imagen }}
+            ${{ env.REPO_IMAGEN }}:latest
+          labels: |
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Verificar que el manifiesto publicado es OCI coherente
+        env:
+          IMAGEN: ${{ steps.imagen.outputs.imagen }}
+        run: |
+          manifiesto=$(docker buildx imagetools inspect --raw "$IMAGEN")
+          echo "$manifiesto" | jq '{mediaType, config: .config.mediaType, capas: [.layers[].mediaType] | unique}'
+          echo "$manifiesto" | jq -e '
+            .mediaType == "application/vnd.oci.image.manifest.v1+json"
+            and .config.mediaType == "application/vnd.oci.image.config.v1+json"
+            and all(.layers[]; .mediaType == "application/vnd.oci.image.layer.v1.tar+gzip")
+          ' > /dev/null || { echo "::error::El manifiesto mezcla tipos Docker y OCI; Azure lo rechazaría."; exit 1; }
+
+      - name: Entrar a Azure (OIDC)
+        uses: azure/login@a641126d1b8aa4d1fa005f4f92df94a3a4c4c906 # v3.1.0
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      # -o none: la salida de "update" incluye valores de variables de entorno y el
+      # registro de Actions de un repo público es público.
+      - name: Actualizar la Container App
+        env:
+          IMAGEN: ${{ steps.imagen.outputs.imagen }}
+        run: az containerapp update -n "$APP" -g "$GRUPO" --image "$IMAGEN" -o none
+
+      # Arranque en frío de ~35 s. Se da por bueno cuando /actuator/health responde
+      # UP y todas las revisiones activas usan la imagen nueva y están corriendo.
+      - name: Verificar la salud y la imagen activa
+        env:
+          IMAGEN: ${{ steps.imagen.outputs.imagen }}
+        run: |
+          limite=$((SECONDS + 240))
+          while [ "$SECONDS" -lt "$limite" ]; do
+            salud=$(curl -sS --max-time 30 "$URL_API/actuator/health" || true)
+            activas=$(az containerapp revision list -n "$APP" -g "$GRUPO" \
+              --query "[?properties.active].properties.template.containers[0].image" -o tsv | sort -u)
+            estados=$(az containerapp revision list -n "$APP" -g "$GRUPO" \
+              --query "[?properties.active].properties.runningState" -o tsv | sort -u)
+            echo "imagen activa: ${activas:-ninguna} · estado: ${estados:-?} · salud: ${salud:-sin respuesta}"
+            if [ "$activas" = "$IMAGEN" ] && [[ "$estados" == Running* ]] \
+              && echo "$salud" | grep -q '"status":"UP"'; then
+              echo "Desplegada $IMAGEN y en pie." >> "$GITHUB_STEP_SUMMARY"
+              exit 0
+            fi
+            sleep 10
+          done
+          az containerapp revision list -n "$APP" -g "$GRUPO" \
+            --query "[].{nombre:name, activa:properties.active, imagen:properties.template.containers[0].image, estado:properties.runningState, salud:properties.healthState}" -o table
+          echo "::error::La API no respondió UP con $IMAGEN en 4 minutos."
+          exit 1
