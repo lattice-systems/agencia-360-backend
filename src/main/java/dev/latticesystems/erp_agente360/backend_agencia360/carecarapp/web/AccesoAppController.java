@@ -77,8 +77,9 @@ public class AccesoAppController {
 	@PostMapping("/auth/recuperar-contrasena")
 	@SecurityRequirements
 	@ResponseStatus(HttpStatus.ACCEPTED)
-	@Operation(summary = "Pedir un código de recuperación por correo", description = "Envía un código de 6 dígitos "
-			+ "que vence en 15 minutos. Responde 202 aunque el correo no exista.")
+	@Operation(summary = "Pedir un enlace de recuperación por correo", description = "Envía un enlace de un solo uso "
+			+ "y, para la app v1, un código de 6 dígitos; vencen en 15 minutos. Responde 202 aunque el correo no "
+			+ "exista.")
 	public void recuperarContrasena(@Valid @RequestBody RecuperarContrasenaRequest request) {
 		recuperacionService.solicitar(request.correo());
 	}
@@ -86,11 +87,18 @@ public class AccesoAppController {
 	@PostMapping("/auth/restablecer-contrasena")
 	@SecurityRequirements
 	@ResponseStatus(HttpStatus.NO_CONTENT)
-	@Operation(summary = "Definir una contraseña nueva con el código", description = "Responde 400 (CODIGO_INVALIDO) "
-			+ "si el código no es válido, ya se usó o venció, y 400 (DATOS_INVALIDOS) si la contraseña no cumple "
-			+ "las reglas. Cierra las sesiones abiertas de la cuenta.")
+	@Operation(summary = "Definir una contraseña nueva con el enlace o el código", description = "Con token (el "
+			+ "del enlace) o con correo y código (app v1). Responde 400 (CODIGO_INVALIDO) si el enlace o el código "
+			+ "no es válido, ya se usó o venció, y 400 (DATOS_INVALIDOS) si falta el token o el correo y el código, "
+			+ "o si la contraseña no cumple las reglas. Cierra las sesiones abiertas de la cuenta.")
 	public void restablecerContrasena(@Valid @RequestBody RestablecerContrasenaRequest request) {
-		recuperacionService.restablecer(request.correo(), request.codigo(), request.contrasenaNueva());
+		if (request.conEnlace()) {
+			recuperacionService.restablecerConEnlace(request.token(), request.contrasenaNueva());
+		} else if (request.conCodigo()) {
+			recuperacionService.restablecer(request.correo(), request.codigo(), request.contrasenaNueva());
+		} else {
+			throw new IllegalArgumentException("Manda el token del enlace o el correo con el código");
+		}
 	}
 
 	@GetMapping("/perfil")
