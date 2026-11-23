@@ -6,7 +6,10 @@
  * buscan un vehículo por su VIN y ven sus datos, su dueño y los servicios que
  * se le han hecho, cada uno con sus renglones como el ticket de una tienda. Los
  * datos del vehículo y del cliente los da el módulo de clientes
- * ({@code clientes.VehiculosDeClientes}); los servicios viven aquí.
+ * ({@code clientes.VehiculosDeClientes}); los servicios viven aquí como órdenes
+ * de servicio ({@code orden_servicio}) con su mano de obra
+ * ({@code orden_mano_de_obra}) y sus refacciones ({@code orden_refaccion}),
+ * V2-T05.06.
  *
  * <p>
  * Siguen pendientes las órdenes de servicio y tickets imprimibles (ERP HU 3.1),

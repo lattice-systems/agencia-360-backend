@@ -2,9 +2,8 @@ package dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.applicati
 
 /**
  * Conjunto cerrado de estatus de una orden de servicio en la app (pregunta
- * PO-5). Hoy el expediente solo registra servicios ya hechos, así que todos
- * salen {@link #TERMINADO}; los demás quedan reservados para cuando ERP-3.1
- * lleve el avance de la orden.
+ * PO-5). Son los mismos de {@code orden_servicio.estatus}; hoy el expediente
+ * solo registra servicios ya hechos, así que todos salen {@link #TERMINADO}.
  */
 public enum EstatusServicio {
 	/** El vehículo entró al taller. */

@@ -1,26 +1,18 @@
 package dev.latticesystems.erp_agente360.backend_agencia360.servicio.domain;
 
 import jakarta.persistence.Column;
-import jakarta.persistence.Entity;
-import jakarta.persistence.EnumType;
-import jakarta.persistence.Enumerated;
 import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
-import jakarta.persistence.Table;
+import jakarta.persistence.MappedSuperclass;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 
-/**
- * Un renglón del servicio, como en el ticket de una tienda: qué se hizo o qué
- * refacción se puso, cuántas veces, a qué precio (con IVA) y su importe.
- */
-@Entity
-@Table(name = "renglon_servicio")
-public class RenglonServicio {
+@MappedSuperclass
+public abstract class RenglonOrden {
 
 	static final int LARGO_MAXIMO_CONCEPTO = 200;
 	static final int CANTIDAD_MAXIMA = 999;
@@ -31,12 +23,8 @@ public class RenglonServicio {
 	private Long id;
 
 	@ManyToOne(fetch = FetchType.LAZY, optional = false)
-	@JoinColumn(name = "servicio_id", nullable = false)
-	private Servicio servicio;
-
-	@Enumerated(EnumType.STRING)
-	@Column(nullable = false, length = 15)
-	private TipoRenglon tipo;
+	@JoinColumn(name = "orden_servicio_id", nullable = false)
+	private OrdenServicio ordenServicio;
 
 	@Column(nullable = false, length = LARGO_MAXIMO_CONCEPTO)
 	private String concepto;
@@ -44,32 +32,24 @@ public class RenglonServicio {
 	@Column(nullable = false)
 	private int cantidad;
 
-	@Column(name = "precio_unitario", nullable = false, precision = 12, scale = 2)
-	private BigDecimal precioUnitario;
+	@Column(nullable = false, precision = 12, scale = 2)
+	private BigDecimal precio;
 
 	@Column(nullable = false, precision = 12, scale = 2)
 	private BigDecimal importe;
 
-	protected RenglonServicio() {
-		// Requerido por JPA
+	protected RenglonOrden() {
 	}
 
-	private RenglonServicio(Servicio servicio, TipoRenglon tipo, String concepto, int cantidad,
-			BigDecimal precioUnitario) {
-		this.servicio = servicio;
-		this.tipo = tipo;
+	protected RenglonOrden(OrdenServicio ordenServicio, String concepto, int cantidad, BigDecimal precio) {
+		this.ordenServicio = ordenServicio;
 		this.concepto = concepto;
 		this.cantidad = cantidad;
-		this.precioUnitario = precioUnitario;
-		this.importe = precioUnitario.multiply(BigDecimal.valueOf(cantidad));
+		this.precio = precio;
+		this.importe = precio.multiply(BigDecimal.valueOf(cantidad));
 	}
 
-	/**
-	 * @throws IllegalArgumentException
-	 *             si falta el tipo o el concepto, la cantidad no está entre 1 y 999
-	 *             o el precio es negativo o tiene más de dos decimales (400)
-	 */
-	static RenglonServicio de(Servicio servicio, RenglonNuevo nuevo) {
+	static RenglonOrden de(OrdenServicio orden, RenglonNuevo nuevo) {
 		if (nuevo == null || nuevo.tipo() == null) {
 			throw new IllegalArgumentException("Cada renglón dice si es mano de obra o refacción");
 		}
@@ -91,15 +71,16 @@ public class RenglonServicio {
 		} catch (ArithmeticException masDeDosDecimales) {
 			throw new IllegalArgumentException("El precio admite hasta dos decimales");
 		}
-		return new RenglonServicio(servicio, nuevo.tipo(), concepto, nuevo.cantidad(), conCentavos);
+		if (nuevo.tipo() == TipoRenglon.MANO_DE_OBRA) {
+			return new OrdenManoDeObra(orden, concepto, nuevo.cantidad(), conCentavos);
+		}
+		return new OrdenRefaccion(orden, concepto, nuevo.cantidad(), conCentavos);
 	}
+
+	public abstract TipoRenglon getTipo();
 
 	public Long getId() {
 		return id;
-	}
-
-	public TipoRenglon getTipo() {
-		return tipo;
 	}
 
 	public String getConcepto() {
@@ -110,8 +91,8 @@ public class RenglonServicio {
 		return cantidad;
 	}
 
-	public BigDecimal getPrecioUnitario() {
-		return precioUnitario;
+	public BigDecimal getPrecio() {
+		return precio;
 	}
 
 	public BigDecimal getImporte() {

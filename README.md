@@ -179,7 +179,7 @@ Reglas de la venta y la factura (ERP-1.3, Sprint 3):
 Reglas del expediente del vehículo (ERP-3.0):
 - Servicio busca el vehículo por su VIN, completo o una parte de al menos 5 caracteres. Solo ve clientes que vienen del CRM: si necesita uno nuevo, lo registra el Gerente de marketing.
 - Arriba muestra número de serie, marca, tipo, modelo y versión, y los datos del cliente; abajo, los servicios del más reciente al más antiguo. Como en el inventario y la factura, `modelo` es el Tipo (Sentra) y `anio` el Modelo (2026).
-- Cada servicio guarda fecha, kilometraje, quién lo atendió y sus renglones (mano de obra o refacción, cantidad y precio). Los precios traen el IVA incluido: el total es la suma de los renglones y de ahí se desglosan subtotal e IVA 16 %.
+- Cada servicio es una orden de servicio (`orden_servicio`) con fecha, kilometraje, quién lo atendió, estatus y fecha de cierre; su mano de obra va en `orden_mano_de_obra` y sus refacciones en `orden_refaccion` (concepto, cantidad y precio). Los precios traen el IVA incluido: el total es la mano de obra más las refacciones y de ahí se desglosan subtotal e IVA 16 %.
 - Los servicios son dinero: no se editan ni se borran. Su captura en pantalla llega después; por ahora se registran por la API y con el script de datos de ejemplo.
 
 Reglas de los manuales de la app (APP-3.1):

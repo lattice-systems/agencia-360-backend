@@ -1,5 +1,6 @@
 package dev.latticesystems.erp_agente360.backend_agencia360.servicio;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -18,23 +19,27 @@ import dev.latticesystems.erp_agente360.backend_agencia360.clientes.application.
 import dev.latticesystems.erp_agente360.backend_agencia360.clientes.application.VehiculoNuevo;
 import dev.latticesystems.erp_agente360.backend_agencia360.shared.AbstractIntegrationTest;
 import dev.latticesystems.erp_agente360.backend_agencia360.shared.security.JwtService;
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.List;
+import java.util.Map;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * Expediente del vehículo (ERP-3.0) de punta a punta: migración V18, seguridad,
- * endpoints y base de datos real (Testcontainers). Cada prueba se revierte al
- * terminar.
+ * Expediente del vehículo (ERP-3.0) de punta a punta: órdenes de servicio
+ * ({@code orden_servicio}, {@code orden_mano_de_obra} y
+ * {@code orden_refaccion}, V2-T05.06), seguridad, endpoints y base de datos
+ * real (Testcontainers). Cada prueba se revierte al terminar.
  */
 @AutoConfigureMockMvc
 @Transactional
@@ -58,6 +63,9 @@ class ExpedienteIntegrationTest extends AbstractIntegrationTest {
 
 	@Autowired
 	private RegistroClientesService registroClientesService;
+
+	@Autowired
+	private JdbcTemplate jdbcTemplate;
 
 	private int usuariosCreados;
 	private Long vehiculoId;
@@ -127,6 +135,39 @@ class ExpedienteIntegrationTest extends AbstractIntegrationTest {
 				.andExpect(jsonPath("$.renglones[1].cantidad").value(2))
 				.andExpect(jsonPath("$.renglones[1].precioUnitario").value(175.5))
 				.andExpect(jsonPath("$.renglones[1].importe").value(351.0));
+	}
+
+	@Test
+	void guardaLaOrdenConSuManoDeObraYSusRefaccionesPorSeparado() throws Exception {
+		String cuerpo = """
+				{"fecha": "%s", "kilometraje": 20000, "renglones": [
+				  {"tipo": "REFACCION", "concepto": "Filtro de aceite", "cantidad": 2, "precioUnitario": 175.50},
+				  {"tipo": "MANO_DE_OBRA", "concepto": "Cambio de aceite", "cantidad": 1, "precioUnitario": 450.00},
+				  {"tipo": "REFACCION", "concepto": "Aceite sintético", "cantidad": 4, "precioUnitario": 120.25}
+				]}""".formatted(HOY);
+		String respuesta = mockMvc
+				.perform(conToken(post(URL + "/{id}/servicios", vehiculoId), "SERVICIO")
+						.contentType(MediaType.APPLICATION_JSON).content(cuerpo))
+				.andExpect(status().isCreated()).andExpect(jsonPath("$.total").value(1282.0))
+				.andExpect(jsonPath("$.renglones[0].tipo").value("MANO_DE_OBRA"))
+				.andExpect(jsonPath("$.renglones[1].concepto").value("Filtro de aceite"))
+				.andExpect(jsonPath("$.renglones[2].concepto").value("Aceite sintético")).andReturn().getResponse()
+				.getContentAsString();
+		Integer ordenId = JsonPath.read(respuesta, "$.id");
+
+		Map<String, Object> orden = jdbcTemplate.queryForMap(
+				"select mano_de_obra, refacciones, total, estatus, fecha_cierre from orden_servicio where id = ?",
+				ordenId);
+		assertThat((BigDecimal) orden.get("mano_de_obra")).isEqualByComparingTo("450.00");
+		assertThat((BigDecimal) orden.get("refacciones")).isEqualByComparingTo("832.00");
+		assertThat((BigDecimal) orden.get("total")).isEqualByComparingTo("1282.00");
+		assertThat(orden.get("estatus")).isEqualTo("TERMINADO");
+		assertThat(orden.get("fecha_cierre")).isNotNull();
+		assertThat(jdbcTemplate.queryForList(
+				"select concepto from orden_refaccion where orden_servicio_id = ? and refaccion_id is null order by id",
+				String.class, ordenId)).containsExactly("Filtro de aceite", "Aceite sintético");
+		assertThat(jdbcTemplate.queryForList("select concepto from orden_mano_de_obra where orden_servicio_id = ?",
+				String.class, ordenId)).containsExactly("Cambio de aceite");
 	}
 
 	@Test
