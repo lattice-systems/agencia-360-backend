@@ -185,7 +185,11 @@ Reglas del expediente del vehículo (ERP-3.0):
 Reglas de los manuales de la app (APP-3.1):
 - Un manual es de una marca, un tipo y un modelo (Nissan March 2026); la versión no cambia el manual. Su nombre es "Nissan March 2026 Manual de propietario".
 - Solo PDF, de 20 MB como máximo. Lo sube el Gerente de marketing; su pantalla llega después y por ahora lo sube el script de datos de ejemplo.
-- El PDF no se guarda en la base: mientras no haya Azure Blob Storage vive en la carpeta `MANUALES_DIRECTORIO`. La app lo abre con una URL temporal firmada (HMAC con `MANUALES_SECRETO`) que vence a los 15 minutos.
+- `manual.archivo_pdf` es la clave del PDF (V2-T05.05). El PDF vive en la tabla `archivo_manual` (por omisión, `MANUALES_ALMACEN=base`) o en la carpeta `MANUALES_DIRECTORIO` (`MANUALES_ALMACEN=local`). La app lo abre con una URL temporal firmada (HMAC con `MANUALES_SECRETO`) que vence a los 15 minutos.
+
+Reglas de la cuenta de la app (APP-2.1, APP-2.3):
+- El cliente entra con `cuenta_app.usuario`, que es su correo en minúsculas (V2-T05.03). Si la agencia cambia el correo del cliente, el módulo de clientes publica `CorreoDeClienteCambiado` y la cuenta cambia de usuario en la misma transacción.
+- La recuperación de contraseña manda por correo un enlace de un solo uso (`RECUPERACION_ENLACE` + `?token=...`) y un código de 6 dígitos para la app v1. Los dos viven en la misma fila de `token_recuperacion` (V2-T05.04): vencen a los 15 minutos, el código admite 5 intentos y usar uno cierra el otro.
 
 ## 4. Lineamientos técnicos ya acordados (impactan el diseño del código)
 
@@ -217,7 +221,7 @@ Con **Podman** también funciona (`podman compose up -d`), siempre que tenga act
 | Servicio | Imagen | Puerto local | Datos de conexión | ¿Los datos se conservan? |
 |---|---|---|---|---|
 | `postgres` | `pgvector/pgvector:pg16` (PostgreSQL 16 con pgvector, para el asistente) | `5432` | BD `agencia360`, usuario `agencia360`, contraseña `agencia360` | Sí, en el volumen `postgres-data` (sobreviven a `docker compose down`) |
-| `mailpit` | `axllent/mailpit` | `1025` (SMTP) y `8025` (bandeja web) | Sin contraseña | No: atrapa los correos de desarrollo (códigos de recuperación de la app) |
+| `mailpit` | `axllent/mailpit` | `1025` (SMTP) y `8025` (bandeja web) | Sin contraseña | No: atrapa los correos de desarrollo (enlaces y códigos de recuperación de la app) |
 
 Estas credenciales son **solo para desarrollo local** y coinciden con los valores por defecto de `src/main/resources/application.properties`, así que no hay que configurar nada para que la API se conecte.
 
@@ -270,7 +274,7 @@ curl http://localhost:8080/actuator/health
 | `http://localhost:8080/v3/api-docs` | Contrato OpenAPI en JSON |
 
 En producción (perfil `prod`) Swagger UI y `/v3/api-docs` están apagados, porque la API es pública en internet.
-| `http://localhost:8025` | Mailpit: correos que envía la API en el perfil `dev` (por ejemplo, el código de recuperación de la app) |
+| `http://localhost:8025` | Mailpit: correos que envía la API en el perfil `dev` (por ejemplo, el enlace y el código de recuperación de la app) |
 
 **Perfil `dev`**: muestra el SQL que ejecuta Hibernate (`spring.jpa.show-sql=true`) y sube el nivel de log del proyecto a `DEBUG`. Ver `src/main/resources/application-dev.properties`.
 
