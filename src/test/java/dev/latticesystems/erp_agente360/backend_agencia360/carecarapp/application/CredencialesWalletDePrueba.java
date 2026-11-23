@@ -50,9 +50,8 @@ final class CredencialesWalletDePrueba {
 					new java.security.cert.Certificate[]{firmante});
 			ByteArrayOutputStream p12 = new ByteArrayOutputStream();
 			almacen.store(p12, CLAVE_P12.toCharArray());
-			String pemWwdr = "-----BEGIN CERTIFICATE-----\n"
-					+ Base64.getMimeEncoder(64, "\n".getBytes(StandardCharsets.US_ASCII))
-							.encodeToString(wwdr.getEncoded())
+			String pemWwdr = "-----BEGIN CERTIFICATE-----\n" + Base64
+					.getMimeEncoder(64, "\n".getBytes(StandardCharsets.US_ASCII)).encodeToString(wwdr.getEncoded())
 					+ "\n-----END CERTIFICATE-----\n";
 
 			KeyPair cuenta = rsa();
@@ -60,8 +59,8 @@ final class CredencialesWalletDePrueba {
 					+ Base64.getMimeEncoder(64, "\n".getBytes(StandardCharsets.US_ASCII))
 							.encodeToString(cuenta.getPrivate().getEncoded())
 					+ "\n-----END PRIVATE KEY-----\n";
-			String jsonCuenta = new com.fasterxml.jackson.databind.ObjectMapper().writeValueAsString(
-					java.util.Map.of("client_email", CORREO_CUENTA, "private_key", pemCuenta));
+			String jsonCuenta = new com.fasterxml.jackson.databind.ObjectMapper()
+					.writeValueAsString(java.util.Map.of("client_email", CORREO_CUENTA, "private_key", pemCuenta));
 
 			ConfiguracionWallet configuracion = new ConfiguracionWallet(PASS_TYPE_ID, TEAM_ID,
 					Base64.getEncoder().encodeToString(p12.toByteArray()), CLAVE_P12,
@@ -101,7 +100,7 @@ final class CredencialesWalletDePrueba {
 		Date hasta = new Date(System.currentTimeMillis() + 86_400_000L);
 		X509v3CertificateBuilder constructor = new JcaX509v3CertificateBuilder(new X500Name(nombre),
 				BigInteger.valueOf(System.nanoTime()), desde, hasta, new X500Name(nombre), pareja.getPublic());
-		return new JcaX509CertificateConverter()
-				.getCertificate(constructor.build(new JcaContentSignerBuilder("SHA256withRSA").build(pareja.getPrivate())));
+		return new JcaX509CertificateConverter().getCertificate(
+				constructor.build(new JcaContentSignerBuilder("SHA256withRSA").build(pareja.getPrivate())));
 	}
 }
