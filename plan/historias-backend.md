@@ -399,7 +399,7 @@ Detalle: [`carecar-mobile/plan/modulos/M24-asistente-carecar.md`](https://github
 | V2-M24.07 | Como equipo queremos medir la calidad de respuestas para saber si el asistente ayuda y mejorarlo | `POST /asistente/consultas/{id}/calificacion` guarda `util` · conjunto de evaluación de al menos 20 preguntas por modelo con página esperada · script que reporta el % de citas correctas contra el umbral del ADR | Daniel |
 | V2-M24.09 | Como cliente quiero ver la respuesta mientras se escribe para no esperar en blanco | `POST /asistente/preguntas` responde en streaming (SSE) con las fuentes al final · una conexión cortada deja registro de respuesta parcial | Daniel |
 
-#### Diseño de V2-M24.02 y V2-M24.03 (ADR 0007)
+#### Diseño de V2-M24.02 y V2-M24.03 (ADR 0007) — implementado
 
 Primera versión dentro del módulo `carecarapp` (subpaquetes `application`, `infrastructure`, `web`), porque usa sus manuales y vehículos. Se separa a un módulo `asistente` si crece (V2-T05.01).
 
