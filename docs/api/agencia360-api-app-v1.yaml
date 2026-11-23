@@ -764,6 +764,144 @@ paths:
         '403':
           $ref: '#/components/responses/CuentaDesactivada'
 
+  /direcciones:
+    get:
+      tags: [Recolección]
+      summary: Listar mis direcciones
+      description: V2-M17.01 · Las direcciones guardadas del cliente, por orden de alta.
+      responses:
+        '200':
+          description: Direcciones del cliente
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Direccion'
+        '401':
+          $ref: '#/components/responses/NoAutenticado'
+        '403':
+          $ref: '#/components/responses/CuentaDesactivada'
+    post:
+      tags: [Recolección]
+      summary: Guardar una dirección
+      description: |
+        V2-M17.01 · El pin del mapa (`lat`, `lng`) es obligatorio. Si queda fuera de la zona de
+        cobertura no se guarda y responde 422.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NuevaDireccion'
+      responses:
+        '201':
+          description: Dirección guardada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Direccion'
+        '400':
+          $ref: '#/components/responses/DatosInvalidos'
+        '401':
+          $ref: '#/components/responses/NoAutenticado'
+        '403':
+          $ref: '#/components/responses/CuentaDesactivada'
+        '422':
+          $ref: '#/components/responses/FueraDeCobertura'
+
+  /direcciones/{direccionId}:
+    put:
+      tags: [Recolección]
+      summary: Editar una dirección
+      description: V2-M17.01 · Reemplaza los datos de una dirección propia. Una ajena responde 404.
+      parameters:
+        - $ref: '#/components/parameters/DireccionId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NuevaDireccion'
+      responses:
+        '200':
+          description: Dirección actualizada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Direccion'
+        '400':
+          $ref: '#/components/responses/DatosInvalidos'
+        '401':
+          $ref: '#/components/responses/NoAutenticado'
+        '403':
+          $ref: '#/components/responses/CuentaDesactivada'
+        '404':
+          $ref: '#/components/responses/NoEncontrado'
+        '422':
+          $ref: '#/components/responses/FueraDeCobertura'
+    delete:
+      tags: [Recolección]
+      summary: Borrar una dirección
+      description: V2-M17.01 · Solo una propia y sin traslados.
+      parameters:
+        - $ref: '#/components/parameters/DireccionId'
+      responses:
+        '204':
+          description: Dirección borrada
+        '401':
+          $ref: '#/components/responses/NoAutenticado'
+        '403':
+          $ref: '#/components/responses/CuentaDesactivada'
+        '404':
+          $ref: '#/components/responses/NoEncontrado'
+        '409':
+          description: La dirección ya tiene traslados (`codigo` DIRECCION_EN_USO)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Problema'
+
+  /recoleccion/cotizacion:
+    get:
+      tags: [Recolección]
+      summary: Costo y franja de la recolección
+      description: |
+        V2-M17.02 · Para una dirección propia y un día en que el taller abre (hoy o después,
+        dentro del plazo de anticipación). El costo por traslado es la tarifa base más la tarifa
+        por kilómetro en línea recta al centro de la cobertura; el total son los dos traslados
+        (recoger y entregar).
+      parameters:
+        - name: direccionId
+          in: query
+          required: true
+          schema:
+            type: integer
+            format: int64
+        - name: fecha
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date
+      responses:
+        '200':
+          description: Cotización
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CotizacionRecoleccion'
+        '400':
+          $ref: '#/components/responses/DatosInvalidos'
+        '401':
+          $ref: '#/components/responses/NoAutenticado'
+        '403':
+          $ref: '#/components/responses/CuentaDesactivada'
+        '404':
+          $ref: '#/components/responses/NoEncontrado'
+        '422':
+          $ref: '#/components/responses/FueraDeCobertura'
+
   /catalogo:
     get:
       tags: [Catálogo]
@@ -894,6 +1032,13 @@ components:
       bearerFormat: JWT
 
   parameters:
+    DireccionId:
+      name: direccionId
+      in: path
+      required: true
+      schema:
+        type: integer
+        format: int64
     ModeloId:
       name: modeloId
       in: path
@@ -958,6 +1103,12 @@ components:
             $ref: '#/components/schemas/Problema'
     NoEncontrado:
       description: No existe o no pertenece al cliente
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Problema'
+    FueraDeCobertura:
+      description: La dirección queda fuera de la zona de cobertura (`codigo` FUERA_DE_COBERTURA)
       content:
         application/json:
           schema:
@@ -1640,6 +1791,119 @@ components:
           type: string
           format: date-time
           description: En UTC
+
+    NuevaDireccion:
+      type: object
+      required: [alias, calle, colonia, cp, ciudad, lat, lng]
+      properties:
+        alias:
+          type: string
+          maxLength: 40
+          example: Casa
+        calle:
+          type: string
+          maxLength: 120
+        colonia:
+          type: string
+          maxLength: 80
+        cp:
+          type: string
+          pattern: '^[0-9]{5}$'
+        ciudad:
+          type: string
+          maxLength: 80
+        lat:
+          type: number
+          minimum: -90
+          maximum: 90
+        lng:
+          type: number
+          minimum: -180
+          maximum: 180
+
+    Direccion:
+      allOf:
+        - type: object
+          required: [id]
+          properties:
+            id:
+              type: integer
+              format: int64
+        - $ref: '#/components/schemas/NuevaDireccion'
+
+    FranjaRecoleccion:
+      type: object
+      required: [inicio, fin]
+      properties:
+        inicio:
+          type: string
+          example: '07:00'
+        fin:
+          type: string
+          example: '09:00'
+
+    CotizacionRecoleccion:
+      type: object
+      required: [direccionId, fecha, costoPorTraslado, costoTotal, recoleccion, entrega]
+      properties:
+        direccionId:
+          type: integer
+          format: int64
+        fecha:
+          type: string
+          format: date
+        costoPorTraslado:
+          type: number
+          description: Pesos, a 2 decimales
+        costoTotal:
+          type: number
+          description: Los dos traslados, recoger y entregar
+        recoleccion:
+          $ref: '#/components/schemas/FranjaRecoleccion'
+        entrega:
+          $ref: '#/components/schemas/FranjaRecoleccion'
+
+    EstadoTraslado:
+      type: string
+      description: Nace `programado`; el resto lo agrega V2-M17.03.
+      enum: [programado, en_camino, recogido, en_taller, de_regreso, entregado, cancelado]
+
+    Traslado:
+      type: object
+      required: [id, tipo, estado, costo, fecha, ventanaInicio, ventanaFin]
+      properties:
+        id:
+          type: integer
+          format: int64
+        tipo:
+          type: string
+          enum: [recoger, entregar]
+        estado:
+          $ref: '#/components/schemas/EstadoTraslado'
+        costo:
+          type: number
+        fecha:
+          type: string
+          format: date
+        ventanaInicio:
+          type: string
+        ventanaFin:
+          type: string
+
+    RecoleccionCita:
+      type: object
+      required: [direccionId, costoTotal, traslados]
+      properties:
+        direccionId:
+          type: integer
+          format: int64
+        costoTotal:
+          type: number
+        traslados:
+          type: array
+          description: El de recoger y el de entregar
+          items:
+            $ref: '#/components/schemas/Traslado'
 
     Problema:
       type: object
