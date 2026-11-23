@@ -1,5 +1,6 @@
-# API de Agencia360 para desarrollo local (perfil dev). Solo para correr en la
-# laptop detras de Nginx; no es una imagen de produccion.
+# API de Agencia360. La misma imagen sirve en local (docker-compose, perfil dev)
+# y en Azure Container Apps, donde la publica el workflow despliegue.yml y la
+# Container App fija SPRING_PROFILES_ACTIVE=prod con sus variables y secretos.
 FROM eclipse-temurin:25-jdk AS construccion
 WORKDIR /fuente
 COPY .mvn .mvn
