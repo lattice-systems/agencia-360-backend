@@ -1,5 +1,11 @@
 package dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.application;
 
+import com.google.zxing.BarcodeFormat;
+import com.google.zxing.EncodeHintType;
+import com.google.zxing.WriterException;
+import com.google.zxing.common.BitMatrix;
+import com.google.zxing.qrcode.QRCodeWriter;
+import com.google.zxing.qrcode.decoder.ErrorCorrectionLevel;
 import com.lowagie.text.Chunk;
 import com.lowagie.text.Document;
 import com.lowagie.text.DocumentException;
@@ -18,10 +24,12 @@ import dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.domain.Est
 import dev.latticesystems.erp_agente360.backend_agencia360.clientes.VehiculosDeClientes.VehiculoDeCliente;
 import dev.latticesystems.erp_agente360.backend_agencia360.shared.pdf.FotosDeAutos;
 import java.awt.Color;
+import java.awt.image.BufferedImage;
 import java.io.ByteArrayOutputStream;
 import java.time.format.DateTimeFormatter;
 import java.time.format.TextStyle;
 import java.util.Locale;
+import java.util.Map;
 import org.springframework.stereotype.Component;
 
 /**
@@ -44,7 +52,12 @@ public class TicketCitaPdf {
 		return FontFactory.getFont(familia, t, Font.NORMAL, c);
 	}
 
-	public byte[] armar(Cita cita, VehiculoDeCliente v) {
+	/**
+	 * @param contenidoQr
+	 *            texto firmado del QR de recepción (V2-M02.11); sin él no se dibuja
+	 *            el QR
+	 */
+	public byte[] armar(Cita cita, VehiculoDeCliente v, String contenidoQr) {
 		ByteArrayOutputStream salida = new ByteArrayOutputStream();
 		Document doc = new Document(PageSize.A4, 40, 40, 36, 36);
 		try {
@@ -63,7 +76,7 @@ public class TicketCitaPdf {
 			doc.add(espacio(14));
 			doc.add(recomendaciones());
 			doc.add(espacio(18));
-			doc.add(pie(cita));
+			doc.add(pie(cita, contenidoQr));
 		} catch (DocumentException e) {
 			throw new IllegalStateException("No se pudo armar el comprobante de la cita " + cita.getId(), e);
 		} finally {
@@ -201,7 +214,26 @@ public class TicketCitaPdf {
 		return t;
 	}
 
-	private static PdfPTable pie(Cita cita) {
+	private static Image qr(String contenido) {
+		try {
+			BitMatrix matriz = new QRCodeWriter().encode(contenido, BarcodeFormat.QR_CODE, 0, 0,
+					Map.of(EncodeHintType.ERROR_CORRECTION, ErrorCorrectionLevel.M, EncodeHintType.MARGIN, 1));
+			BufferedImage imagen = new BufferedImage(matriz.getWidth(), matriz.getHeight(), BufferedImage.TYPE_INT_RGB);
+			for (int x = 0; x < matriz.getWidth(); x++) {
+				for (int y = 0; y < matriz.getHeight(); y++) {
+					imagen.setRGB(x, y, matriz.get(x, y) ? Color.BLACK.getRGB() : Color.WHITE.getRGB());
+				}
+			}
+			Image img = Image.getInstance(imagen, null);
+			img.scaleAbsolute(matriz.getWidth() * 4f, matriz.getHeight() * 4f);
+			img.setAlignment(Element.ALIGN_RIGHT);
+			return img;
+		} catch (WriterException | java.io.IOException | com.lowagie.text.BadElementException e) {
+			throw new IllegalStateException("No se pudo dibujar el QR de la cita", e);
+		}
+	}
+
+	private static PdfPTable pie(Cita cita, String contenidoQr) {
 		PdfPTable t = new PdfPTable(new float[]{3, 2});
 		t.setWidthPercentage(100);
 		PdfPCell a = base(Color.WHITE, Rectangle.TOP, FONDO, 1, 8);
@@ -215,6 +247,12 @@ public class TicketCitaPdf {
 		p.setAlignment(Element.ALIGN_RIGHT);
 		p.add(new Chunk(String.format("CITA-%06d", cita.getId()), f(FontFactory.COURIER_BOLD, 14, AZUL)));
 		b.addElement(p);
+		if (contenidoQr != null) {
+			b.addElement(qr(contenidoQr));
+			Paragraph leyenda = new Paragraph("Muestra este código en recepción", f(FontFactory.HELVETICA, 8, GRIS));
+			leyenda.setAlignment(Element.ALIGN_RIGHT);
+			b.addElement(leyenda);
+		}
 		t.addCell(b);
 		return t;
 	}
