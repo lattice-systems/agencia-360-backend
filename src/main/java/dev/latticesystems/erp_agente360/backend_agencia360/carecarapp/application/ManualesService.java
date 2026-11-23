@@ -54,7 +54,7 @@ public class ManualesService {
 			throw new IllegalArgumentException("El manual debe ser un PDF de hasta 20 MB");
 		}
 		Manual manual = manualRepository.buscar(datos.getMarca(), datos.getModelo(), datos.getAnio()).orElse(datos);
-		String anterior = manual.getArchivo();
+		String anterior = manual.getArchivoPdf();
 		String clave = almacen.guardar(contenido);
 		borrarSiSeRevierte(clave);
 		manual.ponerArchivo(clave, contenido.length, actor.id());
@@ -78,7 +78,7 @@ public class ManualesService {
 			throw noExiste;
 		}
 		Manual manual = manualRepository.findById(manualId).orElseThrow(() -> noExiste);
-		byte[] contenido = almacen.leer(manual.getArchivo()).orElseThrow(() -> noExiste);
+		byte[] contenido = almacen.leer(manual.getArchivoPdf()).orElseThrow(() -> noExiste);
 		return new Archivo(manual.titulo() + ".pdf", contenido);
 	}
 

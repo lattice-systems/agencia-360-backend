@@ -22,6 +22,8 @@ import dev.latticesystems.erp_agente360.backend_agencia360.clientes.application.
 import dev.latticesystems.erp_agente360.backend_agencia360.shared.AbstractIntegrationTest;
 import dev.latticesystems.erp_agente360.backend_agencia360.shared.security.JwtService;
 import dev.latticesystems.erp_agente360.backend_agencia360.shared.security.Role;
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.PersistenceContext;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
@@ -30,6 +32,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
@@ -67,6 +70,12 @@ class VehiculosAppIntegrationTest extends AbstractIntegrationTest {
 
 	@Autowired
 	private FichaTecnicaModeloRepository fichaTecnicaModeloRepository;
+
+	@Autowired
+	private JdbcTemplate jdbcTemplate;
+
+	@PersistenceContext
+	private EntityManager entityManager;
 
 	@MockitoBean
 	private EnvioCorreos envioCorreos;
@@ -153,6 +162,19 @@ class VehiculosAppIntegrationTest extends AbstractIntegrationTest {
 		subirManual("NISSAN", "march", 2026, corregido).andExpect(status().isOk())
 				.andExpect(jsonPath("$.id").value(primero))
 				.andExpect(jsonPath("$.tamanoBytes").value(corregido.length));
+	}
+
+	@Test
+	void elManualGuardaLaClaveDeSuPdfEnArchivoPdf() throws Exception {
+		Integer manualId = JsonPath
+				.read(subirManual("Nissan", "March", 2026, PDF).andReturn().getResponse().getContentAsString(), "$.id");
+		entityManager.flush();
+
+		String clave = jdbcTemplate.queryForObject("select archivo_pdf from manual where id = ?", String.class,
+				manualId);
+		assertThat(clave).isNotBlank();
+		assertThat(jdbcTemplate.queryForObject("select count(*) from archivo_manual where clave = ?", Integer.class,
+				clave)).isEqualTo(1);
 	}
 
 	@Test
