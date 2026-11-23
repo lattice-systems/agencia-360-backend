@@ -17,6 +17,7 @@ public final class CodigosError {
 	public static final String CITA_CANCELADA = "CITA_CANCELADA";
 	public static final String CITA_DUPLICADA = "CITA_DUPLICADA";
 	public static final String CITA_NO_REPROGRAMABLE = "CITA_NO_REPROGRAMABLE";
+	public static final String WALLET_NO_CONFIGURADO = "WALLET_NO_CONFIGURADO";
 
 	private CodigosError() {
 	}
