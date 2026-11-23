@@ -124,8 +124,8 @@ public class AgendaAppController {
 			+ "(application/vnd.apple.pkpass); plataforma=google responde {url} con el enlace de Google Wallet. "
 			+ "El QR es el del comprobante. Responde 404 si la cita no existe o es de otro cliente, 409 "
 			+ "CITA_CANCELADA si esta cancelada y 503 WALLET_NO_CONFIGURADO si faltan las credenciales.")
-	public org.springframework.http.ResponseEntity<?> pase(@PathVariable Long citaId,
-			@RequestParam String plataforma, @AuthenticationPrincipal UsuarioAutenticado cliente) {
+	public org.springframework.http.ResponseEntity<?> pase(@PathVariable Long citaId, @RequestParam String plataforma,
+			@AuthenticationPrincipal UsuarioAutenticado cliente) {
 		PaseWalletApp pase = paseWalletService.pase(cliente.id(), citaId, PlataformaWallet.de(plataforma));
 		if (pase.pkpass() != null) {
 			return org.springframework.http.ResponseEntity.ok()
