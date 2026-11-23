@@ -15,7 +15,7 @@ Antes que cualquier módulo nuevo: `V2-T05.03`–`V2-T05.07` dejan las tablas co
 | `cuenta_app.usuario` | No existe (se usa `cliente.correo`) | V2-T05.03 |
 | `token_recuperacion` | `codigo_recuperacion` (código de 6 dígitos) | V2-T05.04 |
 | `manual.archivo_pdf` | `manual.archivo` | V2-T05.05 |
-| `orden_servicio`, `orden_refaccion` | `servicio`, `renglon_servicio` | V2-T05.06 |
+| `orden_servicio`, `orden_refaccion` | Tablas `orden_servicio`, `orden_refaccion` y `orden_mano_de_obra` | V2-T05.06 |
 | `franja_horario` | Tabla `franja_horario`; `cita.franja_id` con FK | V2-T05.07 |
 
 ## Historias por módulo
@@ -516,6 +516,28 @@ Detalle: [`carecar-mobile/plan/modulos/T05-contrato-api-v2.md`](https://github.c
 **Copia en la app.** `carecar-mobile/api/agencia360-api-app-v2.yaml` se agrega en un PR del repo de la app. La prueba de contrato de la app sigue leyendo el v1 hasta que V2-T03.06 la cambie al v2.
 
 **Sin código.** No hay migración, entidades, endpoints ni eventos nuevos.
+
+#### Diseño de V2-T05.06: `orden_servicio` y `orden_refaccion`
+
+**Tablas.** Lo que hoy es un servicio del expediente pasa a ser una orden de servicio, con los campos del modelo de datos (TEC-1) y los de la historia:
+
+- `orden_servicio`: la tabla `servicio` renombrada, con sus mismos ids y columnas (`vehiculo_cliente_id`, `fecha`, `kilometraje`, `atendido_por`, `subtotal`, `iva`, `total`) y cuatro nuevas: `mano_de_obra`, `refacciones`, `estatus` y `fecha_cierre`. `check`: `total = mano_de_obra + refacciones` y `total = subtotal + iva`. `estatus` es uno de `RECIBIDO`, `EN_PROCESO`, `TERMINADO` o `ENTREGADO` (los mismos de PO-5 que ya devuelve la app); `fecha_cierre` existe solo cuando la orden está `TERMINADO` o `ENTREGADO`.
+- `orden_refaccion`: `id`, `orden_servicio_id`, `refaccion_id` (opcional, con FK a `refaccion`), `concepto`, `cantidad`, `precio`, `importe` (`importe = cantidad * precio`). `refaccion_id` queda vacío mientras la orden no descuente inventario; se llena cuando el taller tome las refacciones del almacén (ERP-3.1, M04).
+- `orden_mano_de_obra` (agregada): `id`, `orden_servicio_id`, `concepto`, `cantidad`, `precio`, `importe`. Guarda el detalle de la mano de obra para que el ticket siga mostrando cada concepto; `orden_servicio.mano_de_obra` es su suma.
+
+Los precios siguen con IVA incluido: `mano_de_obra` y `refacciones` suman los importes y de su suma se desglosan `subtotal` e `iva` (16 %), como antes.
+
+**Migración.** Una nueva (número al integrar) que renombra `servicio` (con su llave, índices, restricciones y secuencia), crea `orden_refaccion` y `orden_mano_de_obra`, reparte los renglones de `renglon_servicio` según su `tipo`, calcula `mano_de_obra` y `refacciones` de cada orden, deja las existentes en `TERMINADO` con `fecha_cierre = created_at` y borra `renglon_servicio`. Ningún dinero cambia: cada `total` existente es igual a la suma de sus renglones.
+
+**Código.** Módulo `servicio`: `OrdenServicio` reemplaza a `Servicio`; `OrdenManoDeObra` y `OrdenRefaccion` (con la base común `RenglonOrden`) reemplazan a `RenglonServicio`; `OrdenServicioRepository` a `ServicioRepository`. `EstatusOrden` vive en la raíz del módulo porque `HistorialDeServicios.ServicioDelVehiculo` lo expone; la app lo traduce a su `EstatusServicio`. Registrar un servicio en el expediente crea la orden `TERMINADO` con `fecha_cierre` en ese momento.
+
+**Endpoints.** Sin rutas nuevas ni cambios de forma. El ERP (`/api/v1/expedientes/...`) sigue recibiendo y devolviendo `renglones` con `tipo`; en el detalle salen primero los de mano de obra y después las refacciones. En la app, `Servicio.estatus` sale de `orden_servicio.estatus` (hoy siempre `TERMINADO`); el contrato v2 sube a 2.2.0 solo por esa descripción.
+
+**Errores.** Los mismos de antes (400 por datos no válidos, 404 si el vehículo o la orden no existen).
+
+**Eventos.** Ninguno.
+
+**Pruebas.** `OrdenServicioTest` (dominio: total = mano de obra + refacciones, orden de los renglones, estatus y cierre), `ExpedienteServiceTest` (Mockito) y `ExpedienteIntegrationTest`, que revisa en las tablas reales el desglose, el estatus y los renglones de cada tabla.
 
 #### Diseño de V2-T05.07: `franja_horario`
 
