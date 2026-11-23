@@ -33,6 +33,10 @@ Perfil `prod`. Los valores sensibles son **secretos de la Container App** (nunca
 | `SPRING_MAIL_PASSWORD` | secreto `smtp-password` |
 | `SPRING_MAIL_PROPERTIES_MAIL_SMTP_AUTH`, `..._STARTTLS_ENABLE` | `true` |
 | `CORREO_REMITENTE` | `CareCar <cuenta de Gmail>` (Gmail exige que coincida con la cuenta) |
+| `WALLET_APPLE_PASS_TYPE_ID`, `WALLET_APPLE_TEAM_ID` | ID del Pass Type ID y Team ID de la cuenta de desarrollador de Apple (opcionales) |
+| `WALLET_APPLE_CERT_P12_BASE64`, `WALLET_APPLE_CERT_PASSWORD`, `WALLET_APPLE_WWDR_PEM_BASE64` | secretos `wallet-apple-cert-p12`, `wallet-apple-cert-password`, `wallet-apple-wwdr-pem` (base64 de los archivos) |
+| `WALLET_GOOGLE_ISSUER_ID` | ID de emisor de Google Wallet (opcional) |
+| `WALLET_GOOGLE_SERVICE_ACCOUNT_JSON_BASE64` | secreto `wallet-google-service-account` (base64 del JSON de la cuenta de servicio) |
 | `MANUALES_DIRECTORIO` | `/home/api/manuales` |
 | `JAVA_TOOL_OPTIONS` | `-XX:MaxRAMPercentage=75` |
 
