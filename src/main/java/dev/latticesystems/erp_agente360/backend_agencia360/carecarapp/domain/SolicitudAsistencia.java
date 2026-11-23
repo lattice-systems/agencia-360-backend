@@ -14,8 +14,8 @@ import java.util.Objects;
 
 /**
  * Solicitud de asistencia (SOS) que el cliente pide desde la app (V2-M11.01).
- * Nace {@code RECIBIDA}. La ubicación es opcional: latitud y longitud van juntas
- * o ninguna.
+ * Nace {@code RECIBIDA}. La ubicación es opcional: latitud y longitud van
+ * juntas o ninguna.
  *
  * <p>
  * {@code clienteId} y {@code vehiculoClienteId} solo se mapean como ids para no
