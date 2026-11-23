@@ -1,9 +1,9 @@
 package dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.application;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.jsonwebtoken.Jwts;
+import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.security.GeneralSecurityException;
 import java.security.KeyFactory;
@@ -75,7 +75,7 @@ public class PaseGoogleGenerador {
 					.claim("typ", "savetowallet").claim("origins", List.of()).claim("payload", carga)
 					.signWith(llave, Jwts.SIG.RS256).compact();
 			return URL_GUARDAR + jwt;
-		} catch (GeneralSecurityException | JsonProcessingException | IllegalArgumentException ex) {
+		} catch (GeneralSecurityException | IOException | IllegalArgumentException ex) {
 			throw new IllegalStateException("No se pudo armar el pase de Google Wallet", ex);
 		}
 	}
