@@ -53,6 +53,42 @@ Detalle: [`carecar-mobile/plan/modulos/M03-catalogo-y-calculadora.md`](https://g
 | V2-M03.06 | Como agencia quiero que la estimación salga de parámetros que puedo ajustar | La fórmula vive en el backend (`parametro_toma_cuenta`), no en la app · pruebas de la fórmula en backend | Cristian |
 | V2-M03.07 | Como cliente quiero guardar y volver a ver mis estimaciones | Lista con fecha y modelo · se puede pedir valuación formal (M26) | Cristian |
 
+#### Diseño de V2-M03.02: detalle de un modelo
+
+**Endpoint.** `GET /api/v1/app/catalogo/{modeloId}`, rol `CLIENTE_CARECAR`. Responde un `DetalleModeloCatalogo` (contrato 1.3.0, `docs/api/agencia360-api-app-v1.yaml`). Cada fila de `modelo_catalogo` es una versión de un modelo (marca, modelo, año y versión son únicos), así que el detalle se pide por el id de una fila y las versiones hermanas son las filas activas con la misma marca, modelo y año.
+
+| Código | Cuándo |
+| --- | --- |
+| 200 | El modelo existe y está activo. |
+| 401 | Sin token o vencido. |
+| 403 | Cuenta desactivada (`CUENTA_DESACTIVADA`). |
+| 404 | El id no existe o el modelo está retirado. Un modelo retirado se trata igual que uno inexistente para no filtrar el catálogo viejo. |
+
+**Respuesta.** Los campos de `ModeloCatalogo` más tres listas:
+
+- `imagenes`: la galería, ordenada por `orden`, con `url` https, `color` y `descripcion` opcionales. Puede venir vacía, y entonces la app muestra `imagenUrl` como única foto.
+- `versiones`: las filas activas de la misma marca, modelo y año, de la más barata a la más cara (precio nulo al final). Siempre incluye la versión pedida. `nombre` es la `version` de la fila o el `modelo` si no tiene.
+- `especificaciones`: la ficha resumida, de 4 a 8 pares `etiqueta` y `valor` ordenados por `orden`. Puede venir vacía. No sustituye a `ficha_tecnica_modelo` de V2-M02.04, que es la ficha completa por modelo y año con secciones.
+
+**Tablas nuevas** (migración `V24__crear_galeria_y_especificaciones_del_catalogo.sql`, el siguiente número libre):
+
+| Tabla | Campos | Notas |
+| --- | --- | --- |
+| `modelo_catalogo_imagen` | id, modelo_catalogo_id (FK), url (https, 500), color (40, nulo), descripcion (120, nulo), orden (entero, no negativo), created_at, updated_at | Es la tabla `modelo_catalogo_imagen` de la ficha. Índice único en (modelo_catalogo_id, orden). |
+| `modelo_catalogo_especificacion` | id, modelo_catalogo_id (FK), etiqueta (60), valor (120), orden (entero, no negativo), created_at, updated_at | Índice único en (modelo_catalogo_id, orden). |
+
+Las dos se borran en cascada con su modelo, aunque un modelo se retira (`activo = false`) y no se borra.
+
+**Capas en `carecarapp`.** `domain`: entidades `ImagenModeloCatalogo` y `EspecificacionModeloCatalogo`, con la misma validación de URL https y largos que `ModeloCatalogo`. `infrastructure`: sus repositorios y una consulta `findByActivoTrueAndMarcaIgnoreCaseAndModeloIgnoreCaseAndAnio` para las versiones. `application`: `CatalogoService.detalle(id)` y el record `DetalleModeloCatalogoApp`, que lanza `RecursoNoEncontradoException` (404). `web`: `CatalogoController.detalle`.
+
+**Alta de galería y ficha.** Queda fuera de esta historia: el ERP o el CRM web están congelados. Mientras tanto se capturan por SQL o por una historia propia del ERP, y la app ya tolera las listas vacías.
+
+**Eventos.** No publica ni escucha ninguno.
+
+**Pruebas pedidas.** 200 con galería, versiones y ficha, 200 con listas vacías, 404 para id inexistente y para modelo retirado, versiones sin las retiradas y ordenadas por precio, 401 y 403.
+
+**Mientras no se implemente.** La app trabaja contra el contrato y `mock_api` de `carecar-mobile` (dependencia simulable).
+
 ### M04 · Taller en vivo: estado de la orden y aprobación de trabajos — H3 — módulo `servicio`
 
 Detalle: [`carecar-mobile/plan/modulos/M04-taller-en-vivo.md`](https://github.com/lattice-systems/carecar-mobile/blob/main/plan/modulos/M04-taller-en-vivo.md)
