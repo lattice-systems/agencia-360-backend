@@ -115,6 +115,9 @@ public class PaseAppleGenerador {
 		return salida.toByteArray();
 	}
 
+	// Apple Wallet exige SHA-1 en las huellas de manifest.json (formato PKPass). No
+	// protege
+	// la integridad por si solo: la firma PKCS#7 de ese manifiesto va con SHA-256.
 	private byte[] manifiesto(Map<String, byte[]> archivos) throws GeneralSecurityException, JsonProcessingException {
 		Map<String, String> huellas = new LinkedHashMap<>();
 		for (Map.Entry<String, byte[]> archivo : archivos.entrySet()) {
