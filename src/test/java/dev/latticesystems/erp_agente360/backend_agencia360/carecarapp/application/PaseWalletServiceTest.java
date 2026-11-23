@@ -56,9 +56,9 @@ class PaseWalletServiceTest {
 	void sinCredencialesResponde503ConWalletNoConfiguradoParaCadaPlataforma() {
 		PaseWalletService servicio = servicio(CredencialesWalletDePrueba.sinCredenciales());
 		for (PlataformaWallet plataforma : PlataformaWallet.values()) {
-			assertThatThrownBy(() -> servicio.pase(CLIENTE, CITA, plataforma))
-					.isInstanceOfSatisfying(ServicioNoDisponibleException.class,
-							ex -> assertThat(ex.getCodigo()).isEqualTo("WALLET_NO_CONFIGURADO"));
+			assertThatThrownBy(() -> servicio.pase(CLIENTE, CITA, plataforma)).isInstanceOfSatisfying(
+					ServicioNoDisponibleException.class,
+					ex -> assertThat(ex.getCodigo()).isEqualTo("WALLET_NO_CONFIGURADO"));
 		}
 	}
 
@@ -66,9 +66,8 @@ class PaseWalletServiceTest {
 	void unaCitaCanceladaResponde409AunqueFalteLaConfiguracion() {
 		cita.cancelar(LocalDateTime.now(), Duration.ofHours(1), Instant.now());
 		PaseWalletService servicio = servicio(CredencialesWalletDePrueba.sinCredenciales());
-		assertThatThrownBy(() -> servicio.pase(CLIENTE, CITA, PlataformaWallet.GOOGLE))
-				.isInstanceOfSatisfying(ConflictoException.class,
-						ex -> assertThat(ex.getCodigo()).isEqualTo("CITA_CANCELADA"));
+		assertThatThrownBy(() -> servicio.pase(CLIENTE, CITA, PlataformaWallet.GOOGLE)).isInstanceOfSatisfying(
+				ConflictoException.class, ex -> assertThat(ex.getCodigo()).isEqualTo("CITA_CANCELADA"));
 	}
 
 	@Test
