@@ -37,8 +37,8 @@ class PaseGoogleGeneradorTest {
 		Map<String, Object> objeto = ((List<Map<String, Object>>) carga.get("genericObjects")).getFirst();
 		assertThat(objeto.get("id")).isEqualTo(CredencialesWalletDePrueba.ISSUER_ID + ".carecar_cita_42");
 		assertThat(objeto.get("state")).isEqualTo("ACTIVE");
-		assertThat((Map<String, Object>) objeto.get("barcode")).containsEntry("type", "QR_CODE")
-				.containsEntry("value", CODIGO);
+		assertThat((Map<String, Object>) objeto.get("barcode")).containsEntry("type", "QR_CODE").containsEntry("value",
+				CODIGO);
 		assertThat(((Map<String, Object>) ((Map<String, Object>) objeto.get("validTimeInterval")).get("end"))
 				.get("date").toString()).startsWith("2026-12-03T09:30:00");
 	}
@@ -47,8 +47,10 @@ class PaseGoogleGeneradorTest {
 	void unJwtVerificadoConOtraLlaveSeRechaza() {
 		String url = new PaseGoogleGenerador(CredencialesWalletDePrueba.nuevas().configuracion()).generar(datos());
 		String jwt = url.substring("https://pay.google.com/gp/v/save/".length());
-		org.assertj.core.api.Assertions.assertThatThrownBy(() -> Jwts.parser()
-				.verifyWith(CredencialesWalletDePrueba.nuevas().llaveGooglePublica()).build().parseSignedClaims(jwt))
+		org.assertj.core.api.Assertions
+				.assertThatThrownBy(
+						() -> Jwts.parser().verifyWith(CredencialesWalletDePrueba.nuevas().llaveGooglePublica()).build()
+								.parseSignedClaims(jwt))
 				.isInstanceOf(io.jsonwebtoken.security.SignatureException.class);
 	}
 }
