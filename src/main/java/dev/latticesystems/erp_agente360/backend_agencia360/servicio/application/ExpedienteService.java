@@ -3,13 +3,13 @@ package dev.latticesystems.erp_agente360.backend_agencia360.servicio.application
 import dev.latticesystems.erp_agente360.backend_agencia360.acceso.DirectorioUsuarios;
 import dev.latticesystems.erp_agente360.backend_agencia360.clientes.VehiculosDeClientes;
 import dev.latticesystems.erp_agente360.backend_agencia360.clientes.VehiculosDeClientes.VehiculoDeCliente;
-import dev.latticesystems.erp_agente360.backend_agencia360.servicio.domain.Servicio;
-import dev.latticesystems.erp_agente360.backend_agencia360.servicio.infrastructure.ServicioRepository;
+import dev.latticesystems.erp_agente360.backend_agencia360.servicio.domain.OrdenServicio;
+import dev.latticesystems.erp_agente360.backend_agencia360.servicio.infrastructure.OrdenServicioRepository;
 import dev.latticesystems.erp_agente360.backend_agencia360.shared.exception.RecursoNoEncontradoException;
 import dev.latticesystems.erp_agente360.backend_agencia360.shared.security.UsuarioAutenticado;
 import java.time.Clock;
-import java.time.LocalDate;
 import java.time.ZoneId;
+import java.time.ZonedDateTime;
 import java.util.List;
 import java.util.Map;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -30,20 +30,20 @@ public class ExpedienteService {
 	private static final String SIN_NOMBRE = "Sin nombre";
 
 	private final VehiculosDeClientes vehiculos;
-	private final ServicioRepository servicioRepository;
+	private final OrdenServicioRepository ordenServicioRepository;
 	private final DirectorioUsuarios directorioUsuarios;
 	private final Clock reloj;
 
 	@Autowired
-	public ExpedienteService(VehiculosDeClientes vehiculos, ServicioRepository servicioRepository,
+	public ExpedienteService(VehiculosDeClientes vehiculos, OrdenServicioRepository ordenServicioRepository,
 			DirectorioUsuarios directorioUsuarios) {
-		this(vehiculos, servicioRepository, directorioUsuarios, Clock.system(ZONA_AGENCIA));
+		this(vehiculos, ordenServicioRepository, directorioUsuarios, Clock.system(ZONA_AGENCIA));
 	}
 
-	ExpedienteService(VehiculosDeClientes vehiculos, ServicioRepository servicioRepository,
+	ExpedienteService(VehiculosDeClientes vehiculos, OrdenServicioRepository ordenServicioRepository,
 			DirectorioUsuarios directorioUsuarios, Clock reloj) {
 		this.vehiculos = vehiculos;
-		this.servicioRepository = servicioRepository;
+		this.ordenServicioRepository = ordenServicioRepository;
 		this.directorioUsuarios = directorioUsuarios;
 		this.reloj = reloj;
 	}
@@ -60,9 +60,10 @@ public class ExpedienteService {
 	@Transactional(readOnly = true)
 	public Expediente expediente(Long vehiculoId) {
 		VehiculoDeCliente vehiculo = vehiculo(vehiculoId);
-		List<Servicio> servicios = servicioRepository.findByVehiculoClienteIdOrderByFechaDescIdDesc(vehiculoId);
+		List<OrdenServicio> servicios = ordenServicioRepository
+				.findByVehiculoClienteIdOrderByFechaDescIdDesc(vehiculoId);
 		Map<Long, String> nombres = directorioUsuarios
-				.nombresDe(servicios.stream().map(Servicio::getAtendidoPor).distinct().toList());
+				.nombresDe(servicios.stream().map(OrdenServicio::getAtendidoPor).distinct().toList());
 		return new Expediente(Expediente.Vehiculo.de(vehiculo), vehiculo.propietario(),
 				servicios.stream().map(servicio -> ServicioResumen.de(servicio, nombreDe(nombres, servicio))).toList());
 	}
@@ -90,8 +91,8 @@ public class ExpedienteService {
 	@Transactional
 	public ServicioDetalle registrar(Long vehiculoId, NuevoServicio nuevo, UsuarioAutenticado actor) {
 		vehiculo(vehiculoId);
-		Servicio servicio = servicioRepository.save(Servicio.registrar(vehiculoId, nuevo.fecha(), nuevo.kilometraje(),
-				actor.id(), nuevo.renglones(), LocalDate.now(reloj)));
+		OrdenServicio servicio = ordenServicioRepository.save(OrdenServicio.registrar(vehiculoId, nuevo.fecha(),
+				nuevo.kilometraje(), actor.id(), nuevo.renglones(), ZonedDateTime.now(reloj)));
 		return ServicioDetalle.de(servicio, nombreDe(directorioUsuarios.nombresDe(List.of(actor.id())), servicio));
 	}
 
@@ -101,7 +102,7 @@ public class ExpedienteService {
 	 */
 	@Transactional(readOnly = true)
 	public ServicioDetalle detalle(Long vehiculoId, Long servicioId) {
-		Servicio servicio = servicioRepository.obtenerConRenglones(vehiculoId, servicioId)
+		OrdenServicio servicio = ordenServicioRepository.findByIdAndVehiculoClienteId(servicioId, vehiculoId)
 				.orElseThrow(() -> new RecursoNoEncontradoException(
 						"El vehículo " + vehiculoId + " no tiene el servicio " + servicioId));
 		return ServicioDetalle.de(servicio,
@@ -113,7 +114,7 @@ public class ExpedienteService {
 				.orElseThrow(() -> new RecursoNoEncontradoException("No existe el vehículo " + vehiculoId));
 	}
 
-	private static String nombreDe(Map<Long, String> nombres, Servicio servicio) {
+	private static String nombreDe(Map<Long, String> nombres, OrdenServicio servicio) {
 		return nombres.getOrDefault(servicio.getAtendidoPor(), SIN_NOMBRE);
 	}
 }

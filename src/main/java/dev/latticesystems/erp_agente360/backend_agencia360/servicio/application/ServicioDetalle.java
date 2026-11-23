@@ -1,7 +1,7 @@
 package dev.latticesystems.erp_agente360.backend_agencia360.servicio.application;
 
-import dev.latticesystems.erp_agente360.backend_agencia360.servicio.domain.RenglonServicio;
-import dev.latticesystems.erp_agente360.backend_agencia360.servicio.domain.Servicio;
+import dev.latticesystems.erp_agente360.backend_agencia360.servicio.domain.OrdenServicio;
+import dev.latticesystems.erp_agente360.backend_agencia360.servicio.domain.RenglonOrden;
 import dev.latticesystems.erp_agente360.backend_agencia360.servicio.domain.TipoRenglon;
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -22,13 +22,13 @@ public record ServicioDetalle(Long id, Long vehiculoId, LocalDate fecha, int kil
 	public record Renglon(TipoRenglon tipo, String concepto, int cantidad, BigDecimal precioUnitario,
 			BigDecimal importe) {
 
-		static Renglon de(RenglonServicio renglon) {
-			return new Renglon(renglon.getTipo(), renglon.getConcepto(), renglon.getCantidad(),
-					renglon.getPrecioUnitario(), renglon.getImporte());
+		static Renglon de(RenglonOrden renglon) {
+			return new Renglon(renglon.getTipo(), renglon.getConcepto(), renglon.getCantidad(), renglon.getPrecio(),
+					renglon.getImporte());
 		}
 	}
 
-	static ServicioDetalle de(Servicio servicio, String atendidoPor) {
+	static ServicioDetalle de(OrdenServicio servicio, String atendidoPor) {
 		return new ServicioDetalle(servicio.getId(), servicio.getVehiculoClienteId(), servicio.getFecha(),
 				servicio.getKilometraje(), atendidoPor, servicio.getRenglones().stream().map(Renglon::de).toList(),
 				servicio.getSubtotal(), servicio.getIva(), servicio.getTotal());

@@ -11,10 +11,10 @@ import dev.latticesystems.erp_agente360.backend_agencia360.acceso.DirectorioUsua
 import dev.latticesystems.erp_agente360.backend_agencia360.clientes.VehiculosDeClientes;
 import dev.latticesystems.erp_agente360.backend_agencia360.clientes.VehiculosDeClientes.Propietario;
 import dev.latticesystems.erp_agente360.backend_agencia360.clientes.VehiculosDeClientes.VehiculoDeCliente;
+import dev.latticesystems.erp_agente360.backend_agencia360.servicio.domain.OrdenServicio;
 import dev.latticesystems.erp_agente360.backend_agencia360.servicio.domain.RenglonNuevo;
-import dev.latticesystems.erp_agente360.backend_agencia360.servicio.domain.Servicio;
 import dev.latticesystems.erp_agente360.backend_agencia360.servicio.domain.TipoRenglon;
-import dev.latticesystems.erp_agente360.backend_agencia360.servicio.infrastructure.ServicioRepository;
+import dev.latticesystems.erp_agente360.backend_agencia360.servicio.infrastructure.OrdenServicioRepository;
 import dev.latticesystems.erp_agente360.backend_agencia360.shared.exception.RecursoNoEncontradoException;
 import dev.latticesystems.erp_agente360.backend_agencia360.shared.security.Role;
 import dev.latticesystems.erp_agente360.backend_agencia360.shared.security.UsuarioAutenticado;
@@ -49,7 +49,7 @@ class ExpedienteServiceTest {
 	private VehiculosDeClientes vehiculos;
 
 	@Mock
-	private ServicioRepository servicioRepository;
+	private OrdenServicioRepository ordenServicioRepository;
 
 	@Mock
 	private DirectorioUsuarios directorioUsuarios;
@@ -58,20 +58,20 @@ class ExpedienteServiceTest {
 
 	@BeforeEach
 	void setUp() {
-		service = new ExpedienteService(vehiculos, servicioRepository, directorioUsuarios,
+		service = new ExpedienteService(vehiculos, ordenServicioRepository, directorioUsuarios,
 				Clock.fixed(AHORA, ExpedienteService.ZONA_AGENCIA));
 	}
 
-	private static Servicio servicio(LocalDate fecha, String precio) {
-		return Servicio.registrar(3L, fecha, 15_000, 7L,
+	private static OrdenServicio servicio(LocalDate fecha, String precio) {
+		return OrdenServicio.registrar(3L, fecha, 15_000, 7L,
 				List.of(new RenglonNuevo(TipoRenglon.MANO_DE_OBRA, "Afinación", 1, new BigDecimal(precio))),
-				HOY_EN_LA_AGENCIA);
+				AHORA.atZone(ExpedienteService.ZONA_AGENCIA));
 	}
 
 	@Test
 	void armaElExpedienteConElVehiculoSuDuenoYSusServicios() {
 		when(vehiculos.buscarPorId(3L)).thenReturn(Optional.of(SENTRA));
-		when(servicioRepository.findByVehiculoClienteIdOrderByFechaDescIdDesc(3L)).thenReturn(
+		when(ordenServicioRepository.findByVehiculoClienteIdOrderByFechaDescIdDesc(3L)).thenReturn(
 				List.of(servicio(LocalDate.of(2026, 10, 20), "1200"), servicio(LocalDate.of(2026, 5, 2), "800")));
 		when(directorioUsuarios.nombresDe(List.of(7L))).thenReturn(Map.of(7L, "Luis Técnico"));
 
@@ -96,7 +96,8 @@ class ExpedienteServiceTest {
 	@Test
 	void registraElServicioANombreDeQuienLoAtiendeConElDiaDeLaAgencia() {
 		when(vehiculos.buscarPorId(3L)).thenReturn(Optional.of(SENTRA));
-		when(servicioRepository.save(any(Servicio.class))).thenAnswer(invocacion -> invocacion.getArgument(0));
+		when(ordenServicioRepository.save(any(OrdenServicio.class)))
+				.thenAnswer(invocacion -> invocacion.getArgument(0));
 		when(directorioUsuarios.nombresDe(List.of(7L))).thenReturn(Map.of(7L, "Luis Técnico"));
 
 		NuevoServicio nuevo = new NuevoServicio(HOY_EN_LA_AGENCIA, 16_000,
@@ -118,7 +119,7 @@ class ExpedienteServiceTest {
 				new NuevoServicio(HOY_EN_LA_AGENCIA.plusDays(1), 16_000,
 						List.of(new RenglonNuevo(TipoRenglon.REFACCION, "Filtro", 1, BigDecimal.TEN))),
 				TECNICO)).isInstanceOf(IllegalArgumentException.class);
-		verify(servicioRepository, never()).save(any());
+		verify(ordenServicioRepository, never()).save(any());
 	}
 
 	@Test
@@ -129,12 +130,12 @@ class ExpedienteServiceTest {
 				new NuevoServicio(HOY_EN_LA_AGENCIA, 100,
 						List.of(new RenglonNuevo(TipoRenglon.REFACCION, "Filtro", 1, BigDecimal.TEN))),
 				TECNICO)).isInstanceOf(RecursoNoEncontradoException.class);
-		verify(servicioRepository, never()).save(any());
+		verify(ordenServicioRepository, never()).save(any());
 	}
 
 	@Test
 	void elDetalleDeUnServicioDeOtroVehiculoResponde404() {
-		when(servicioRepository.obtenerConRenglones(3L, 50L)).thenReturn(Optional.empty());
+		when(ordenServicioRepository.findByIdAndVehiculoClienteId(50L, 3L)).thenReturn(Optional.empty());
 
 		assertThatThrownBy(() -> service.detalle(3L, 50L)).isInstanceOf(RecursoNoEncontradoException.class)
 				.hasMessage("El vehículo 3 no tiene el servicio 50");

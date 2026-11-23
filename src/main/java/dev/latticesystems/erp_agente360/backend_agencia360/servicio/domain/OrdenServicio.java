@@ -1,9 +1,12 @@
 package dev.latticesystems.erp_agente360.backend_agencia360.servicio.domain;
 
+import dev.latticesystems.erp_agente360.backend_agencia360.servicio.EstatusOrden;
 import dev.latticesystems.erp_agente360.backend_agencia360.shared.domain.Auditable;
 import jakarta.persistence.CascadeType;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
@@ -11,28 +14,20 @@ import jakarta.persistence.OneToMany;
 import jakarta.persistence.OrderBy;
 import jakarta.persistence.Table;
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.time.LocalDate;
+import java.time.ZonedDateTime;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
+import java.util.stream.Stream;
 
-/**
- * Servicio que se le hizo al vehículo de un cliente (ERP-3.0): cuándo, con qué
- * kilometraje, quién lo atendió y sus renglones. El total es la suma de los
- * renglones y ya trae el IVA. Es dinero: no se edita ni se borra.
- *
- * <p>
- * {@code vehiculoClienteId} y {@code atendidoPor} solo se mapean como ids para
- * no cruzar módulos; las llaves foráneas sí viven en la base.
- */
 @Entity
-@Table(name = "servicio")
-public class Servicio extends Auditable {
+@Table(name = "orden_servicio")
+public class OrdenServicio extends Auditable {
 
 	static final int MAXIMO_RENGLONES = 100;
 	static final int KILOMETRAJE_MAXIMO = 2_000_000;
-	/** Lo más que cabe en la columna numeric(12, 2). */
 	static final BigDecimal TOTAL_MAXIMO = new BigDecimal("9999999999.99");
 
 	@Id
@@ -51,6 +46,12 @@ public class Servicio extends Auditable {
 	@Column(name = "atendido_por", nullable = false)
 	private Long atendidoPor;
 
+	@Column(name = "mano_de_obra", nullable = false, precision = 12, scale = 2)
+	private BigDecimal manoDeObra;
+
+	@Column(nullable = false, precision = 12, scale = 2)
+	private BigDecimal refacciones;
+
 	@Column(nullable = false, precision = 12, scale = 2)
 	private BigDecimal subtotal;
 
@@ -60,39 +61,40 @@ public class Servicio extends Auditable {
 	@Column(nullable = false, precision = 12, scale = 2)
 	private BigDecimal total;
 
-	@OneToMany(mappedBy = "servicio", cascade = CascadeType.PERSIST)
-	@OrderBy("id asc")
-	private List<RenglonServicio> renglones = new ArrayList<>();
+	@Enumerated(EnumType.STRING)
+	@Column(nullable = false, length = 15)
+	private EstatusOrden estatus;
 
-	protected Servicio() {
-		// Requerido por JPA
+	@Column(name = "fecha_cierre")
+	private Instant fechaCierre;
+
+	@OneToMany(mappedBy = "ordenServicio", cascade = CascadeType.PERSIST)
+	@OrderBy("id asc")
+	private List<OrdenManoDeObra> renglonesManoDeObra = new ArrayList<>();
+
+	@OneToMany(mappedBy = "ordenServicio", cascade = CascadeType.PERSIST)
+	@OrderBy("id asc")
+	private List<OrdenRefaccion> renglonesRefaccion = new ArrayList<>();
+
+	protected OrdenServicio() {
 	}
 
-	private Servicio(Long vehiculoClienteId, LocalDate fecha, int kilometraje, Long atendidoPor) {
+	private OrdenServicio(Long vehiculoClienteId, LocalDate fecha, int kilometraje, Long atendidoPor) {
 		this.vehiculoClienteId = vehiculoClienteId;
 		this.fecha = fecha;
 		this.kilometraje = kilometraje;
 		this.atendidoPor = atendidoPor;
 	}
 
-	/**
-	 * Registra un servicio con sus renglones y calcula sus montos.
-	 *
-	 * @param hoy
-	 *            día de la agencia; la fecha no puede ser posterior
-	 * @throws IllegalArgumentException
-	 *             si falta la fecha, es futura, el kilometraje no es válido, no
-	 *             trae renglones, un renglón no es válido o el total es demasiado
-	 *             grande (400)
-	 */
-	public static Servicio registrar(Long vehiculoClienteId, LocalDate fecha, int kilometraje, Long atendidoPor,
-			List<RenglonNuevo> renglones, LocalDate hoy) {
+	public static OrdenServicio registrar(Long vehiculoClienteId, LocalDate fecha, int kilometraje, Long atendidoPor,
+			List<RenglonNuevo> renglones, ZonedDateTime ahora) {
 		Objects.requireNonNull(vehiculoClienteId, "vehiculoClienteId");
 		Objects.requireNonNull(atendidoPor, "atendidoPor");
+		Objects.requireNonNull(ahora, "ahora");
 		if (fecha == null) {
 			throw new IllegalArgumentException("La fecha del servicio es obligatoria");
 		}
-		if (fecha.isAfter(hoy)) {
+		if (fecha.isAfter(ahora.toLocalDate())) {
 			throw new IllegalArgumentException("La fecha del servicio no puede ser posterior a hoy");
 		}
 		if (kilometraje < 0 || kilometraje > KILOMETRAJE_MAXIMO) {
@@ -104,18 +106,33 @@ public class Servicio extends Auditable {
 		if (renglones.size() > MAXIMO_RENGLONES) {
 			throw new IllegalArgumentException("El servicio admite hasta " + MAXIMO_RENGLONES + " renglones");
 		}
-		Servicio servicio = new Servicio(vehiculoClienteId, fecha, kilometraje, atendidoPor);
-		renglones.forEach(nuevo -> servicio.renglones.add(RenglonServicio.de(servicio, nuevo)));
-		BigDecimal suma = servicio.renglones.stream().map(RenglonServicio::getImporte).reduce(BigDecimal.ZERO,
-				BigDecimal::add);
-		if (suma.compareTo(TOTAL_MAXIMO) > 0) {
+		OrdenServicio orden = new OrdenServicio(vehiculoClienteId, fecha, kilometraje, atendidoPor);
+		renglones.forEach(nuevo -> orden.agregar(RenglonOrden.de(orden, nuevo)));
+		orden.manoDeObra = suma(orden.renglonesManoDeObra);
+		orden.refacciones = suma(orden.renglonesRefaccion);
+		BigDecimal sumaTotal = orden.manoDeObra.add(orden.refacciones);
+		if (sumaTotal.compareTo(TOTAL_MAXIMO) > 0) {
 			throw new IllegalArgumentException("El total del servicio no puede pasar de " + TOTAL_MAXIMO);
 		}
-		Montos montos = Montos.desglosar(suma);
-		servicio.subtotal = montos.subtotal();
-		servicio.iva = montos.iva();
-		servicio.total = montos.total();
-		return servicio;
+		Montos montos = Montos.desglosar(sumaTotal);
+		orden.subtotal = montos.subtotal();
+		orden.iva = montos.iva();
+		orden.total = montos.total();
+		orden.estatus = EstatusOrden.TERMINADO;
+		orden.fechaCierre = ahora.toInstant();
+		return orden;
+	}
+
+	private void agregar(RenglonOrden renglon) {
+		if (renglon instanceof OrdenManoDeObra manoDeObra) {
+			renglonesManoDeObra.add(manoDeObra);
+		} else {
+			renglonesRefaccion.add((OrdenRefaccion) renglon);
+		}
+	}
+
+	private static BigDecimal suma(List<? extends RenglonOrden> renglones) {
+		return renglones.stream().map(RenglonOrden::getImporte).reduce(BigDecimal.ZERO, BigDecimal::add).setScale(2);
 	}
 
 	public Long getId() {
@@ -138,6 +155,14 @@ public class Servicio extends Auditable {
 		return atendidoPor;
 	}
 
+	public BigDecimal getManoDeObra() {
+		return manoDeObra;
+	}
+
+	public BigDecimal getRefacciones() {
+		return refacciones;
+	}
+
 	public BigDecimal getSubtotal() {
 		return subtotal;
 	}
@@ -150,7 +175,15 @@ public class Servicio extends Auditable {
 		return total;
 	}
 
-	public List<RenglonServicio> getRenglones() {
-		return Collections.unmodifiableList(renglones);
+	public EstatusOrden getEstatus() {
+		return estatus;
+	}
+
+	public Instant getFechaCierre() {
+		return fechaCierre;
+	}
+
+	public List<RenglonOrden> getRenglones() {
+		return Stream.<RenglonOrden>concat(renglonesManoDeObra.stream(), renglonesRefaccion.stream()).toList();
 	}
 }

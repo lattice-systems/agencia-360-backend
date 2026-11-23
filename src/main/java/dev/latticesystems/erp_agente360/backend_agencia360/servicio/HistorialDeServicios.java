@@ -31,9 +31,11 @@ public interface HistorialDeServicios {
 	/**
 	 * Un servicio del vehículo.
 	 *
+	 * @param estatus
+	 *            estatus de la orden de servicio
 	 * @param total
 	 *            mano de obra más refacciones, con IVA incluido
 	 */
-	record ServicioDelVehiculo(Long id, LocalDate fecha, int kilometraje, BigDecimal total) {
+	record ServicioDelVehiculo(Long id, LocalDate fecha, int kilometraje, EstatusOrden estatus, BigDecimal total) {
 	}
 }
