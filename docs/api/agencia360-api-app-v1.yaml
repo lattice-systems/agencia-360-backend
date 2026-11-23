@@ -628,6 +628,71 @@ paths:
               schema:
                 $ref: '#/components/schemas/Problema'
 
+  /citas/{citaId}/pase:
+    get:
+      tags: [Agenda]
+      summary: Pase de Wallet de una cita
+      description: |
+        V2-M25.03 · El QR del pase es exactamente el `codigo` del comprobante
+        (`CARECAR-CITA:<id>.<firma>`). `plataforma=apple` responde el `.pkpass` firmado;
+        `plataforma=google` responde `{url}` con el enlace `https://pay.google.com/gp/v/save/<jwt>`.
+        El pase vence al terminar la cita. Una cita cancelada no emite pase (409); un pase ya
+        emitido no se revoca desde el servidor, pero recepción valida el QR contra el estado
+        actual de la cita.
+      parameters:
+        - name: citaId
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+        - name: plataforma
+          in: query
+          required: true
+          schema:
+            type: string
+            enum: [apple, google]
+      responses:
+        '200':
+          description: Pase listo para guardar
+          content:
+            application/vnd.apple.pkpass:
+              schema:
+                type: string
+                format: binary
+            application/json:
+              schema:
+                type: object
+                required: [url]
+                properties:
+                  url:
+                    type: string
+                    example: https://pay.google.com/gp/v/save/eyJhbGciOiJSUzI1NiJ9...
+        '400':
+          description: La plataforma falta o no es apple ni google (`codigo` DATOS_INVALIDOS)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Problema'
+        '401':
+          $ref: '#/components/responses/NoAutenticado'
+        '403':
+          $ref: '#/components/responses/CuentaDesactivada'
+        '404':
+          $ref: '#/components/responses/NoEncontrado'
+        '409':
+          description: La cita está cancelada (`codigo` CITA_CANCELADA)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Problema'
+        '503':
+          description: Faltan las credenciales de esa plataforma (`codigo` WALLET_NO_CONFIGURADO)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Problema'
+
   /catalogo:
     get:
       tags: [Catálogo]
@@ -1480,6 +1545,7 @@ components:
             - CITA_DUPLICADA
             - CITA_NO_REPROGRAMABLE
             - CITA_CANCELADA
+            - WALLET_NO_CONFIGURADO
           example: FRANJA_SIN_CUPO
         path:
           type: string
