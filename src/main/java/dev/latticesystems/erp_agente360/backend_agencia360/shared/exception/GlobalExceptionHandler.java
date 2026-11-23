@@ -95,6 +95,14 @@ public class GlobalExceptionHandler {
 				ex.getMessage(), request.getRequestURI(), ex.getCodigo()));
 	}
 
+	@ExceptionHandler(ServicioNoDisponibleException.class)
+	public ResponseEntity<ApiError> handleServicioNoDisponible(ServicioNoDisponibleException ex,
+			HttpServletRequest request) {
+		return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).body(ApiError.of(
+				HttpStatus.SERVICE_UNAVAILABLE.value(), "Service Unavailable", ex.getMessage(),
+				request.getRequestURI(), ex.getCodigo()));
+	}
+
 	@ExceptionHandler(DataIntegrityViolationException.class)
 	public ResponseEntity<ApiError> handleIntegridad(DataIntegrityViolationException ex, HttpServletRequest request) {
 		return ResponseEntity.status(HttpStatus.CONFLICT).body(ApiError.of(HttpStatus.CONFLICT.value(), "Conflict",
