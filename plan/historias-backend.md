@@ -146,7 +146,7 @@ Calcular y guardar es una sola operación: toda estimación queda en el historia
 
 Un 422 no es un fallo de la app ni del cliente: la agencia aún no valuó ese auto. La app lo explica y ofrece pedir una valuación formal (V2-M26.01). No se inventa un valor por omisión.
 
-**Tablas nuevas** (migración `V25__crear_tablas_de_toma_a_cuenta.sql`, el siguiente número libre después de V24 de V2-M03.02):
+**Tablas nuevas** (migración `V34__crear_tablas_de_toma_a_cuenta.sql`; el diseño decía V25, pero V24 y V25 ya los tomaron otras historias y V34 fue el siguiente número libre al construirla):
 
 | Tabla | Campos | Notas |
 | --- | --- | --- |
@@ -177,7 +177,9 @@ Un parámetro que la agencia deja de usar se desactiva (`activo = false`), no se
 
 **Pruebas pedidas.** De la fórmula, con casos de números exactos: auto nuevo, auto con los kilómetros esperados, con el doble, con cero, cada estado, el límite de 0.5 y de 1.2 del ajuste de kilómetros, el redondeo a 100 y el rango que no baja de 0. Del servicio y del controlador: 201 con vehículo, 201 con auto capturado, 201 con y sin modelo destino, 400 con las dos formas del auto y con ninguna, 400 con km o año fuera de rango, 404 con vehículo ajeno y con modelo retirado, 422 sin parámetros o con el parámetro desactivado, 401 y 403, y que el listado salga ordenado, paginado y solo del cliente. Una estimación guardada no cambia aunque después cambie el parámetro.
 
-**Mientras no se implemente.** La app trabaja contra el contrato y `mock_api` de `carecar-mobile` (dependencia simulable). El mock aplica la misma fórmula con un puñado de parámetros de ejemplo.
+**Construido** (V2-M03.06, junto con el backend de V2-M03.04 y V2-M03.07). `CalculadoraTomaCuenta` usa `BigDecimal` para que los resultados sean exactos y expone el rango con sus supuestos. Un vehículo registrado sin marca se busca solo por modelo y año, y solo sirve si hay un único parámetro activo. El año actual sale del reloj del servidor en UTC. Las pruebas están en `CalculadoraTomaCuentaTest`, `ParametroTomaCuentaTest` y `TomaCuentaIntegrationTest`. Falta que el PO entregue los valores reales de `parametro_toma_cuenta`: hasta entonces la app recibe 422 para todo auto.
+
+**Antes de construirse.** La app trabajó contra el contrato y `mock_api` de `carecar-mobile` (dependencia simulable). El mock aplica la misma fórmula con un puñado de parámetros de ejemplo.
 
 ### M04 · Taller en vivo: estado de la orden y aprobación de trabajos — H3 — módulo `servicio`
 
