@@ -19,8 +19,10 @@ class TicketCitaPdfTest {
 		ReflectionTestUtils.setField(cita, "id", 57L);
 		VehiculoDeCliente v = new VehiculoDeCliente(11L, "3N1AB7AP5KY123456", "Nissan", "Sentra", 2024, "Advance",
 				"ABC-123-D", 12000, null, null);
-		byte[] pdf = new TicketCitaPdf().armar(cita, v);
+		byte[] sinQr = new TicketCitaPdf().armar(cita, v, null);
+		byte[] pdf = new TicketCitaPdf().armar(cita, v, new FirmaCitas("test-only-citas-qr-0123456789-0123456789").contenidoQr(57L));
 		assertThat(new String(pdf, 0, 4)).isEqualTo("%PDF");
+		assertThat(pdf.length).isGreaterThan(sinQr.length);
 		Files.createDirectories(Path.of("target"));
 		Files.write(Path.of("target/ticket-cita-muestra.pdf"), pdf);
 	}
