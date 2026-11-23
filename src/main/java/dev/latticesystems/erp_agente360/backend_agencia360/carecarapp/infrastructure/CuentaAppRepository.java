@@ -8,5 +8,7 @@ public interface CuentaAppRepository extends JpaRepository<CuentaApp, Long> {
 
 	Optional<CuentaApp> findByClienteId(Long clienteId);
 
+	Optional<CuentaApp> findByUsuario(String usuario);
+
 	boolean existsByClienteId(Long clienteId);
 }

@@ -18,15 +18,17 @@ import dev.latticesystems.erp_agente360.backend_agencia360.shared.security.Role;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.List;
+import java.util.Optional;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * Sesión del cliente en la app CareCar (APP-2.1 y APP-2.3): login con correo,
- * refresh token de un solo uso, cierre de sesión, cambio de contraseña y
- * perfil. El token de la app lleva el id del cliente y el rol
+ * Sesión del cliente en la app CareCar (APP-2.1 y APP-2.3): login con el
+ * usuario de la cuenta ({@code cuenta_app.usuario}, que es el correo;
+ * V2-T05.03), refresh token de un solo uso, cierre de sesión, cambio de
+ * contraseña y perfil. El token de la app lleva el id del cliente y el rol
  * {@code CLIENTE_CARECAR}.
  */
 @Service
@@ -72,8 +74,9 @@ public class AccesoAppService {
 	@Transactional(noRollbackFor = NoAutenticadoException.class)
 	public SesionIniciadaApp iniciarSesion(String correo, String contrasena) {
 		Instant ahora = Instant.now(reloj);
-		ClienteRegistrado cliente = directorioClientes.buscarPorCorreo(correo).orElseThrow(this::credencialesInvalidas);
-		CuentaApp cuenta = cuentaRepository.findByClienteId(cliente.id()).orElseThrow(this::credencialesInvalidas);
+		CuentaApp cuenta = cuentaPorUsuario(correo).orElseThrow(this::credencialesInvalidas);
+		ClienteRegistrado cliente = directorioClientes.buscarPorId(cuenta.getClienteId())
+				.orElseThrow(this::credencialesInvalidas);
 		if (cuenta.estaBloqueada(ahora)) {
 			throw new DemasiadosIntentosException(
 					"Demasiados intentos. Intenta de nuevo en " + minutos(cuenta.segundosDeBloqueo(ahora)) + ".",
@@ -175,6 +178,13 @@ public class AccesoAppService {
 		} catch (IllegalArgumentException ex) {
 			throw new SolicitudInvalidaException(ex.getMessage(), CodigosError.DATOS_INVALIDOS);
 		}
+	}
+
+	private Optional<CuentaApp> cuentaPorUsuario(String usuario) {
+		if (usuario == null || usuario.isBlank()) {
+			return Optional.empty();
+		}
+		return cuentaRepository.findByUsuario(CuentaApp.normalizarUsuario(usuario));
 	}
 
 	private SesionIniciadaApp emitirSesion(CuentaApp cuenta, ClienteRegistrado cliente, Instant ahora) {
