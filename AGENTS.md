@@ -59,7 +59,7 @@ docker compose up -d                                          # PostgreSQL y Mai
 ./scripts/limpiar-datos.sh                                    # borra datos de ejemplo
 ```
 
-Antes de subir: `spotless:apply`, `checkstyle:check`, `verify` (CI y Lint fallan si no pasan). Swagger UI en `/swagger-ui.html`, health en `/actuator/health`.
+Antes de subir: `spotless:apply`, `checkstyle:check`, `verify` (CI y Lint fallan si no pasan). Swagger UI en `/swagger-ui.html` (solo en local; apagado en `prod`), health en `/actuator/health`.
 
 ## Arquitectura
 
