@@ -205,6 +205,25 @@ class AgendaAppIntegrationTest extends AbstractIntegrationTest {
 	}
 
 	@Test
+	void elComprobanteDaElCodigoDelQrYNoSirveCanceladaNiAjena() throws Exception {
+		long citaId = JsonPath.<Number>read(agendar(tokenDeAna, vehiculosDeAna.getFirst(), 1, diaHabil).andReturn()
+				.getResponse().getContentAsString(), "$.id").longValue();
+		mockMvc.perform(get("/api/v1/app/citas/{id}/comprobante", citaId).header(HttpHeaders.AUTHORIZATION,
+				"Bearer " + tokenDeAna)).andExpect(status().isOk()).andExpect(jsonPath("$.citaId").value(citaId))
+				.andExpect(jsonPath("$.codigo").value(org.hamcrest.Matchers.startsWith("CARECAR-CITA:" + citaId + ".")))
+				.andExpect(jsonPath("$.fecha").value(diaHabil.toString()))
+				.andExpect(jsonPath("$.horaInicio").value("09:00")).andExpect(jsonPath("$.horaFin").value("10:00"))
+				.andExpect(jsonPath("$.vehiculoNombre").value("Nissan March 2026"));
+		mockMvc.perform(get("/api/v1/app/citas/{id}/comprobante", citaId).header(HttpHeaders.AUTHORIZATION,
+				"Bearer " + tokenDeBruno)).andExpect(status().isNotFound());
+		mockMvc.perform(post("/api/v1/app/citas/{id}/cancelar", citaId).header(HttpHeaders.AUTHORIZATION,
+				"Bearer " + tokenDeAna)).andExpect(status().isOk());
+		mockMvc.perform(get("/api/v1/app/citas/{id}/comprobante", citaId).header(HttpHeaders.AUTHORIZATION,
+				"Bearer " + tokenDeAna)).andExpect(status().isConflict())
+				.andExpect(jsonPath("$.codigo").value("CITA_CANCELADA"));
+	}
+
+	@Test
 	void elTicketLlevaElQrFirmadoYSoloLoVeSuDueno() throws Exception {
 		long citaId = JsonPath.<Number>read(agendar(tokenDeAna, vehiculosDeAna.getFirst(), 1, diaHabil).andReturn()
 				.getResponse().getContentAsString(), "$.id").longValue();
