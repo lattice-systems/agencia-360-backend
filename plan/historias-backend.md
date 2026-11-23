@@ -399,6 +399,49 @@ Detalle: [`carecar-mobile/plan/modulos/M24-asistente-carecar.md`](https://github
 | V2-M24.07 | Como equipo queremos medir la calidad de respuestas para saber si el asistente ayuda y mejorarlo | `POST /asistente/consultas/{id}/calificacion` guarda `util` · conjunto de evaluación de al menos 20 preguntas por modelo con página esperada · script que reporta el % de citas correctas contra el umbral del ADR | Daniel |
 | V2-M24.09 | Como cliente quiero ver la respuesta mientras se escribe para no esperar en blanco | `POST /asistente/preguntas` responde en streaming (SSE) con las fuentes al final · una conexión cortada deja registro de respuesta parcial | Daniel |
 
+#### Diseño de V2-M24.02 y V2-M24.03 (ADR 0007) — implementado
+
+Primera versión dentro del módulo `carecarapp` (subpaquetes `application`, `infrastructure`, `web`), porque usa sus manuales y vehículos. Se separa a un módulo `asistente` si crece (V2-T05.01).
+
+**Migración** `V27__crear_tablas_del_asistente.sql`:
+
+- `create extension if not exists vector` (pgvector; Neon lo trae y Testcontainers usa la imagen `pgvector/pgvector:pg16`).
+- `fragmento_manual`: `id`, `manual_id` (FK a `manual`, en cascada), `pagina`, `texto`, `embedding vector(768)` nulo hasta calcularse y `created_at`.
+  - Único (`manual_id`, `pagina`).
+  - Índice GIN de texto completo en español.
+  - Índice HNSW coseno sobre `embedding`.
+- `consulta_asistente`: `id`, `cliente_id`, `vehiculo_cliente_id`, `pregunta` (500), `respuesta`, `fuentes` (jsonb `[{manualId, pagina}]`), `util` (nulo), `encontrado`, `proveedor` y `created_at`.
+  - Índice por cliente y fecha.
+
+**Indexado (V2-M24.02):**
+- `IndexadorManuales` lee el PDF del `AlmacenManuales` con PDFBox y guarda el texto de cada página. Reindexar no duplica (upsert por página) y borra las páginas que ya no existen. Un PDF sin texto queda sin fragmentos y se registra en el log.
+- Se indexa al subir un manual (después del commit), al preguntar si el manual aún no tiene fragmentos, y cada 30 minutos los que falten.
+- Los vectores se calculan aparte, como máximo 500 por día, con pausa entre llamadas por la cuota gratis.
+
+**Pregunta (V2-M24.03):** `POST /api/v1/app/asistente/preguntas`, solo para `CLIENTE_CARECAR`.
+- Cuerpo `{vehiculoId, pregunta}` (1 a 500 caracteres).
+- Respuesta `{consultaId, respuesta, encontrado, fuentes: [{manualId, pagina, titulo}]}`.
+
+Pasos:
+
+1. El vehículo debe ser del cliente (404). Se busca el manual de su marca, modelo y año (`409 ASISTENTE_SIN_MANUAL`).
+2. Límites: 10 por cliente al día (`429 ASISTENTE_LIMITE` con `Retry-After` hasta medianoche) y 450 en total al día (`503 ASISTENTE_NO_DISPONIBLE`).
+3. Se borran de la pregunta correo, teléfono, VIN y placas.
+4. Se eligen las 5 páginas más parecidas:
+   - por vector, si se pudo calcular el de la pregunta y el manual ya tiene vectores;
+   - si no, por texto completo.
+5. Sin páginas, se responde "no lo encontré" sin llamar al modelo.
+6. Con páginas, `ProveedorIA.responder` pide JSON `{respuesta, encontrado, paginas}`. Solo se aceptan páginas que se le dieron.
+7. Se guarda en `consulta_asistente`.
+
+**Proveedor:**
+- `ProveedorIA` tiene dos implementaciones:
+  - `GeminiProveedorIA`: REST con `RestClient`, encabezado `x-goog-api-key`, espera de 20 s y un reintento.
+  - `ProveedorIAFalso`: determinista, sin red, para pruebas.
+- `app.asistente.proveedor=auto` usa Gemini si hay `GEMINI_API_KEY`; si no, el falso.
+- Los modelos se fijan con `ASISTENTE_MODELO_TEXTO` y `ASISTENTE_MODELO_EMBEDDING`.
+- Una cuota agotada, un error o una espera vencida dan `503 ASISTENTE_NO_DISPONIBLE`.
+
 ### M25 · Widgets, Wallet y accesos rápidos — H6 — módulo `carecarapp`
 
 Detalle: [`carecar-mobile/plan/modulos/M25-widgets-y-wallet.md`](https://github.com/lattice-systems/carecar-mobile/blob/main/plan/modulos/M25-widgets-y-wallet.md)

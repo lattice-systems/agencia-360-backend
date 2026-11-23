@@ -39,6 +39,9 @@ Perfil `prod`. Los valores sensibles son **secretos de la Container App** (nunca
 | `WALLET_GOOGLE_SERVICE_ACCOUNT_JSON_BASE64` | secreto `wallet-google-service-account` (base64 del JSON de la cuenta de servicio) |
 | `MANUALES_ALMACEN` | sin definir (por omisión `base`: los PDF de los manuales van a la tabla `archivo_manual` de Neon). `MANUALES_DIRECTORIO` solo se usa con `MANUALES_ALMACEN=local` |
 | `GEMINI_API_KEY` | secreto `gemini-api-key`: llave del proyecto de Google AI Studio del equipo en plan **Free, sin facturación** (costo cero; ver ADR [0007](https://github.com/lattice-systems/carecar-mobile/blob/main/docs/decisiones/0007-asistente-ia.md)). La usará el asistente (M24); nunca vincular facturación a ese proyecto |
+| `ASISTENTE_PROVEEDOR` | sin definir (`auto`: Gemini si hay `GEMINI_API_KEY`; `falso` para apagar la IA sin tocar código) |
+| `ASISTENTE_MODELO_TEXTO`, `ASISTENTE_MODELO_EMBEDDING` | sin definir (`gemini-3.5-flash-lite` y `gemini-embedding-2`); se cambian aquí si Google retira un modelo |
+| `ASISTENTE_LIMITE_POR_CLIENTE`, `ASISTENTE_LIMITE_GLOBAL` | sin definir (10 y 450 preguntas al día, por la cuota gratis de 500) |
 | `JAVA_TOOL_OPTIONS` | `-XX:MaxRAMPercentage=75` |
 
 Cambiar un secreto (p. ej. la contraseña de aplicación de Gmail, que son 16 letras) y aplicarlo. Los entornos *express* no permiten `revision restart`; se crea una revisión nueva cambiando una variable inofensiva, y la revisión nueva lee los secretos al arrancar:

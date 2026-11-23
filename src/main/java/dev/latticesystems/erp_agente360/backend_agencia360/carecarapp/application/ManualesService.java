@@ -20,16 +20,21 @@ import org.springframework.transaction.support.TransactionSynchronizationManager
 @Service
 public class ManualesService {
 
+	private static final org.slf4j.Logger LOG = org.slf4j.LoggerFactory.getLogger(ManualesService.class);
+
 	private static final byte[] INICIO_PDF = "%PDF-".getBytes(StandardCharsets.US_ASCII);
 
 	private final ManualRepository manualRepository;
 	private final AlmacenManuales almacen;
 	private final FirmaManuales firma;
+	private final IndexadorManuales indexador;
 
-	public ManualesService(ManualRepository manualRepository, AlmacenManuales almacen, FirmaManuales firma) {
+	public ManualesService(ManualRepository manualRepository, AlmacenManuales almacen, FirmaManuales firma,
+			IndexadorManuales indexador) {
 		this.manualRepository = manualRepository;
 		this.almacen = almacen;
 		this.firma = firma;
+		this.indexador = indexador;
 	}
 
 	/** Contenido del PDF para descargarlo. */
@@ -57,6 +62,7 @@ public class ManualesService {
 		if (anterior != null) {
 			borrarAlConfirmar(anterior);
 		}
+		indexarAlConfirmar(guardado.getId());
 		return ManualVista.de(guardado);
 	}
 
@@ -82,6 +88,25 @@ public class ManualesService {
 	}
 
 	/** Si la transacción falla, el archivo nuevo no queda huérfano. */
+	/**
+	 * Al confirmar la subida, el asistente lee el texto de cada página (V2-M24.02).
+	 * Si falla, no se pierde el manual: el indexado programado lo reintenta.
+	 */
+	private void indexarAlConfirmar(Long manualId) {
+		if (TransactionSynchronizationManager.isSynchronizationActive()) {
+			TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+				@Override
+				public void afterCommit() {
+					try {
+						indexador.indexarTexto(manualId);
+					} catch (RuntimeException ex) {
+						LOG.warn("No se pudo indexar el manual {}; se reintenta después", manualId, ex);
+					}
+				}
+			});
+		}
+	}
+
 	private void borrarSiSeRevierte(String clave) {
 		if (TransactionSynchronizationManager.isSynchronizationActive()) {
 			TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {

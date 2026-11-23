@@ -18,6 +18,9 @@ public final class CodigosError {
 	public static final String CITA_DUPLICADA = "CITA_DUPLICADA";
 	public static final String CITA_NO_REPROGRAMABLE = "CITA_NO_REPROGRAMABLE";
 	public static final String WALLET_NO_CONFIGURADO = "WALLET_NO_CONFIGURADO";
+	public static final String ASISTENTE_SIN_MANUAL = "ASISTENTE_SIN_MANUAL";
+	public static final String ASISTENTE_LIMITE = "ASISTENTE_LIMITE";
+	public static final String ASISTENTE_NO_DISPONIBLE = "ASISTENTE_NO_DISPONIBLE";
 
 	private CodigosError() {
 	}

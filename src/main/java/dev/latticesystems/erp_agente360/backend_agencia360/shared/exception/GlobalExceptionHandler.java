@@ -80,7 +80,7 @@ public class GlobalExceptionHandler {
 		return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS)
 				.header(HttpHeaders.RETRY_AFTER, String.valueOf(ex.getSegundosParaReintentar()))
 				.body(ApiError.of(HttpStatus.TOO_MANY_REQUESTS.value(), "Too Many Requests", ex.getMessage(),
-						request.getRequestURI(), CodigosError.DEMASIADOS_INTENTOS));
+						request.getRequestURI(), ex.getCodigo()));
 	}
 
 	@ExceptionHandler(RecursoNoEncontradoException.class)
