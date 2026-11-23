@@ -124,3 +124,4 @@ La base de Neon tiene los **datos de ejemplo** (`scripts/cargar-datos-de-ejemplo
 - **Usuarios de ejemplo con contraseñas públicas**: aceptable mientras la base solo tenga datos de prueba; antes de datos reales hay que borrarlos (`scripts/limpiar-datos.sh`) y rotar contraseñas.
 - **Sin logs en Azure**: el entorno se creó sin Log Analytics (cuesta por GB). Para depurar: `az containerapp logs show -n ca-agencia360-api -g rg-agencia360 --follow`.
 - **Arranque en frío** de 20–40 s tras inactividad.
+- **Sin Swagger en producción**: el perfil `prod` apaga Swagger UI y `/v3/api-docs` porque la API es pública. El contrato se consulta levantando el backend en local.

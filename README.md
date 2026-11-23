@@ -268,6 +268,8 @@ curl http://localhost:8080/actuator/health
 | `http://localhost:8080/actuator/health` | Estado de la API, la base de datos (`UP` / `DOWN`) |
 | `http://localhost:8080/swagger-ui.html` | Swagger UI para probar los endpoints |
 | `http://localhost:8080/v3/api-docs` | Contrato OpenAPI en JSON |
+
+En producción (perfil `prod`) Swagger UI y `/v3/api-docs` están apagados, porque la API es pública en internet.
 | `http://localhost:8025` | Mailpit: correos que envía la API en el perfil `dev` (por ejemplo, el código de recuperación de la app) |
 
 **Perfil `dev`**: muestra el SQL que ejecuta Hibernate (`spring.jpa.show-sql=true`) y sube el nivel de log del proyecto a `DEBUG`. Ver `src/main/resources/application-dev.properties`.
