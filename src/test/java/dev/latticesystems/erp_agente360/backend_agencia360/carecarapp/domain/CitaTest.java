@@ -59,8 +59,7 @@ class CitaTest {
 	@Test
 	void guardaElMotivoYSinElQuedaNulo() {
 		assertThat(cita().getMotivo()).isNull();
-		Cita conMotivo = Cita.confirmar(1L, 2L, DIA, 1L, LocalTime.of(9, 0), LocalTime.of(10, 0),
-				MotivoCita.GARANTIA);
+		Cita conMotivo = Cita.confirmar(1L, 2L, DIA, 1L, LocalTime.of(9, 0), LocalTime.of(10, 0), MotivoCita.GARANTIA);
 		assertThat(conMotivo.getMotivo()).isEqualTo(MotivoCita.GARANTIA);
 	}
 
@@ -85,9 +84,9 @@ class CitaTest {
 				.isEqualTo("CITA_NO_REPROGRAMABLE");
 
 		Cita empezada = cita();
-		assertThatThrownBy(() -> empezada.reprogramar(DIA.atTime(9, 0), DIA, 2L, LocalTime.of(10, 0),
-				LocalTime.of(11, 0))).isInstanceOf(ConflictoException.class).extracting("codigo")
-				.isEqualTo("CITA_NO_REPROGRAMABLE");
+		assertThatThrownBy(
+				() -> empezada.reprogramar(DIA.atTime(9, 0), DIA, 2L, LocalTime.of(10, 0), LocalTime.of(11, 0)))
+				.isInstanceOf(ConflictoException.class).extracting("codigo").isEqualTo("CITA_NO_REPROGRAMABLE");
 		assertThat(empezada.getFranjaId()).isEqualTo(1L);
 	}
 }
