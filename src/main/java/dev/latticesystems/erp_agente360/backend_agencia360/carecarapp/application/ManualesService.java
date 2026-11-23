@@ -20,6 +20,8 @@ import org.springframework.transaction.support.TransactionSynchronizationManager
 @Service
 public class ManualesService {
 
+	private static final org.slf4j.Logger LOG = org.slf4j.LoggerFactory.getLogger(ManualesService.class);
+
 	private static final byte[] INICIO_PDF = "%PDF-".getBytes(StandardCharsets.US_ASCII);
 
 	private final ManualRepository manualRepository;
@@ -98,8 +100,7 @@ public class ManualesService {
 					try {
 						indexador.indexarTexto(manualId);
 					} catch (RuntimeException ex) {
-						org.slf4j.LoggerFactory.getLogger(ManualesService.class)
-								.warn("No se pudo indexar el manual {}; se reintenta después", manualId, ex);
+						LOG.warn("No se pudo indexar el manual {}; se reintenta después", manualId, ex);
 					}
 				}
 			});
