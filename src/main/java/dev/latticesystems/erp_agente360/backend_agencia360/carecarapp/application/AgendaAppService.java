@@ -50,13 +50,17 @@ public class AgendaAppService {
 	private final VehiculosDeClientes vehiculos;
 	private final Clock reloj;
 	private final TicketCitaPdf ticketCitaPdf = new TicketCitaPdf();
+	private final FirmaCitas firmaCitas;
 
 	@Autowired
-	public AgendaAppService(HorarioTaller horario, CitaRepository citaRepository, VehiculosDeClientes vehiculos) {
-		this(horario, citaRepository, vehiculos, Clock.system(ZONA_AGENCIA));
+	public AgendaAppService(HorarioTaller horario, CitaRepository citaRepository, VehiculosDeClientes vehiculos,
+			FirmaCitas firmaCitas) {
+		this(horario, citaRepository, vehiculos, firmaCitas, Clock.system(ZONA_AGENCIA));
 	}
 
-	AgendaAppService(HorarioTaller horario, CitaRepository citaRepository, VehiculosDeClientes vehiculos, Clock reloj) {
+	AgendaAppService(HorarioTaller horario, CitaRepository citaRepository, VehiculosDeClientes vehiculos,
+			FirmaCitas firmaCitas, Clock reloj) {
+		this.firmaCitas = firmaCitas;
 		this.horario = horario;
 		this.citaRepository = citaRepository;
 		this.vehiculos = vehiculos;
@@ -151,17 +155,17 @@ public class AgendaAppService {
 	}
 
 	/**
-	 * Mueve una cita confirmada que no ha empezado a otra franja: libera la anterior
-	 * y ocupa la nueva en la misma transacción (V2-M02.13).
+	 * Mueve una cita confirmada que no ha empezado a otra franja: libera la
+	 * anterior y ocupa la nueva en la misma transacción (V2-M02.13).
 	 *
 	 * @param fecha
 	 *            nuevo día; si es {@code null} se queda el de la cita
 	 * @throws RecursoNoEncontradoException
 	 *             si la cita no existe o no es del cliente (404)
 	 * @throws IllegalArgumentException
-	 *             si falta la franja, el taller no abre ese día, la franja no existe,
-	 *             ya empezó, pasa del límite de anticipación o es la misma de la cita
-	 *             (400)
+	 *             si falta la franja, el taller no abre ese día, la franja no
+	 *             existe, ya empezó, pasa del límite de anticipación o es la misma
+	 *             de la cita (400)
 	 * @throws ConflictoException
 	 *             con {@code CITA_NO_REPROGRAMABLE}, {@code FRANJA_SIN_CUPO} o
 	 *             {@code CITA_DUPLICADA} (409)
@@ -188,7 +192,9 @@ public class AgendaAppService {
 						.orElse(null));
 	}
 
-	/** El taller abre ese día, la franja existe, no ha empezado y hay anticipación. */
+	/**
+	 * El taller abre ese día, la franja existe, no ha empezado y hay anticipación.
+	 */
 	private HorarioTaller.Franja validarFranja(LocalDate fecha, Long franjaId) {
 		if (!horario.abre(fecha)) {
 			throw new IllegalArgumentException("El taller no abre ese día");
@@ -206,7 +212,10 @@ public class AgendaAppService {
 		return franja;
 	}
 
-	/** Sin cita duplicada ese día y con cupo en la franja; {@code excepto} no cuenta. */
+	/**
+	 * Sin cita duplicada ese día y con cupo en la franja; {@code excepto} no
+	 * cuenta.
+	 */
 	private void verificarDisponible(Long vehiculoId, LocalDate fecha, Long franjaId, Long excepto) {
 		if (citaRepository.existeCitaDelVehiculoEnElDia(vehiculoId, fecha, EstadoCita.CONFIRMADA, excepto)) {
 			throw new ConflictoException("Ese vehículo ya tiene una cita ese día", CodigosError.CITA_DUPLICADA);
@@ -239,7 +248,7 @@ public class AgendaAppService {
 	}
 
 	/**
-	 * PDF del comprobante de la cita.
+	 * PDF del comprobante de la cita, con el QR firmado para recepción (V2-M02.11).
 	 *
 	 * @throws RecursoNoEncontradoException
 	 *             si la cita no existe o no es del cliente (404)
@@ -250,6 +259,6 @@ public class AgendaAppService {
 				.orElseThrow(() -> new RecursoNoEncontradoException("No existe la cita " + citaId));
 		VehiculoDeCliente vehiculo = vehiculos.buscarPorId(cita.getVehiculoClienteId())
 				.filter(propio -> propio.propietario().id().equals(clienteId)).orElse(null);
-		return ticketCitaPdf.armar(cita, vehiculo);
+		return ticketCitaPdf.armar(cita, vehiculo, firmaCitas.contenidoQr(cita.getId()));
 	}
 }
