@@ -183,6 +183,14 @@ public class OrdenServicio extends Auditable {
 		return fechaCierre;
 	}
 
+	public List<OrdenManoDeObra> getRenglonesManoDeObra() {
+		return List.copyOf(renglonesManoDeObra);
+	}
+
+	public List<OrdenRefaccion> getRenglonesRefaccion() {
+		return List.copyOf(renglonesRefaccion);
+	}
+
 	public List<RenglonOrden> getRenglones() {
 		return Stream.<RenglonOrden>concat(renglonesManoDeObra.stream(), renglonesRefaccion.stream()).toList();
 	}
