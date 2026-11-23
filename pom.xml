@@ -21,6 +21,7 @@
 		<springdoc-openapi.version>2.9.1</springdoc-openapi.version>
 		<jjwt.version>0.13.0</jjwt.version>
 		<openpdf.version>2.4.0</openpdf.version>
+		<zxing.version>3.5.3</zxing.version>
 		<spotless-maven-plugin.version>2.46.1</spotless-maven-plugin.version>
 
 		<!--
@@ -146,6 +147,13 @@
 			<groupId>com.github.librepdf</groupId>
 			<artifactId>openpdf</artifactId>
 			<version>${openpdf.version}</version>
+		</dependency>
+
+		<!-- QR del comprobante de la cita (V2-M02.11); OpenPDF no genera QR -->
+		<dependency>
+			<groupId>com.google.zxing</groupId>
+			<artifactId>core</artifactId>
+			<version>${zxing.version}</version>
 		</dependency>
 
 		<!-- Observabilidad -->
