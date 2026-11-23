@@ -2,6 +2,7 @@ package dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.applicati
 
 import dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.domain.Cita;
 import dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.domain.EstadoCita;
+import dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.domain.MotivoCita;
 import dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.infrastructure.CitaRepository;
 import dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.infrastructure.FranjaOcupada;
 import dev.latticesystems.erp_agente360.backend_agencia360.clientes.VehiculosDeClientes;
@@ -40,6 +41,8 @@ public class AgendaAppService {
 	static final int DIAS_MAXIMOS_POR_CONSULTA = 31;
 
 	private static final LocalDate SIN_INICIO = LocalDate.of(1900, 1, 1);
+	/** Id que ninguna cita tiene: para no excluir ninguna al revisar duplicadas. */
+	private static final Long SIN_CITA = -1L;
 	private static final LocalDate SIN_FIN = LocalDate.of(9999, 12, 31);
 
 	private final HorarioTaller horario;
@@ -129,17 +132,64 @@ public class AgendaAppService {
 	 *             si falta un dato, el taller no abre ese día, la franja no existe,
 	 *             ya empezó o pasa del límite de anticipación (400)
 	 * @throws ConflictoException
-	 *             con {@code FRANJA_SIN_CUPO} si la franja ya no tiene cupo, o sin
-	 *             código si el vehículo ya tiene cita en ella (409)
+	 *             con {@code FRANJA_SIN_CUPO} si la franja ya no tiene cupo, o con
+	 *             {@code CITA_DUPLICADA} si el vehículo ya tiene cita ese día (409)
 	 */
 	@Transactional
-	public CitaApp agendar(Long clienteId, Long vehiculoId, Long franjaId, LocalDate fecha) {
+	public CitaApp agendar(Long clienteId, Long vehiculoId, Long franjaId, LocalDate fecha, MotivoCita motivo) {
 		if (vehiculoId == null || franjaId == null || fecha == null) {
 			throw new IllegalArgumentException("El vehículo, la franja y la fecha son obligatorios");
 		}
 		VehiculoDeCliente vehiculo = vehiculos.buscarPorId(vehiculoId)
 				.filter(propio -> propio.propietario().id().equals(clienteId))
 				.orElseThrow(() -> new RecursoNoEncontradoException("No existe el vehículo " + vehiculoId));
+		HorarioTaller.Franja franja = validarFranja(fecha, franjaId);
+		citaRepository.bloquearFranja(fecha.toEpochDay() * 1_000 + franjaId);
+		verificarDisponible(vehiculoId, fecha, franjaId, SIN_CITA);
+		Cita nueva = Cita.confirmar(clienteId, vehiculoId, fecha, franjaId, franja.inicio(), franja.fin(), motivo);
+		return CitaApp.de(citaRepository.save(nueva), CitaApp.describir(vehiculo));
+	}
+
+	/**
+	 * Mueve una cita confirmada que no ha empezado a otra franja: libera la anterior
+	 * y ocupa la nueva en la misma transacción (V2-M02.13).
+	 *
+	 * @param fecha
+	 *            nuevo día; si es {@code null} se queda el de la cita
+	 * @throws RecursoNoEncontradoException
+	 *             si la cita no existe o no es del cliente (404)
+	 * @throws IllegalArgumentException
+	 *             si falta la franja, el taller no abre ese día, la franja no existe,
+	 *             ya empezó, pasa del límite de anticipación o es la misma de la cita
+	 *             (400)
+	 * @throws ConflictoException
+	 *             con {@code CITA_NO_REPROGRAMABLE}, {@code FRANJA_SIN_CUPO} o
+	 *             {@code CITA_DUPLICADA} (409)
+	 */
+	@Transactional
+	public CitaApp reprogramar(Long clienteId, Long citaId, Long franjaId, LocalDate fecha) {
+		if (franjaId == null) {
+			throw new IllegalArgumentException("La franja es obligatoria");
+		}
+		Cita cita = citaRepository.findByIdAndClienteId(citaId, clienteId)
+				.orElseThrow(() -> new RecursoNoEncontradoException("No existe la cita " + citaId));
+		LocalDate nuevoDia = fecha == null ? cita.getFecha() : fecha;
+		if (nuevoDia.equals(cita.getFecha()) && franjaId.equals(cita.getFranjaId())) {
+			throw new IllegalArgumentException("La cita ya está en esa franja");
+		}
+		HorarioTaller.Franja franja = validarFranja(nuevoDia, franjaId);
+		LocalDateTime ahora = LocalDateTime.now(reloj);
+		citaRepository.bloquearFranja(nuevoDia.toEpochDay() * 1_000 + franjaId);
+		verificarDisponible(cita.getVehiculoClienteId(), nuevoDia, franjaId, cita.getId());
+		cita.reprogramar(ahora, nuevoDia, franjaId, franja.inicio(), franja.fin());
+		return CitaApp.de(cita,
+				vehiculos.buscarPorId(cita.getVehiculoClienteId())
+						.filter(vehiculo -> vehiculo.propietario().id().equals(clienteId)).map(CitaApp::describir)
+						.orElse(null));
+	}
+
+	/** El taller abre ese día, la franja existe, no ha empezado y hay anticipación. */
+	private HorarioTaller.Franja validarFranja(LocalDate fecha, Long franjaId) {
 		if (!horario.abre(fecha)) {
 			throw new IllegalArgumentException("El taller no abre ese día");
 		}
@@ -153,17 +203,18 @@ public class AgendaAppService {
 			throw new IllegalArgumentException(
 					"Solo se puede agendar hasta " + horario.diasDeAnticipacion() + " días adelante");
 		}
-		citaRepository.bloquearFranja(fecha.toEpochDay() * 1_000 + franjaId);
-		if (citaRepository.existsByVehiculoClienteIdAndFechaAndFranjaIdAndEstado(vehiculoId, fecha, franjaId,
-				EstadoCita.CONFIRMADA)) {
-			throw new ConflictoException("Ese vehículo ya tiene una cita en ese horario");
+		return franja;
+	}
+
+	/** Sin cita duplicada ese día y con cupo en la franja; {@code excepto} no cuenta. */
+	private void verificarDisponible(Long vehiculoId, LocalDate fecha, Long franjaId, Long excepto) {
+		if (citaRepository.existeCitaDelVehiculoEnElDia(vehiculoId, fecha, EstadoCita.CONFIRMADA, excepto)) {
+			throw new ConflictoException("Ese vehículo ya tiene una cita ese día", CodigosError.CITA_DUPLICADA);
 		}
 		if (citaRepository.countByFechaAndFranjaIdAndEstado(fecha, franjaId, EstadoCita.CONFIRMADA) >= horario
 				.cupoPorFranja()) {
 			throw new ConflictoException("La franja ya no tiene cupo", CodigosError.FRANJA_SIN_CUPO);
 		}
-		Cita nueva = Cita.confirmar(clienteId, vehiculoId, fecha, franjaId, franja.inicio(), franja.fin());
-		return CitaApp.de(citaRepository.save(nueva), CitaApp.describir(vehiculo));
 	}
 
 	/**
