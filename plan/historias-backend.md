@@ -393,10 +393,11 @@ Detalle: [`carecar-mobile/plan/modulos/M24-asistente-carecar.md`](https://github
 
 | ID | Historia | Criterios de aceptación | Dueño |
 | --- | --- | --- | --- |
-| V2-M24.02 | Como equipo queremos indexar los manuales por página | Al subir un manual se extrae texto por página y se generan embeddings | Daniel |
-| V2-M24.03 | Como cliente quiero preguntar algo de mi auto y recibir una respuesta citada | Solo usa el manual de su modelo/año · cada respuesta cita páginas · si no está en el manual, lo dice | Daniel |
-| V2-M24.05 | Como cliente quiero fotografiar una luz del tablero y saber qué significa | Identificación con gravedad · si es roja sugiere detenerse y SOS (M11) | Daniel |
-| V2-M24.07 | Como equipo queremos medir la calidad de respuestas | Calificación 👍/👎 y conjunto de preguntas de evaluación por modelo | Daniel |
+| V2-M24.02 | Como equipo queremos indexar los manuales por página para que el asistente busque solo en el manual correcto y pueda citar la página | Al registrar o cambiar `manual.archivo_pdf` se extrae el texto de cada página a `fragmento_manual` (`manual_id`, `pagina`, `texto`, `embedding` según el ADR de V2-M24.01) · reindexar no duplica · PDF escaneado sin texto queda marcado "sin texto" sin romper · comando de administración para indexar los existentes · prueba con un PDF de 3 páginas | Daniel |
+| V2-M24.03 | Como cliente quiero preguntar algo de mi auto y recibir una respuesta citada para resolver dudas sin buscar en el manual | `POST /asistente/preguntas` usa solo fragmentos del manual del vehículo (modelo y año) · cada respuesta trae al menos una fuente `{manual_id, pagina}` · si no está en el manual lo dice sin inventar · errores `ASISTENTE_SIN_MANUAL`, `ASISTENTE_LIMITE` (límite diario por cliente) y `ASISTENTE_NO_DISPONIBLE` · guarda en `consulta_asistente` · prompt sin datos personales (prueba que lo verifica) · llave del proveedor solo en secreto de Azure | Daniel |
+| V2-M24.05 | Como cliente quiero fotografiar una luz del tablero y saber qué significa para decidir si puedo seguir manejando | `POST /asistente/testigos` recibe la imagen sin EXIF y no la conserva tras responder · devuelve testigo, gravedad (roja, amarilla, informativa), qué hacer y página del manual si existe · si no la reconoce lo dice · se registra en `consulta_asistente` | Daniel |
+| V2-M24.07 | Como equipo queremos medir la calidad de respuestas para saber si el asistente ayuda y mejorarlo | `POST /asistente/consultas/{id}/calificacion` guarda `util` · conjunto de evaluación de al menos 20 preguntas por modelo con página esperada · script que reporta el % de citas correctas contra el umbral del ADR | Daniel |
+| V2-M24.09 | Como cliente quiero ver la respuesta mientras se escribe para no esperar en blanco | `POST /asistente/preguntas` responde en streaming (SSE) con las fuentes al final · una conexión cortada deja registro de respuesta parcial | Daniel |
 
 ### M25 · Widgets, Wallet y accesos rápidos — H6 — módulo `carecarapp`
 
