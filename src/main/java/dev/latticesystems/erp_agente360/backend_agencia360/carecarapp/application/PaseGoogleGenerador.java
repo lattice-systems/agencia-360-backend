@@ -20,9 +20,10 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 /**
- * Arma el enlace "Guardar en Google Wallet" de la cita (V2-M25.03): un JWT RS256
- * firmado con la llave de la cuenta de servicio que lleva la clase y el objeto
- * genérico del pase. El QR es exactamente el de {@code FirmaCitas.contenidoQr}.
+ * Arma el enlace "Guardar en Google Wallet" de la cita (V2-M25.03): un JWT
+ * RS256 firmado con la llave de la cuenta de servicio que lleva la clase y el
+ * objeto genérico del pase. El QR es exactamente el de
+ * {@code FirmaCitas.contenidoQr}.
  */
 @Component
 public class PaseGoogleGenerador {
@@ -42,8 +43,7 @@ public class PaseGoogleGenerador {
 	/** @return la URL {@code https://pay.google.com/gp/v/save/<jwt>} */
 	public String generar(DatosPase datos) {
 		try {
-			JsonNode cuenta = json.readTree(
-					Base64.getDecoder().decode(configuracion.googleServiceAccountJsonBase64()));
+			JsonNode cuenta = json.readTree(Base64.getDecoder().decode(configuracion.googleServiceAccountJsonBase64()));
 			String correo = cuenta.path("client_email").asText();
 			PrivateKey llave = llavePrivada(cuenta.path("private_key").asText());
 			String claseId = configuracion.googleIssuerId() + ".carecar_cita";
@@ -60,8 +60,8 @@ public class PaseGoogleGenerador {
 			objeto.put("validTimeInterval", Map.of("start", Map.of("date", datos.inicio().format(ISO)), "end",
 					Map.of("date", datos.fin().format(ISO))));
 			List<Map<String, String>> modulos = new ArrayList<>();
-			modulos.add(Map.of("id", "inicio", "header", "Fecha y hora", "body", datos.inicio().toLocalDate() + " "
-					+ datos.inicio().toLocalTime()));
+			modulos.add(Map.of("id", "inicio", "header", "Fecha y hora", "body",
+					datos.inicio().toLocalDate() + " " + datos.inicio().toLocalTime()));
 			if (datos.vehiculoNombre() != null) {
 				modulos.add(Map.of("id", "vehiculo", "header", "Vehículo", "body", datos.vehiculoNombre()));
 			}
