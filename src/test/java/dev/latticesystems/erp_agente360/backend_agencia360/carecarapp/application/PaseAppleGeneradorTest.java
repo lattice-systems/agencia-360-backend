@@ -1,6 +1,7 @@
 package dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.application;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -8,13 +9,14 @@ import java.io.ByteArrayInputStream;
 import java.security.MessageDigest;
 import java.time.ZoneId;
 import java.time.ZonedDateTime;
-import java.util.HexFormat;
 import java.util.HashMap;
+import java.util.HexFormat;
 import java.util.Map;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
 import org.bouncycastle.cms.CMSProcessableByteArray;
 import org.bouncycastle.cms.CMSSignedData;
+import org.bouncycastle.cms.CMSSignerDigestMismatchException;
 import org.bouncycastle.cms.SignerInformation;
 import org.bouncycastle.cms.jcajce.JcaSimpleSignerInfoVerifierBuilder;
 import org.junit.jupiter.api.Test;
@@ -56,7 +58,7 @@ class PaseAppleGeneradorTest {
 	}
 
 	@Test
-	void elManifiestoTrae_elSha1DeCadaArchivo() throws Exception {
+	void elManifiestoTraeElSha1DeCadaArchivo() throws Exception {
 		CredencialesWalletDePrueba credenciales = CredencialesWalletDePrueba.nuevas();
 		Map<String, byte[]> archivos = descomprimir(
 				new PaseAppleGenerador(credenciales.configuracion()).generar(datos()));
@@ -78,14 +80,16 @@ class PaseAppleGeneradorTest {
 		CMSSignedData firma = new CMSSignedData(new CMSProcessableByteArray(archivos.get("manifest.json")),
 				archivos.get("signature"));
 		SignerInformation firmante = firma.getSignerInfos().getSigners().iterator().next();
-		assertThat(firmante.verify(new JcaSimpleSignerInfoVerifierBuilder()
-				.build(credenciales.certificadoFirmante()))).isTrue();
+		assertThat(firmante.verify(new JcaSimpleSignerInfoVerifierBuilder().build(credenciales.certificadoFirmante())))
+				.isTrue();
 		assertThat(firma.getCertificates().getMatches(null)).hasSize(2);
 
 		byte[] otroManifiesto = "{}".getBytes();
 		CMSSignedData alterado = new CMSSignedData(new CMSProcessableByteArray(otroManifiesto),
 				archivos.get("signature"));
-		assertThat(alterado.getSignerInfos().getSigners().iterator().next().verify(
-				new JcaSimpleSignerInfoVerifierBuilder().build(credenciales.certificadoFirmante()))).isFalse();
+		SignerInformation alteradoFirmante = alterado.getSignerInfos().getSigners().iterator().next();
+		assertThatThrownBy(() -> alteradoFirmante
+				.verify(new JcaSimpleSignerInfoVerifierBuilder().build(credenciales.certificadoFirmante())))
+				.isInstanceOf(CMSSignerDigestMismatchException.class);
 	}
 }
