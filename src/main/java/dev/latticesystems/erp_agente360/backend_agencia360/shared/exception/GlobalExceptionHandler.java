@@ -103,6 +103,14 @@ public class GlobalExceptionHandler {
 						request.getRequestURI(), ex.getCodigo()));
 	}
 
+	@ExceptionHandler(SinParametrosDeValuacionException.class)
+	public ResponseEntity<ApiError> handleSinParametrosDeValuacion(SinParametrosDeValuacionException ex,
+			HttpServletRequest request) {
+		return ResponseEntity.status(HttpStatus.UNPROCESSABLE_ENTITY)
+				.body(ApiError.of(HttpStatus.UNPROCESSABLE_ENTITY.value(), "Unprocessable Entity", ex.getMessage(),
+						request.getRequestURI(), CodigosError.SIN_PARAMETROS_DE_VALUACION));
+	}
+
 	@ExceptionHandler(DataIntegrityViolationException.class)
 	public ResponseEntity<ApiError> handleIntegridad(DataIntegrityViolationException ex, HttpServletRequest request) {
 		return ResponseEntity.status(HttpStatus.CONFLICT).body(ApiError.of(HttpStatus.CONFLICT.value(), "Conflict",
