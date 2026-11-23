@@ -54,7 +54,8 @@ public class FichaTecnicaModelo extends Auditable {
 			String valor, int orden) {
 		for (String texto : new String[]{marca, modelo, seccion, nombre, valor}) {
 			if (texto == null || texto.isBlank()) {
-				throw new IllegalArgumentException("La marca, el modelo, la sección, el nombre y el valor son obligatorios");
+				throw new IllegalArgumentException(
+						"La marca, el modelo, la sección, el nombre y el valor son obligatorios");
 			}
 		}
 		if (anio < 1900) {
