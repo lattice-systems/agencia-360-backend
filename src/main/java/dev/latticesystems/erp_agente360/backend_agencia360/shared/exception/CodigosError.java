@@ -21,6 +21,7 @@ public final class CodigosError {
 	public static final String ASISTENTE_SIN_MANUAL = "ASISTENTE_SIN_MANUAL";
 	public static final String ASISTENTE_LIMITE = "ASISTENTE_LIMITE";
 	public static final String ASISTENTE_NO_DISPONIBLE = "ASISTENTE_NO_DISPONIBLE";
+	public static final String SIN_PARAMETROS_DE_VALUACION = "SIN_PARAMETROS_DE_VALUACION";
 
 	private CodigosError() {
 	}
