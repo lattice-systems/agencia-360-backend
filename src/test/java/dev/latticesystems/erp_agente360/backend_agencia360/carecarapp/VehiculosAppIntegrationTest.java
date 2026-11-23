@@ -177,10 +177,14 @@ class VehiculosAppIntegrationTest extends AbstractIntegrationTest {
 
 	@Test
 	void laFichaTecnicaSeAgrupaEnSeccionesPorModeloYAnio() throws Exception {
-		fichaTecnicaModeloRepository.save(FichaTecnicaModelo.de("Nissan", "Sentra", 2025, "Seguridad", "Bolsas de aire", "6", 2));
-		fichaTecnicaModeloRepository.save(FichaTecnicaModelo.de("Nissan", "Sentra", 2025, "Motor", "Potencia", "149 hp", 2));
-		fichaTecnicaModeloRepository.save(FichaTecnicaModelo.de("nissan", "SENTRA", 2025, "Motor", "Cilindrada", "2.0 L", 1));
-		fichaTecnicaModeloRepository.save(FichaTecnicaModelo.de("Nissan", "Sentra", 2024, "Motor", "Potencia", "otro año", 1));
+		fichaTecnicaModeloRepository
+				.save(FichaTecnicaModelo.de("Nissan", "Sentra", 2025, "Seguridad", "Bolsas de aire", "6", 2));
+		fichaTecnicaModeloRepository
+				.save(FichaTecnicaModelo.de("Nissan", "Sentra", 2025, "Motor", "Potencia", "149 hp", 2));
+		fichaTecnicaModeloRepository
+				.save(FichaTecnicaModelo.de("nissan", "SENTRA", 2025, "Motor", "Cilindrada", "2.0 L", 1));
+		fichaTecnicaModeloRepository
+				.save(FichaTecnicaModelo.de("Nissan", "Sentra", 2024, "Motor", "Potencia", "otro año", 1));
 
 		mockMvc.perform(get("/api/v1/app/vehiculos/{id}/ficha-tecnica", sentraId).header(HttpHeaders.AUTHORIZATION,
 				"Bearer " + tokenDeAna)).andExpect(status().isOk()).andExpect(jsonPath("$.vehiculoId").value(sentraId))
@@ -196,7 +200,8 @@ class VehiculosAppIntegrationTest extends AbstractIntegrationTest {
 	@Test
 	void sinDatosLaFichaTecnicaVieneVaciaYUnVehiculoAjenoEs404() throws Exception {
 		mockMvc.perform(get("/api/v1/app/vehiculos/{id}/ficha-tecnica", sentraId).header(HttpHeaders.AUTHORIZATION,
-				"Bearer " + tokenDeAna)).andExpect(status().isOk()).andExpect(jsonPath("$.secciones.length()").value(0));
+				"Bearer " + tokenDeAna)).andExpect(status().isOk())
+				.andExpect(jsonPath("$.secciones.length()").value(0));
 		mockMvc.perform(get("/api/v1/app/vehiculos/{id}/ficha-tecnica", vehiculoDeBrunoId)
 				.header(HttpHeaders.AUTHORIZATION, "Bearer " + tokenDeAna)).andExpect(status().isNotFound());
 		mockMvc.perform(get("/api/v1/app/vehiculos/{id}/ficha-tecnica", sentraId)).andExpect(status().isUnauthorized());
