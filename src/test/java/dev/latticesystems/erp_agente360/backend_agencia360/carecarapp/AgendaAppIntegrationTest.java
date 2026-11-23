@@ -124,7 +124,93 @@ class AgendaAppIntegrationTest extends AbstractIntegrationTest {
 	@Test
 	void elMismoVehiculoNoReservaDosVecesLaMismaFranja() throws Exception {
 		agendar(tokenDeAna, vehiculosDeAna.getFirst(), 3, diaHabil).andExpect(status().isCreated());
-		agendar(tokenDeAna, vehiculosDeAna.getFirst(), 3, diaHabil).andExpect(status().isConflict());
+		agendar(tokenDeAna, vehiculosDeAna.getFirst(), 3, diaHabil).andExpect(status().isConflict())
+				.andExpect(jsonPath("$.codigo").value("CITA_DUPLICADA"));
+	}
+
+	@Test
+	void elMismoVehiculoNoTieneDosCitasElMismoDia() throws Exception {
+		agendar(tokenDeAna, vehiculosDeAna.getFirst(), 3, diaHabil).andExpect(status().isCreated());
+		agendar(tokenDeAna, vehiculosDeAna.getFirst(), 5, diaHabil).andExpect(status().isConflict())
+				.andExpect(jsonPath("$.codigo").value("CITA_DUPLICADA"))
+				.andExpect(jsonPath("$.path").value("/api/v1/app/citas"));
+		agendar(tokenDeAna, vehiculosDeAna.get(1), 5, diaHabil).andExpect(status().isCreated());
+	}
+
+	@Test
+	void guardaYDevuelveElMotivoOpcional() throws Exception {
+		String conMotivo = """
+				{"vehiculoId": %d, "franjaId": 1, "fecha": "%s", "motivo": "Garantia"}"""
+				.formatted(vehiculosDeAna.getFirst(), diaHabil);
+		mockMvc.perform(post("/api/v1/app/citas").header(HttpHeaders.AUTHORIZATION, "Bearer " + tokenDeAna)
+				.contentType(MediaType.APPLICATION_JSON).content(conMotivo)).andExpect(status().isCreated())
+				.andExpect(jsonPath("$.motivo").value("garantia"));
+		agendar(tokenDeAna, vehiculosDeAna.get(1), 1, diaHabil).andExpect(status().isCreated())
+				.andExpect(jsonPath("$.motivo").doesNotExist());
+
+		mockMvc.perform(get("/api/v1/app/citas").header(HttpHeaders.AUTHORIZATION, "Bearer " + tokenDeAna))
+				.andExpect(jsonPath("$.contenido[0].motivo").value("garantia"));
+
+		String invalido = """
+				{"vehiculoId": %d, "franjaId": 2, "fecha": "%s", "motivo": "paseo"}"""
+				.formatted(vehiculosDeAna.getFirst(), diaHabil);
+		mockMvc.perform(post("/api/v1/app/citas").header(HttpHeaders.AUTHORIZATION, "Bearer " + tokenDeAna)
+				.contentType(MediaType.APPLICATION_JSON).content(invalido)).andExpect(status().isBadRequest())
+				.andExpect(jsonPath("$.codigo").value("DATOS_INVALIDOS"));
+	}
+
+	@Test
+	void reprogramaLiberandoLaFranjaAnteriorYOcupandoLaNueva() throws Exception {
+		for (int i = 0; i < CUPO; i++) {
+			agendar(tokenDeAna, vehiculosDeAna.get(i), 2, diaHabil).andExpect(status().isCreated());
+		}
+		long citaId = JsonPath.<Number>read(agendar(tokenDeBruno, vehiculoDeBruno, 4, diaHabil).andReturn()
+				.getResponse().getContentAsString(), "$.id").longValue();
+
+		reprogramar(tokenDeBruno, citaId, "{\"franjaId\": 2}").andExpect(status().isConflict())
+				.andExpect(jsonPath("$.codigo").value("FRANJA_SIN_CUPO"));
+
+		reprogramar(tokenDeBruno, citaId, "{\"franjaId\": 6}").andExpect(status().isOk())
+				.andExpect(jsonPath("$.id").value(citaId)).andExpect(jsonPath("$.franjaId").value(6))
+				.andExpect(jsonPath("$.estado").value("CONFIRMADA"));
+		disponibilidad(diaHabil, diaHabil).andExpect(jsonPath("$[?(@.franjaId == 4)].cupoDisponible").value(3))
+				.andExpect(jsonPath("$[?(@.franjaId == 6)].cupoDisponible").value(2));
+
+		reprogramar(tokenDeAna, citaId, "{\"franjaId\": 7}").andExpect(status().isNotFound());
+		reprogramar(tokenDeBruno, citaId, "{\"franjaId\": 6}").andExpect(status().isBadRequest());
+		reprogramar(tokenDeBruno, citaId, "{}").andExpect(status().isBadRequest());
+	}
+
+	@Test
+	void reprogramaAOtroDiaConFechaYNoReprogramaLasCanceladas() throws Exception {
+		long citaId = JsonPath.<Number>read(agendar(tokenDeAna, vehiculosDeAna.getFirst(), 1, diaHabil).andReturn()
+				.getResponse().getContentAsString(), "$.id").longValue();
+		LocalDate otroDia = diaHabil.plusDays(1);
+		if (otroDia.getDayOfWeek() == DayOfWeek.SUNDAY) {
+			otroDia = otroDia.plusDays(1);
+		}
+		reprogramar(tokenDeAna, citaId, "{\"franjaId\": 3, \"fecha\": \"%s\"}".formatted(otroDia))
+				.andExpect(status().isOk()).andExpect(jsonPath("$.fecha").value(otroDia.toString()))
+				.andExpect(jsonPath("$.franjaId").value(3));
+
+		agendar(tokenDeAna, vehiculosDeAna.getFirst(), 2, diaHabil).andExpect(status().isCreated());
+		reprogramar(tokenDeAna, citaId, "{\"franjaId\": 8, \"fecha\": \"%s\"}".formatted(diaHabil))
+				.andExpect(status().isConflict()).andExpect(jsonPath("$.codigo").value("CITA_DUPLICADA"));
+
+		mockMvc.perform(post("/api/v1/app/citas/{id}/cancelar", citaId).header(HttpHeaders.AUTHORIZATION,
+				"Bearer " + tokenDeAna)).andExpect(status().isOk());
+		reprogramar(tokenDeAna, citaId, "{\"franjaId\": 4}").andExpect(status().isConflict())
+				.andExpect(jsonPath("$.codigo").value("CITA_NO_REPROGRAMABLE"));
+	}
+
+	@Test
+	void elTicketLlevaElQrFirmadoYSoloLoVeSuDueno() throws Exception {
+		long citaId = JsonPath.<Number>read(agendar(tokenDeAna, vehiculosDeAna.getFirst(), 1, diaHabil).andReturn()
+				.getResponse().getContentAsString(), "$.id").longValue();
+		mockMvc.perform(get("/api/v1/app/citas/{id}/ticket", citaId).header(HttpHeaders.AUTHORIZATION,
+				"Bearer " + tokenDeAna)).andExpect(status().isOk());
+		mockMvc.perform(get("/api/v1/app/citas/{id}/ticket", citaId).header(HttpHeaders.AUTHORIZATION,
+				"Bearer " + tokenDeBruno)).andExpect(status().isNotFound());
 	}
 
 	@Test
@@ -180,6 +266,12 @@ class AgendaAppIntegrationTest extends AbstractIntegrationTest {
 	private ResultActions disponibilidad(LocalDate desde, LocalDate hasta) throws Exception {
 		return mockMvc.perform(get("/api/v1/app/agenda/disponibilidad").param("desde", desde.toString())
 				.param("hasta", hasta.toString()).header(HttpHeaders.AUTHORIZATION, "Bearer " + tokenDeAna));
+	}
+
+	private ResultActions reprogramar(String token, long citaId, String cuerpo) throws Exception {
+		return mockMvc.perform(post("/api/v1/app/citas/{id}/reprogramar", citaId)
+				.header(HttpHeaders.AUTHORIZATION, "Bearer " + token).contentType(MediaType.APPLICATION_JSON)
+				.content(cuerpo));
 	}
 
 	private ResultActions agendar(String token, Long vehiculoId, long franjaId, LocalDate fecha) throws Exception {
