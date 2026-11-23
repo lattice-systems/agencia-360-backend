@@ -61,10 +61,12 @@ public class AgendaAppController {
 	@ResponseStatus(HttpStatus.CREATED)
 	@PreAuthorize("hasRole('CLIENTE_CARECAR')")
 	@Operation(summary = "Agendar una cita de servicio", description = "Descuenta cupo de la franja. Responde 409 "
-			+ "con codigo FRANJA_SIN_CUPO si ya no hay lugar.")
+			+ "con codigo FRANJA_SIN_CUPO si ya no hay lugar o CITA_DUPLICADA si el vehiculo ya tiene cita ese dia. "
+			+ "El motivo es opcional.")
 	public CitaApp agendar(@Valid @RequestBody NuevaCitaRequest request,
 			@AuthenticationPrincipal UsuarioAutenticado cliente) {
-		return agendaAppService.agendar(cliente.id(), request.vehiculoId(), request.franjaId(), request.fecha());
+		return agendaAppService.agendar(cliente.id(), request.vehiculoId(), request.franjaId(), request.fecha(),
+				request.motivo());
 	}
 
 	@PostMapping("/citas/{citaId}/cancelar")
@@ -74,6 +76,16 @@ public class AgendaAppController {
 			+ "CITA_NO_CANCELABLE.")
 	public CitaApp cancelar(@PathVariable Long citaId, @AuthenticationPrincipal UsuarioAutenticado cliente) {
 		return agendaAppService.cancelar(cliente.id(), citaId);
+	}
+
+	@PostMapping("/citas/{citaId}/reprogramar")
+	@PreAuthorize("hasRole('CLIENTE_CARECAR')")
+	@Operation(summary = "Reprogramar una cita sin cancelarla", description = "Libera la franja anterior y ocupa "
+			+ "la nueva en la misma operacion. Solo citas confirmadas que no han empezado. Responde 409 con "
+			+ "FRANJA_SIN_CUPO, CITA_DUPLICADA o CITA_NO_REPROGRAMABLE.")
+	public CitaApp reprogramar(@PathVariable Long citaId, @Valid @RequestBody ReprogramarCitaRequest request,
+			@AuthenticationPrincipal UsuarioAutenticado cliente) {
+		return agendaAppService.reprogramar(cliente.id(), citaId, request.franjaId(), request.fecha());
 	}
 
 	@GetMapping(path = "/citas/{citaId}/ticket", produces = org.springframework.http.MediaType.APPLICATION_PDF_VALUE)
