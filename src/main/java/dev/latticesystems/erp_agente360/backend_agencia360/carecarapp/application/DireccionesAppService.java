@@ -63,8 +63,10 @@ public class DireccionesAppService {
 	public DireccionApp editar(Long clienteId, Long id, String alias, String calle, String colonia, String cp,
 			String ciudad, BigDecimal lat, BigDecimal lng) {
 		DireccionCliente direccion = propia(clienteId, id);
+		if (lat != null && lng != null) {
+			exigirCobertura(lat, lng);
+		}
 		direccion.corregir(alias, calle, colonia, cp, ciudad, lat, lng);
-		exigirCobertura(direccion);
 		return DireccionApp.de(direcciones.save(direccion));
 	}
 
@@ -90,7 +92,12 @@ public class DireccionesAppService {
 	}
 
 	void exigirCobertura(DireccionCliente direccion) {
-		if (!politica.cubre(direccion.getLat(), direccion.getLng())) {
+		exigirCobertura(direccion.getLat(), direccion.getLng());
+	}
+
+	/** Se revisa antes de cambiar la dirección para no dejarla a medias. */
+	private void exigirCobertura(BigDecimal lat, BigDecimal lng) {
+		if (!politica.cubre(lat, lng)) {
 			throw new NoProcesableException("La dirección queda fuera de la zona de cobertura",
 					CodigosError.FUERA_DE_COBERTURA);
 		}
