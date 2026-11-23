@@ -447,7 +447,7 @@ Para ver la cobertura sin tocar el `pom.xml`:
 - `plan/`: objetivos, módulos de Modulith y las 110 historias de backend de la app v2 (el plan maestro y el tablero viven en `carecar-mobile/plan/`).
 - `docs/despliegue-azure-neon.md`: el backend en la nube (Azure Container Apps + Neon), URL pública, variables y secretos, el despliegue automático en cada merge a `main` (workflow `despliegue.yml`), cómo relanzarlo o volver a una imagen anterior y limitaciones.
 - `docs/TEC-1_modelo-datos_v1.md` y `docs/diagramas/agencia360-modelo-datos-v1.drawio`: modelo de datos v1.
-- `docs/api/`: contrato OpenAPI de la app CareCar (YAML y PDF).
+- `docs/api/`: contratos OpenAPI de la app CareCar. `agencia360-api-app-v2.yaml` es el vigente para la app v2 y es compatible con la v1; `agencia360-api-app-v1.yaml` (y su PDF) queda congelado en 1.4.0 como referencia de la app v1 instalada.
 - `docs/datos-de-ejemplo.md`: los datos de ejemplo de TEC-3 y qué demuestra cada uno.
 - `scripts/cargar-datos-de-ejemplo.sh` y `scripts/limpiar-datos.sh`: cargan y limpian esos datos (sección 5.6).
 - `docs/convenciones-commits.md`: formato de commits (Conventional Commits), scopes por módulo y nombres de rama.

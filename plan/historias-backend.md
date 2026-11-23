@@ -458,3 +458,17 @@ Detalle: [`carecar-mobile/plan/modulos/T05-contrato-api-v2.md`](https://github.c
 | V2-T05.09 | Como equipo queremos almacenamiento de archivos para evidencias y documentos | Interfaz de almacenamiento con implementación local y en la nube · URLs firmadas de corta vida | Ricardo |
 | V2-T05.10 | Como equipo queremos datos de ejemplo para cada módulo nuevo | `scripts/cargar-datos-de-ejemplo.sh` extendido | Ricardo |
 | V2-T05.11 | Como equipo queremos desplegar la API en Azure automáticamente en cada merge a `main` | Workflow que construye la imagen en formato OCI, la publica en GHCR y actualiza `ca-agencia360-api` · entrada a Azure por OIDC con una identidad administrada (Contributor solo sobre la app; variables de repositorio, sin secretos) · verificación de `/actuator/health` tras desplegar · ver `docs/despliegue-azure-neon.md` · **Hecha** (`.github/workflows/despliegue.yml`) | Daniel |
+
+#### Diseño de V2-T05.02: contrato v2
+
+**Archivo.** `docs/api/agencia360-api-app-v2.yaml`, versión 2.0.0. Nace como copia de `agencia360-api-app-v1.yaml` en 1.4.0 (todo lo integrado hasta hoy, incluidos los diseños de M02 y M03), con la descripción reescrita para la v2. No agrega ni quita rutas.
+
+**Compatibilidad.** Las rutas siguen bajo `/api/v1/app`: la app v1 instalada sigue funcionando sin cambios. Un cambio incompatible va en una ruta nueva bajo `/api/v2/app` y la anterior sigue respondiendo igual mientras exista la app v1.
+
+**v1 congelado.** `agencia360-api-app-v1.yaml` se queda en 1.4.0 como referencia de la app v1; su descripción lo dice. Desde esta historia, toda ruta o esquema nuevo entra solo en el v2 y sube su versión menor (2.1.0, 2.2.0...).
+
+**Cómo se cambia.** Cada historia escribe sus rutas y esquemas bajo la etiqueta de su módulo antes de programarlas, sin reordenar ni reformatear lo de otros (archivos calientes de `carecar-mobile/plan/trabajo-en-paralelo.md`). Al integrar, se copia el archivo a `carecar-mobile/api/agencia360-api-app-v2.yaml`.
+
+**Copia en la app.** `carecar-mobile/api/agencia360-api-app-v2.yaml` se agrega en un PR del repo de la app. La prueba de contrato de la app sigue leyendo el v1 hasta que V2-T03.06 la cambie al v2.
+
+**Sin código.** No hay migración, entidades, endpoints ni eventos nuevos.

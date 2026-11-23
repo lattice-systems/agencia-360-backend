@@ -29,6 +29,9 @@ info:
     o rutas opcionales; un cambio incompatible va en una ruta nueva (`/api/v2/app`). Todo cambio
     entra por PR con CareCar como revisora.
 
+    Congelado en 1.4.0: es la referencia de la app v1 instalada. Los cambios nuevos entran en
+    `agencia360-api-app-v2.yaml`, que es compatible con este contrato.
+
 servers:
   - url: /api/v1/app
 
