@@ -6,7 +6,7 @@ El backend corre en la nube para que la app móvil (y quien la pruebe) no depend
 | --- | --- | --- |
 | API | Azure Container Apps, grupo `rg-agencia360`, entorno `cae-agencia360-c`, app `ca-agencia360-api`, región **East US 2** | `https://ca-agencia360-api.calmcliff-d0e7fc3b.eastus2.azurecontainerapps.io` · se apaga sin tráfico (0–1 réplicas, 0.75 vCPU / 1.5 GiB) |
 | Base de datos | Neon, organización "Ojeda Luna", proyecto `carecar`, rama `production`, base `neondb`, región `aws-us-east-2` | PostgreSQL 18 · conexión directa con `sslmode=require` |
-| Imagen | `ghcr.io/lattice-systems/agencia-360-backend` (paquete público) | Etiqueta con el commit, p. ej. `980766a-azure` |
+| Imagen | `ghcr.io/lattice-systems/agencia-360-backend` (paquete público) | Etiqueta con el sha corto del commit de `main` (p. ej. `5c3ba08`) y `latest`; la publica el workflow `Despliegue a Azure` |
 | Correo | Gmail (`smtp.gmail.com:587`, STARTTLS) | Contraseña de aplicación en el secreto `smtp-password` |
 
 La app móvil usa `API_BASE_URL=https://ca-agencia360-api.calmcliff-d0e7fc3b.eastus2.azurecontainerapps.io/api/v1/app` (variable de repositorio de `carecar-mobile`, la usa el workflow `Release`).
@@ -15,7 +15,7 @@ La app móvil usa `API_BASE_URL=https://ca-agencia360-api.calmcliff-d0e7fc3b.eas
 
 - **Se apaga sin uso**: entra en la capa gratuita de Container Apps. La primera petición después de un rato tarda 20–40 s en despertar (arranque de Spring Boot); después responde normal.
 - **Conexión directa a Neon, no el pooler**: la API ya tiene su pool (HikariCP) y Flyway usa bloqueos de sesión que el pooler en modo transacción no garantiza.
-- **Sin Redis**: se descartó del proyecto ([ADR 0001](decisiones/0001-descartar-redis.md)); la variable `MANAGEMENT_HEALTH_REDIS_ENABLED` ya no hace falta y se puede quitar de la Container App.
+- **Sin Redis**: se descartó del proyecto ([ADR 0001](decisiones/0001-descartar-redis.md)); la variable `MANAGEMENT_HEALTH_REDIS_ENABLED` se quitó de la Container App tras el primer despliegue automático.
 - **Regiones**: la suscripción "Azure for Students" solo permite `southcentralus`, `canadacentral`, `centralus`, `mexicocentral` y `eastus2`; `eastus2` es la más cercana a Neon `us-east-2`.
 
 ## Variables y secretos
@@ -26,7 +26,7 @@ Perfil `prod`. Los valores sensibles son **secretos de la Container App** (nunca
 | --- | --- |
 | `SPRING_PROFILES_ACTIVE` | `prod` |
 | `DB_URL`, `DB_USERNAME`, `DB_PASSWORD` | secretos `db-url`, `db-username`, `db-password` (Neon) |
-| `JWT_SECRET`, `MANUALES_SECRETO`, `CITAS_QR_SECRETO` | secretos aleatorios |
+| `JWT_SECRET`, `MANUALES_SECRETO`, `CITAS_QR_SECRETO` | secretos aleatorios `jwt-secret`, `manuales-secreto`, `citas-qr-secreto` (este último **pendiente de crear**, ver Limitaciones) |
 | `ADMIN_INICIAL_USUARIO` / `ADMIN_INICIAL_CONTRASENA` | `admin` / secreto `admin-contrasena` |
 | `GERENTE_INICIAL_USUARIO` / `GERENTE_INICIAL_CONTRASENA` | `gerente` / secreto `gerente-contrasena` |
 | `SPRING_MAIL_HOST`, `SPRING_MAIL_PORT`, `SPRING_MAIL_USERNAME` | `smtp.gmail.com`, `587`, la cuenta de Gmail |
@@ -45,23 +45,70 @@ az containerapp update -n ca-agencia360-api -g rg-agencia360 --set-env-vars REIN
 
 Para ver los registros (no hay Log Analytics): `az containerapp logs show -n ca-agencia360-api -g rg-agencia360 --tail 100 --format text`.
 
-## Publicar una versión nueva de la API
+## Despliegue automático (`V2-T05.11`)
 
-Hoy es manual (el despliegue automático es `V2-T05.11`).
+Cada merge a `main` que toque código despliega la API solo, con el workflow [`.github/workflows/despliegue.yml`](../.github/workflows/despliegue.yml) (`Despliegue a Azure`). Los cambios que solo tocan `docs/**`, `plan/**` o archivos `.md` no despliegan. Las pruebas no se repiten: el PR ya pasó CI antes de integrarse.
 
-1. Construir la imagen: `docker build -t ghcr.io/lattice-systems/agencia-360-backend:<sha> .`
-2. **Subirla en formato OCI puro.** El constructor clásico de Docker deja la capa del `.jar` con tipo Docker dentro de un manifiesto OCI, y el entorno *express* de Azure la rechaza (`unsupported MIME type for compression: "application/vnd.docker.image.rootfs.diff.tar.gzip"`). Se exporta y se sube con skopeo:
-   ```bash
-   docker save -o img.tar ghcr.io/lattice-systems/agencia-360-backend:<sha>
-   docker run --rm -v "$PWD:/w:ro" quay.io/skopeo/stable copy --authfile /w/auth.json \
-     --format oci --dest-compress-format gzip \
-     docker-archive:/w/img.tar docker://ghcr.io/lattice-systems/agencia-360-backend:<sha>-azure
-   ```
-   (`auth.json` con un token de GitHub con `write:packages`; bórralo al terminar.)
-3. Actualizar la app: `az containerapp update -n ca-agencia360-api -g rg-agencia360 --image ghcr.io/lattice-systems/agencia-360-backend:<sha>-azure`
-4. Comprobar: `curl https://ca-agencia360-api.calmcliff-d0e7fc3b.eastus2.azurecontainerapps.io/actuator/health` → `{"status":"UP"}`.
+1. **Construye y publica la imagen** con Buildx en `ghcr.io/lattice-systems/agencia-360-backend:<sha corto>` y `:latest`, con el `GITHUB_TOKEN` del workflow (`packages: write`).
+2. **Verifica el formato.** El entorno *express* de Azure rechaza un manifiesto OCI con capas de tipo Docker (`unsupported MIME type for compression: "application/vnd.docker.image.rootfs.diff.tar.gzip"`). Por eso la imagen sale en OCI puro (`oci-mediatypes=true`, `compression=gzip`, `force-compression=true`, sin provenance ni SBOM) y un paso revisa con `docker buildx imagetools inspect --raw` que el manifiesto, la configuración y todas las capas sean OCI; si no, el job falla antes de tocar Azure.
+3. **Entra a Azure por OIDC** (`azure/login`), sin contraseñas ni secretos guardados en GitHub.
+4. **Actualiza la app**: `az containerapp update -n ca-agencia360-api -g rg-agencia360 --image <imagen>` (con `-o none`: el registro de Actions es público y la salida incluiría valores de variables de entorno).
+5. **Comprueba** durante hasta 4 minutos (el arranque en frío tarda ~35 s) que `/actuator/health` responde `UP` y que la revisión activa usa la imagen nueva y está corriendo. Si no, el job falla y muestra el estado de las revisiones.
 
-Flyway aplica las migraciones nuevas al arrancar.
+Solo corre un despliegue a la vez (`concurrency: despliegue-azure`); si se integran varios PR seguidos, el que está en curso termina y luego se despliega el más nuevo.
+
+### Identidad y permisos
+
+| Pieza | Valor |
+| --- | --- |
+| Identidad administrada (asignada por el usuario) | `id-agencia360-deploy`, en `rg-agencia360` |
+| Credencial federada | `github-main`: emisor `https://token.actions.githubusercontent.com`, sujeto `repo:lattice-systems/agencia-360-backend:ref:refs/heads/main`, audiencia `api://AzureADTokenExchange` |
+| Rol | **Contributor solo sobre la Container App** `ca-agencia360-api` (no sobre el grupo ni la suscripción) |
+| Variables del repositorio (no son secretos) | `AZURE_CLIENT_ID` (client id de la identidad), `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID` |
+
+El sujeto de la credencial federada solo acepta tokens de la rama `main` de este repositorio: un PR, otra rama o un fork no pueden entrar a Azure. Si el workflow llegara a usar `environment:`, el sujeto cambia (`repo:…:environment:<nombre>`) y hay que crear otra credencial federada.
+
+Para revisar o recrear la configuración:
+
+```bash
+az identity show -n id-agencia360-deploy -g rg-agencia360 --query clientId -o tsv
+az identity federated-credential list --identity-name id-agencia360-deploy -g rg-agencia360 -o table
+az role assignment list --assignee <clientId> --all -o table
+gh variable list -R lattice-systems/agencia-360-backend
+```
+
+### Relanzarlo a mano
+
+Desde la pestaña **Actions → Despliegue a Azure → Run workflow** (rama `main`), o:
+
+```bash
+gh workflow run despliegue.yml -R lattice-systems/agencia-360-backend --ref main
+gh run watch -R lattice-systems/agencia-360-backend $(gh run list -R lattice-systems/agencia-360-backend -w despliegue.yml -L 1 --json databaseId -q '.[0].databaseId')
+```
+
+Solo funciona con `--ref main` (la credencial federada no acepta otras ramas). Construye y despliega el último commit de `main`.
+
+### Volver a una imagen anterior
+
+Cada despliegue deja en GHCR la imagen etiquetada con su sha corto (ver las versiones en <https://github.com/orgs/lattice-systems/packages/container/package/agencia-360-backend>). Para regresar a una:
+
+```bash
+az containerapp update -n ca-agencia360-api -g rg-agencia360 \
+  --image ghcr.io/lattice-systems/agencia-360-backend:<sha corto anterior> -o none
+curl https://ca-agencia360-api.calmcliff-d0e7fc3b.eastus2.azurecontainerapps.io/actuator/health
+```
+
+Ojo: Flyway no deshace migraciones. Si entre las dos versiones hubo una migración nueva, la imagen vieja arranca con `validate` contra un esquema más nuevo y puede fallar; en ese caso lo correcto es un PR que revierta el cambio (con una migración nueva si hace falta) y dejar que el despliegue automático lo suba. La reversión a mano dura hasta el siguiente merge a `main`, que vuelve a desplegar lo último.
+
+### Publicar a mano (solo si GitHub Actions no está disponible)
+
+```bash
+docker buildx build --provenance=false --sbom=false \
+  --output type=image,name=ghcr.io/lattice-systems/agencia-360-backend:<sha>,push=true,oci-mediatypes=true,compression=gzip,force-compression=true .
+az containerapp update -n ca-agencia360-api -g rg-agencia360 --image ghcr.io/lattice-systems/agencia-360-backend:<sha> -o none
+```
+
+Hace falta `docker login ghcr.io` con un token con `write:packages` (cierra sesión con `docker logout ghcr.io` al terminar). Flyway aplica las migraciones nuevas al arrancar.
 
 ## Datos
 
@@ -73,3 +120,8 @@ La base de Neon tiene los **datos de ejemplo** (`scripts/cargar-datos-de-ejemplo
 - **Usuarios de ejemplo con contraseñas públicas**: aceptable mientras la base solo tenga datos de prueba; antes de datos reales hay que borrarlos (`scripts/limpiar-datos.sh`) y rotar contraseñas.
 - **Sin logs en Azure**: el entorno se creó sin Log Analytics (cuesta por GB). Para depurar: `az containerapp logs show -n ca-agencia360-api -g rg-agencia360 --follow`.
 - **Arranque en frío** de 20–40 s tras inactividad.
+- **`CITAS_QR_SECRETO` aún no está en la Container App**: mientras falte, la API firma el QR del comprobante de cita (V2-M02.11) con el valor de solo-desarrollo. Se crea con un valor aleatorio y una revisión nueva:
+  ```bash
+  az containerapp secret set -n ca-agencia360-api -g rg-agencia360 --secrets citas-qr-secreto="$(openssl rand -base64 48)"
+  az containerapp update -n ca-agencia360-api -g rg-agencia360 --set-env-vars CITAS_QR_SECRETO=secretref:citas-qr-secreto -o none
+  ```

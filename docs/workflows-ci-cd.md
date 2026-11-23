@@ -12,6 +12,7 @@ Todo vive en `.github/workflows/` y corre automáticamente en GitHub. Este docum
 | Dependency Review | `dependency-review.yml` | Solo en PR | Que no se agregue una dependencia con una vulnerabilidad conocida |
 | Trivy | `trivy.yml` | Push/PR a `main` + todos los lunes | CVE en todas las dependencias (no solo las nuevas), secretos y configuración |
 | Publicar paquete | `publish.yml` | Al publicar un Release en GitHub | Compila, prueba y sube el `.jar` a GitHub Packages |
+| Despliegue a Azure | `despliegue.yml` | Push a `main` que toque código + manual | Publica la imagen en GHCR, actualiza la Container App y verifica `/actuator/health` |
 
 ## 1. CI: build y pruebas (`ci.yml`)
 
@@ -71,12 +72,16 @@ Se publican tres artefactos:
 
 El paquete publicado queda visible en `https://github.com/lattice-systems/agencia-360-backend/packages`. Para consumirlo desde otro proyecto Maven hace falta autenticarse contra GitHub Packages con un token que tenga permiso `read:packages` (esto no aplica todavía porque nada más lo consume).
 
+## 5. Despliegue a Azure (`despliegue.yml`)
+
+En cada push a `main` (es decir, al integrar un PR) que no sea solo de `docs/**`, `plan/**` o `.md`, y también a mano desde Actions: construye la imagen Docker en formato OCI puro, la publica en GHCR con el sha corto del commit y `latest`, entra a Azure por OIDC con la identidad `id-agencia360-deploy` (sin secretos: usa las variables de repositorio `AZURE_CLIENT_ID`, `AZURE_TENANT_ID` y `AZURE_SUBSCRIPTION_ID`), actualiza `ca-agencia360-api` y espera a que `/actuator/health` responda `UP` con la imagen nueva. Si algo falla, el job queda en rojo. No repite las pruebas: el PR ya pasó CI. Detalle, permisos, cómo relanzarlo y cómo volver a una imagen anterior en [`despliegue-azure-neon.md`](despliegue-azure-neon.md).
+
 ## Dónde ver los resultados
 
 - **Pestaña "Actions"** del repo: corridas de CI y Lint, con logs completos.
 - **Pestaña "Security" → "Code scanning"**: alertas de CodeQL.
 - **Comentario automático en el PR**: resumen de Dependency Review.
-- **Pestaña "Packages"** (barra lateral del repo): versiones publicadas del `.jar`.
+- **Pestaña "Packages"** (barra lateral del repo): versiones publicadas del `.jar` y de la imagen Docker.
 
 ## Pendiente / recomendación para el equipo
 
