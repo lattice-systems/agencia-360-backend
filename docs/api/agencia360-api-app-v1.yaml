@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: Agencia360 · API para la app CareCar
-  version: 1.4.0
+  version: 1.5.0
   description: |
     Contrato de API que Agencia360 expone a la app CareCar (TEC-1).
 
@@ -48,6 +48,10 @@ tags:
     description: APP-4.1 (fuera del MVP; incluido porque TEC-1 lo pide en el contrato)
   - name: Toma a cuenta
     description: V2-M03.04, V2-M03.06 y V2-M03.07
+  - name: Asistencia
+    description: V2-M11.01
+  - name: Recolección
+    description: V2-M17.01 y V2-M17.02
 
 security:
   - bearerAuth: []
@@ -695,6 +699,70 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Problema'
+
+  /asistencia:
+    post:
+      tags: [Asistencia]
+      summary: Pedir ayuda con mi ubicación
+      description: |
+        V2-M11.01 · Crea una solicitud de asistencia (SOS) en estado `recibida`. La ubicación
+        es opcional pero va completa: `lat` y `lng` juntas o ninguna. Cada cliente tiene a lo
+        más una solicitud abierta (`recibida` o `en_camino`).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NuevaSolicitudAsistencia'
+      responses:
+        '201':
+          description: Solicitud recibida
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SolicitudAsistencia'
+        '400':
+          $ref: '#/components/responses/DatosInvalidos'
+        '401':
+          $ref: '#/components/responses/NoAutenticado'
+        '403':
+          $ref: '#/components/responses/CuentaDesactivada'
+        '404':
+          $ref: '#/components/responses/NoEncontrado'
+        '409':
+          description: El cliente ya tiene una solicitud abierta (`codigo` SOLICITUD_ABIERTA)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Problema'
+    get:
+      tags: [Asistencia]
+      summary: Mi solicitud de asistencia abierta
+      description: |
+        V2-M11.01 · Con `activa=true` devuelve la solicitud `recibida` o `en_camino` del
+        cliente, o 204 sin cuerpo si no tiene ninguna. Cualquier otro valor de `activa` es 400.
+      parameters:
+        - name: activa
+          in: query
+          required: true
+          schema:
+            type: boolean
+            enum: [true]
+      responses:
+        '200':
+          description: La solicitud abierta
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SolicitudAsistencia'
+        '204':
+          description: No hay solicitud abierta
+        '400':
+          $ref: '#/components/responses/DatosInvalidos'
+        '401':
+          $ref: '#/components/responses/NoAutenticado'
+        '403':
+          $ref: '#/components/responses/CuentaDesactivada'
 
   /catalogo:
     get:
@@ -1511,6 +1579,67 @@ components:
           format: int64
         totalPaginas:
           type: integer
+
+    TipoAsistencia:
+      type: string
+      description: Se acepta sin importar mayúsculas y siempre se devuelve en minúsculas.
+      enum: [llanta, bateria, choque, sin_gasolina, otro]
+
+    EstadoAsistencia:
+      type: string
+      enum: [recibida, en_camino, atendida, cancelada]
+
+    NuevaSolicitudAsistencia:
+      type: object
+      required: [vehiculoId, tipo]
+      properties:
+        vehiculoId:
+          type: integer
+          format: int64
+        tipo:
+          $ref: '#/components/schemas/TipoAsistencia'
+        lat:
+          type: number
+          minimum: -90
+          maximum: 90
+          nullable: true
+        lng:
+          type: number
+          minimum: -180
+          maximum: 180
+          nullable: true
+        comentario:
+          type: string
+          maxLength: 500
+          nullable: true
+
+    SolicitudAsistencia:
+      type: object
+      required: [id, vehiculoId, tipo, estado, creadaEn]
+      properties:
+        id:
+          type: integer
+          format: int64
+        vehiculoId:
+          type: integer
+          format: int64
+        tipo:
+          $ref: '#/components/schemas/TipoAsistencia'
+        lat:
+          type: number
+          nullable: true
+        lng:
+          type: number
+          nullable: true
+        comentario:
+          type: string
+          nullable: true
+        estado:
+          $ref: '#/components/schemas/EstadoAsistencia'
+        creadaEn:
+          type: string
+          format: date-time
+          description: En UTC
 
     Problema:
       type: object
