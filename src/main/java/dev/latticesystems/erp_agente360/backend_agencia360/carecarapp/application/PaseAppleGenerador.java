@@ -87,8 +87,8 @@ public class PaseAppleGenerador {
 		pase.put("foregroundColor", "rgb(255, 255, 255)");
 		pase.put("relevantDate", datos.inicio().format(ISO));
 		pase.put("expirationDate", datos.fin().format(ISO));
-		pase.put("barcodes", List.of(Map.of("format", "PKBarcodeFormatQR", "message", datos.codigoQr(),
-				"messageEncoding", "iso-8859-1")));
+		pase.put("barcodes", List.of(
+				Map.of("format", "PKBarcodeFormatQR", "message", datos.codigoQr(), "messageEncoding", "iso-8859-1")));
 		List<Map<String, String>> secundarios = new ArrayList<>();
 		if (datos.vehiculoNombre() != null) {
 			secundarios.add(campo("vehiculo", "Vehículo", datos.vehiculoNombre()));
@@ -128,8 +128,7 @@ public class PaseAppleGenerador {
 			org.bouncycastle.cms.CMSException, org.bouncycastle.operator.OperatorCreationException {
 		char[] clave = configuracion.appleCertPassword().toCharArray();
 		KeyStore almacen = KeyStore.getInstance("PKCS12");
-		almacen.load(new ByteArrayInputStream(Base64.getDecoder().decode(configuracion.appleCertP12Base64())),
-				clave);
+		almacen.load(new ByteArrayInputStream(Base64.getDecoder().decode(configuracion.appleCertP12Base64())), clave);
 		String alias = null;
 		for (Enumeration<String> alias0 = almacen.aliases(); alias0.hasMoreElements() && alias == null;) {
 			String candidato = alias0.nextElement();
@@ -147,10 +146,9 @@ public class PaseAppleGenerador {
 
 		BouncyCastleProvider proveedor = new BouncyCastleProvider();
 		CMSSignedDataGenerator generador = new CMSSignedDataGenerator();
-		generador.addSignerInfoGenerator(
-				new JcaSignerInfoGeneratorBuilder(new JcaDigestCalculatorProviderBuilder().setProvider(proveedor).build())
-						.build(new JcaContentSignerBuilder("SHA256withRSA").setProvider(proveedor).build(llave),
-								firmante));
+		generador.addSignerInfoGenerator(new JcaSignerInfoGeneratorBuilder(
+				new JcaDigestCalculatorProviderBuilder().setProvider(proveedor).build())
+				.build(new JcaContentSignerBuilder("SHA256withRSA").setProvider(proveedor).build(llave), firmante));
 		generador.addCertificates(new JcaCertStore(List.of(firmante, wwdr)));
 		CMSSignedData firmado = generador.generate(new CMSProcessableByteArray(manifiesto), false);
 		return firmado.getEncoded();
