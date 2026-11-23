@@ -63,6 +63,7 @@ Estado: en curso en la rama `feat/v2-juan-pablo-citas-b`. Los nombres de campos 
 
 - `GET /api/v1/app/citas/{citaId}/ticket` sigue igual y agrega al PDF un QR con el texto `CARECAR-CITA:<id>.<firma>`; `firma` es HMAC-SHA256 en base64url de `cita:<id>` con la llave `app.citas.qr-secreto`.
 - La llave sale de la variable de entorno `CITAS_QR_SECRETO` (al menos 32 caracteres; en el repo solo hay un valor de solo-desarrollo, igual que `MANUALES_SECRETO`, y el arranque falla si es más corta). Hay que sobrescribirla en cualquier ambiente real.
+- `GET /api/v1/app/citas/{citaId}/comprobante` (alineado con la app) responde JSON `{ citaId, codigo, fecha, horaInicio, horaFin, vehiculoNombre }` donde `codigo` es exactamente el texto del QR del PDF. Solo del dueño (404 si no); una cita cancelada responde 409 `CITA_CANCELADA` (formato `Problema`). `vehiculoNombre` puede faltar.
 - Clase `FirmaCitas` (`firmar` y `esValida`, con comparación en tiempo constante) para que recepción y el pase de Wallet (V2-M25.03) verifiquen el mismo QR. El QR se dibuja con `com.google.zxing:core` (OpenPDF no trae generador de QR).
 
 **V2-M02.04 · Ficha técnica del vehículo**
