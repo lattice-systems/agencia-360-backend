@@ -89,6 +89,65 @@ Las dos se borran en cascada con su modelo, aunque un modelo se retira (`activo 
 
 **Mientras no se implemente.** La app trabaja contra el contrato y `mock_api` de `carecar-mobile` (dependencia simulable).
 
+#### Diseño de V2-M03.04, V2-M03.06 y V2-M03.07: estimación de toma a cuenta
+
+Las tres historias comparten tablas y endpoint, así que se diseñan juntas. V2-M03.05 (la diferencia a pagar) no necesita backend: la app resta el rango estimado del `precioDestino` que ya viene en la respuesta.
+
+**Endpoints.** Rol `CLIENTE_CARECAR`, contrato 1.4.0 (`docs/api/agencia360-api-app-v1.yaml`).
+
+| Método | Ruta | Historia | Uso |
+| --- | --- | --- | --- |
+| POST | `/api/v1/app/toma-a-cuenta/estimaciones` | M03.04 y M03.06 | Calcula el rango con los parámetros de la agencia y lo guarda. |
+| GET | `/api/v1/app/toma-a-cuenta/estimaciones` | M03.07 | Lista las estimaciones del cliente, la más reciente primero, con `pagina` y `tamano`. |
+
+Calcular y guardar es una sola operación: toda estimación queda en el historial del cliente, porque es un prospecto suave para la agencia y porque así la app no tiene un paso de "guardar" que se pueda olvidar. La respuesta del POST es la misma `EstimacionTomaCuenta` que devuelve el GET.
+
+**Petición.** `km` y `estado` (`EXCELENTE`, `BUENO`, `REGULAR` o `MALO`) son obligatorios. El auto se indica con `vehiculoId` (de ahí salen marca, modelo y año) o con `marca`, `modelo` y `anio`, nunca con las dos formas ni con ninguna. `modeloCatalogoId` es opcional y dice contra qué modelo nuevo se estima.
+
+| Código | Cuándo |
+| --- | --- |
+| 201 | Estimación calculada y guardada. |
+| 400 | Faltan datos, `km` fuera de 0 a 999999, año menor a 1900 o mayor al actual, estado desconocido, o se mandó el auto de las dos formas o de ninguna (`DATOS_INVALIDOS`). |
+| 401 | Sin token o vencido. |
+| 403 | Cuenta desactivada (`CUENTA_DESACTIVADA`). |
+| 404 | El `vehiculoId` no existe o es de otro cliente, o el `modeloCatalogoId` no existe o está retirado. |
+| 422 | No hay parámetros activos para esa marca, modelo y año (`SIN_PARAMETROS_DE_VALUACION`). |
+
+Un 422 no es un fallo de la app ni del cliente: la agencia aún no valuó ese auto. La app lo explica y ofrece pedir una valuación formal (V2-M26.01). No se inventa un valor por omisión.
+
+**Tablas nuevas** (migración `V25__crear_tablas_de_toma_a_cuenta.sql`, el siguiente número libre después de V24 de V2-M03.02):
+
+| Tabla | Campos | Notas |
+| --- | --- | --- |
+| `parametro_toma_cuenta` | id, marca (40), modelo (80), anio, valor_base (numeric 12,2), depreciacion_anual (numeric 5,4), factor_km (numeric 5,4), factor_estado (numeric 5,4), activo, created_at, updated_at | Es la tabla `parametro_toma_cuenta` de la ficha, con `marca` agregada porque el modelo solo no identifica el auto. Índice único en (lower(marca), lower(modelo), anio). Checks: `valor_base >= 0`, `depreciacion_anual` entre 0 y 0.5, `factor_km` entre 0 y 0.2, `factor_estado` entre 0 y 0.3. |
+| `estimacion_toma_cuenta` | id, cliente_id (FK), vehiculo_cliente_id (FK, nulo), modelo_catalogo_id (FK, nulo), marca, modelo, anio, km, estado, minimo (numeric 12,2), maximo (numeric 12,2), parametro_toma_cuenta_id (FK), supuestos (texto JSON), modelo_destino (120, nulo), precio_destino (numeric 12,2, nulo), created_at, updated_at | Es la tabla `estimacion_toma_cuenta` de la ficha, con campos agregados. `created_at` es la `creada_en` de la ficha. Guarda marca, modelo y año aunque haya vehículo, para que borrar o editar el vehículo no cambie la estimación. `supuestos`, `modelo_destino` y `precio_destino` congelan lo que se usó ese día. Índice en (cliente_id, created_at desc). Checks: `km >= 0`, `minimo <= maximo`, `estado` en los cuatro valores. |
+
+Un parámetro que la agencia deja de usar se desactiva (`activo = false`), no se borra, porque las estimaciones guardadas lo referencian.
+
+**La fórmula** (V2-M03.06). Vive en `CalculadoraTomaCuenta`, una clase de `domain` sin dependencias de Spring ni de la base, para probarla con números exactos. Con el parámetro activo de la marca, modelo y año del auto:
+
+1. `edad = max(0, anioActual - anio)`.
+2. `base = valor_base * (1 - depreciacion_anual) ^ edad`.
+3. `kmEsperado = edad * kmAnuales`, con `kmAnuales` en 15,000 por omisión (`carecarapp.toma-cuenta.km-anuales`).
+4. `ajusteKm = 1 - factor_km * (km - kmEsperado) / 10000`, limitado a entre 0.5 y 1.2. Menos kilómetros de los esperados lo sube y más lo baja.
+5. `ajusteEstado = 1 - factor_estado * pasos`, con pasos `EXCELENTE = -1`, `BUENO = 0`, `REGULAR = 1` y `MALO = 2`.
+6. `estimado = base * ajusteKm * ajusteEstado`.
+7. `minimo = estimado * (1 - margen)` y `maximo = estimado * (1 + margen)`, con `margen` en 0.08 por omisión (`carecarapp.toma-cuenta.margen`). Ambos se redondean a la centena más cercana y nunca bajan de 0.
+
+`valor_base` es el valor de referencia de ese modelo y año tal como sale de agencia, no un precio de lista. Las dos constantes (`km-anuales` y `margen`) son propiedades de la aplicación y no columnas, porque hoy no hay una pantalla donde la agencia las edite. Si se necesitan por modelo, se agregan columnas con otra migración sin romper el contrato, porque la respuesta ya expone `supuestos`.
+
+**Alta y mantenimiento de parámetros.** Queda fuera de esta historia: el ERP y el CRM web están congelados. Mientras tanto se capturan por SQL y la migración no trae filas: los valores reales los entrega el PO, y sin ellos la app responde con el caso 422.
+
+**Capas en `carecarapp`.** `domain`: entidades `ParametroTomaCuenta` y `EstimacionTomaCuenta`, el enum `EstadoVehiculo` y `CalculadoraTomaCuenta`. `infrastructure`: sus repositorios, con `findByActivoTrueAndMarcaIgnoreCaseAndModeloIgnoreCaseAndAnio` y la consulta paginada por cliente. `application`: `TomaCuentaService.estimar(clienteId, solicitud)` y `TomaCuentaService.listar(clienteId, pagina)`, que lanzan `RecursoNoEncontradoException` (404) y la nueva `SinParametrosDeValuacionException` (422). `web`: `TomaCuentaController`. El cliente sale del token, nunca del cuerpo.
+
+**Seguridad.** Una estimación ajena no se puede leer: el listado filtra siempre por el cliente del token y un `vehiculoId` de otro cliente responde 404. Los datos del auto son del cliente, así que no van a los registros de la aplicación.
+
+**Eventos.** No publica ni escucha ninguno. Cuando exista V2-M26.01, la valuación formal leerá la estimación por su id.
+
+**Pruebas pedidas.** De la fórmula, con casos de números exactos: auto nuevo, auto con los kilómetros esperados, con el doble, con cero, cada estado, el límite de 0.5 y de 1.2 del ajuste de kilómetros, el redondeo a 100 y el rango que no baja de 0. Del servicio y del controlador: 201 con vehículo, 201 con auto capturado, 201 con y sin modelo destino, 400 con las dos formas del auto y con ninguna, 400 con km o año fuera de rango, 404 con vehículo ajeno y con modelo retirado, 422 sin parámetros o con el parámetro desactivado, 401 y 403, y que el listado salga ordenado, paginado y solo del cliente. Una estimación guardada no cambia aunque después cambie el parámetro.
+
+**Mientras no se implemente.** La app trabaja contra el contrato y `mock_api` de `carecar-mobile` (dependencia simulable). El mock aplica la misma fórmula con un puñado de parámetros de ejemplo.
+
 ### M04 · Taller en vivo: estado de la orden y aprobación de trabajos — H3 — módulo `servicio`
 
 Detalle: [`carecar-mobile/plan/modulos/M04-taller-en-vivo.md`](https://github.com/lattice-systems/carecar-mobile/blob/main/plan/modulos/M04-taller-en-vivo.md)
