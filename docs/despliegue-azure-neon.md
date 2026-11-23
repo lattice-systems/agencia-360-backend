@@ -37,7 +37,7 @@ Perfil `prod`. Los valores sensibles son **secretos de la Container App** (nunca
 | `WALLET_APPLE_CERT_P12_BASE64`, `WALLET_APPLE_CERT_PASSWORD`, `WALLET_APPLE_WWDR_PEM_BASE64` | secretos `wallet-apple-cert-p12`, `wallet-apple-cert-password`, `wallet-apple-wwdr-pem` (base64 de los archivos) |
 | `WALLET_GOOGLE_ISSUER_ID` | ID de emisor de Google Wallet (opcional) |
 | `WALLET_GOOGLE_SERVICE_ACCOUNT_JSON_BASE64` | secreto `wallet-google-service-account` (base64 del JSON de la cuenta de servicio) |
-| `MANUALES_DIRECTORIO` | `/home/api/manuales` |
+| `MANUALES_ALMACEN` | sin definir (por omisión `base`: los PDF de los manuales van a la tabla `archivo_manual` de Neon). `MANUALES_DIRECTORIO` solo se usa con `MANUALES_ALMACEN=local` |
 | `GEMINI_API_KEY` | secreto `gemini-api-key`: llave del proyecto de Google AI Studio del equipo en plan **Free, sin facturación** (costo cero; ver ADR [0007](https://github.com/lattice-systems/carecar-mobile/blob/main/docs/decisiones/0007-asistente-ia.md)). La usará el asistente (M24); nunca vincular facturación a ese proyecto |
 | `JAVA_TOOL_OPTIONS` | `-XX:MaxRAMPercentage=75` |
 
@@ -121,7 +121,7 @@ La base de Neon tiene los **datos de ejemplo** (`scripts/cargar-datos-de-ejemplo
 
 ## Limitaciones conocidas
 
-- **Manuales PDF**: se guardan en el disco del contenedor (`MANUALES_DIRECTORIO`), que se borra en cada reinicio; la app usa su respaldo incluido. Lo resuelve el almacenamiento de archivos de `V2-T05.09`.
+- **Manuales PDF**: se guardan en la base (tabla `archivo_manual`), porque el disco del contenedor se borra en cada revisión. Cabe en el plan gratis de Neon mientras sean pocos manuales; si crecen, el almacenamiento de archivos de `V2-T05.09` los mueve a otro lado sin cambiar el contrato. Para reponerlos: `API=<url> GERENTE_USUARIO=… GERENTE_CONTRASENA=… scripts/subir-manuales.sh`.
 - **Usuarios de ejemplo con contraseñas públicas**: aceptable mientras la base solo tenga datos de prueba; antes de datos reales hay que borrarlos (`scripts/limpiar-datos.sh`) y rotar contraseñas.
 - **Sin logs en Azure**: el entorno se creó sin Log Analytics (cuesta por GB). Para depurar: `az containerapp logs show -n ca-agencia360-api -g rg-agencia360 --follow`.
 - **Arranque en frío** de 20–40 s tras inactividad.

@@ -371,6 +371,8 @@ Solo necesita `bash` y `curl`; en Windows, corre en Git Bash. Para apuntar a otr
 
 Para subir el PDF real del manual del March en lugar del de ejemplo: `MANUAL_MARCH_PDF=/ruta/al/manual.pdf ./scripts/cargar-datos-de-ejemplo.sh`.
 
+Para reponer solo los manuales (por ejemplo en Azure) sin tocar los demás datos: `API=<url> GERENTE_USUARIO=gerente GERENTE_CONTRASENA=... ./scripts/subir-manuales.sh`. Los PDF se guardan en la base (tabla `archivo_manual`), así que sobreviven a los reinicios del contenedor.
+
 **Verificar que se cargaron**
 
 | Dónde | Con quién | Qué debe verse |
