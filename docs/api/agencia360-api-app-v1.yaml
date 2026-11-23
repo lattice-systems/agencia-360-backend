@@ -445,7 +445,10 @@ paths:
     post:
       tags: [Agenda]
       summary: Agendar una cita de servicio
-      description: APP-3.3 · La cita descuenta capacidad de la franja y no se puede reservar dos veces.
+      description: |
+        APP-3.3 · La cita descuenta capacidad de la franja y no se puede reservar dos veces.
+        V2-M17.02 · Con `recoleccion.direccionId` crea también los traslados de recoger y entregar
+        en la misma transacción: si algo falla no queda ni cita ni traslados.
       requestBody:
         required: true
         content:
@@ -475,6 +478,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Problema'
+        '422':
+          $ref: '#/components/responses/FueraDeCobertura'
 
   /citas/{citaId}/cancelar:
     post:
@@ -1346,6 +1351,18 @@ components:
           format: date
         motivo:
           $ref: '#/components/schemas/MotivoCita'
+        recoleccion:
+          $ref: '#/components/schemas/NuevaRecoleccion'
+
+    NuevaRecoleccion:
+      type: object
+      nullable: true
+      description: V2-M17.02 · Pide que recojan y entreguen el vehículo en una dirección guardada.
+      required: [direccionId]
+      properties:
+        direccionId:
+          type: integer
+          format: int64
 
     MotivoCita:
       type: string
@@ -1434,6 +1451,12 @@ components:
           $ref: '#/components/schemas/EstadoCita'
         motivo:
           $ref: '#/components/schemas/MotivoCita'
+        recoleccion:
+          allOf:
+            - $ref: '#/components/schemas/RecoleccionCita'
+          nullable: true
+          description: |
+            V2-M17.02 · Solo viene al agendar con `recoleccion`; en el resto de las consultas es nula.
 
     PaginaCitas:
       type: object
@@ -1942,6 +1965,9 @@ components:
             - CITA_NO_REPROGRAMABLE
             - CITA_CANCELADA
             - WALLET_NO_CONFIGURADO
+            - SOLICITUD_ABIERTA
+            - FUERA_DE_COBERTURA
+            - DIRECCION_EN_USO
           example: FRANJA_SIN_CUPO
         path:
           type: string
