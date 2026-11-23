@@ -73,6 +73,23 @@ Estado: en curso en la rama `feat/v2-juan-pablo-citas-b`. Los nombres de campos 
 - La carga de datos de la ficha (captura por el equipo de producto) queda fuera de esta historia: se agrega después como historia de ERP o script.
 - Eventos: ninguno publicado ni escuchado en estas cuatro historias.
 
+#### Diseño técnico — V2-M02.05 y V2-M02.06 (Ricardo)
+
+**V2-M02.05 · Historial con filtro por año**
+
+- `GET /api/v1/app/vehiculos/{vehiculoId}/servicios?anio=&pagina=&tamano=`: `anio` opcional (1900 a 2100, si no, 400 `DATOS_INVALIDOS`) filtra por el año de `orden_servicio.fecha`. Cada orden suma `fechaCierre` (hora de la agencia, sin zona, `yyyy-MM-ddTHH:mm:ss`; nula si sigue abierta) a `id`, `fecha`, `estatus` y `total`. La paginación no cambia: la app pide la siguiente página al llegar al final.
+- `GET /api/v1/app/vehiculos/{vehiculoId}/servicios/anios` → `[2026, 2025]`: años con servicios, del más reciente al más antiguo, para el filtro.
+- 404 si el vehículo no es del cliente. Sin migración: lee `orden_servicio` (V2-T05.06).
+- `servicio.HistorialDeServicios` suma `deVehiculo(vehiculoId, anio, pagina)`, `aniosDeVehiculo` y `fechaCierre` en `ServicioDelVehiculo`.
+
+**V2-M02.06 · Ticket en la app**
+
+- `GET /api/v1/app/servicios/{servicioId}` → `ServicioDetalle`: `manoDeObra` y `refacciones` (cada renglón con `concepto`, `cantidad`, `precio` e `importe` = cantidad × precio), `totalManoDeObra`, `totalRefacciones`, `subtotal`, `iva` y `total` = mano de obra + refacciones. 404 si el servicio no existe o es de un vehículo ajeno.
+- El PDF sigue en `GET /servicios/{servicioId}/ticket`; la app lo descarga para compartirlo.
+- `servicio.HistorialDeServicios.detalle(servicioId)` lee `orden_mano_de_obra` y `orden_refaccion`.
+
+**Pruebas.** `ServiciosAppIntegrationTest`: filtro por año, años con servicios, año fuera de rango 400, vehículo ajeno 404, ticket con mano de obra y refacciones que suman el total y ticket ajeno 404.
+
 ### M03 · Catálogo y calculadora de toma a cuenta — H2 — módulo `carecarapp`
 
 Detalle: [`carecar-mobile/plan/modulos/M03-catalogo-y-calculadora.md`](https://github.com/lattice-systems/carecar-mobile/blob/main/plan/modulos/M03-catalogo-y-calculadora.md)
