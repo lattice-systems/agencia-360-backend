@@ -248,6 +248,27 @@ public class AgendaAppService {
 	}
 
 	/**
+	 * Código del QR de la cita y sus datos, para que la app lo dibuje (V2-M02.11).
+	 *
+	 * @throws RecursoNoEncontradoException
+	 *             si la cita no existe o no es del cliente (404)
+	 * @throws ConflictoException
+	 *             con {@code CITA_CANCELADA} si la cita está cancelada (409)
+	 */
+	@Transactional(readOnly = true)
+	public ComprobanteCitaApp comprobante(Long clienteId, Long citaId) {
+		Cita cita = citaRepository.findByIdAndClienteId(citaId, clienteId)
+				.orElseThrow(() -> new RecursoNoEncontradoException("No existe la cita " + citaId));
+		if (cita.getEstado() == EstadoCita.CANCELADA) {
+			throw new ConflictoException("La cita está cancelada", CodigosError.CITA_CANCELADA);
+		}
+		String nombre = vehiculos.buscarPorId(cita.getVehiculoClienteId())
+				.filter(propio -> propio.propietario().id().equals(clienteId)).map(CitaApp::describir).orElse(null);
+		return new ComprobanteCitaApp(cita.getId(), firmaCitas.contenidoQr(cita.getId()), cita.getFecha(),
+				cita.getHoraInicio(), cita.getHoraFin(), nombre);
+	}
+
+	/**
 	 * PDF del comprobante de la cita, con el QR firmado para recepción (V2-M02.11).
 	 *
 	 * @throws RecursoNoEncontradoException
