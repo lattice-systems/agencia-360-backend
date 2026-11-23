@@ -1,6 +1,8 @@
 package dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.application;
 
+import dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.domain.FichaTecnicaModelo;
 import dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.domain.Manual;
+import dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.infrastructure.FichaTecnicaModeloRepository;
 import dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.infrastructure.ManualRepository;
 import dev.latticesystems.erp_agente360.backend_agencia360.clientes.VehiculosDeClientes;
 import dev.latticesystems.erp_agente360.backend_agencia360.clientes.VehiculosDeClientes.VehiculoDeCliente;
@@ -19,11 +21,33 @@ public class VehiculosAppService {
 	private final VehiculosDeClientes vehiculos;
 	private final ManualRepository manualRepository;
 	private final FirmaManuales firma;
+	private final FichaTecnicaModeloRepository fichaTecnicaRepository;
 
-	public VehiculosAppService(VehiculosDeClientes vehiculos, ManualRepository manualRepository, FirmaManuales firma) {
+	public VehiculosAppService(VehiculosDeClientes vehiculos, ManualRepository manualRepository, FirmaManuales firma,
+			FichaTecnicaModeloRepository fichaTecnicaRepository) {
 		this.vehiculos = vehiculos;
 		this.manualRepository = manualRepository;
 		this.firma = firma;
+		this.fichaTecnicaRepository = fichaTecnicaRepository;
+	}
+
+	/**
+	 * La ficha técnica del modelo y año del vehículo (V2-M02.04), en secciones.
+	 * Sin marca se busca solo por modelo y año; sin datos, las secciones vienen
+	 * vacías.
+	 *
+	 * @throws RecursoNoEncontradoException
+	 *             si el vehículo no existe o no es del cliente (404)
+	 */
+	@Transactional(readOnly = true)
+	public FichaTecnicaApp fichaTecnica(Long clienteId, Long vehiculoId) {
+		VehiculoDeCliente vehiculo = vehiculos.buscarPorId(vehiculoId)
+				.filter(encontrado -> encontrado.propietario().id().equals(clienteId))
+				.orElseThrow(() -> new RecursoNoEncontradoException("No existe el vehículo " + vehiculoId));
+		List<FichaTecnicaModelo> filas = vehiculo.marca() == null
+				? fichaTecnicaRepository.sinMarca(vehiculo.modelo(), vehiculo.anio())
+				: fichaTecnicaRepository.buscar(vehiculo.marca(), vehiculo.modelo(), vehiculo.anio());
+		return FichaTecnicaApp.de(vehiculo, filas);
 	}
 
 	public List<VehiculoApp> listar(Long clienteId) {
