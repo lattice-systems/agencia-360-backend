@@ -2,6 +2,7 @@ package dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.applicati
 
 import dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.domain.Cita;
 import dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.domain.EstadoCita;
+import dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.domain.FranjaHorario;
 import dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.domain.MotivoCita;
 import dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.infrastructure.CitaRepository;
 import dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.infrastructure.FranjaOcupada;
@@ -11,6 +12,7 @@ import dev.latticesystems.erp_agente360.backend_agencia360.shared.exception.Codi
 import dev.latticesystems.erp_agente360.backend_agencia360.shared.exception.ConflictoException;
 import dev.latticesystems.erp_agente360.backend_agencia360.shared.exception.RecursoNoEncontradoException;
 import java.time.Clock;
+import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
@@ -26,10 +28,10 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * Agenda de citas de servicio de la app (APP-3.3). Las franjas salen del
- * {@link HorarioTaller}; el cupo de cada una es la capacidad menos sus citas
- * confirmadas. Dos citas a la vez no pasan del cupo: agendar bloquea la franja
- * hasta terminar la transacción.
+ * Agenda de citas de servicio de la app (APP-3.3). Las franjas salen de la
+ * tabla {@code franja_horario} (V2-T05.07); el cupo de cada una es su capacidad
+ * menos sus citas confirmadas en esa fecha. Dos citas a la vez no pasan del
+ * cupo: agendar bloquea la franja hasta terminar la transacción.
  */
 @Service
 public class AgendaAppService {
@@ -44,6 +46,7 @@ public class AgendaAppService {
 	/** Id que ninguna cita tiene: para no excluir ninguna al revisar duplicadas. */
 	private static final Long SIN_CITA = -1L;
 	private static final LocalDate SIN_FIN = LocalDate.of(9999, 12, 31);
+	private static final long FRANJAS_POR_DIA_EN_BLOQUEO = 1_000_000L;
 
 	private final HorarioTaller horario;
 	private final CitaRepository citaRepository;
@@ -90,19 +93,17 @@ public class AgendaAppService {
 		LocalDate limite = ahora.toLocalDate().plusDays(horario.diasDeAnticipacion());
 		Map<String, Long> ocupadas = citaRepository.ocupadas(EstadoCita.CONFIRMADA, desde, hasta).stream()
 				.collect(Collectors.toMap(franja -> clave(franja.fecha(), franja.franjaId()), FranjaOcupada::citas));
+		Map<DayOfWeek, List<FranjaHorario>> franjasPorDia = horario.franjasPorDia();
 		List<DisponibilidadApp> disponibles = new ArrayList<>();
 		for (LocalDate fecha = desde; !fecha.isAfter(hasta) && !fecha.isAfter(limite); fecha = fecha.plusDays(1)) {
-			if (!horario.abre(fecha)) {
-				continue;
-			}
-			for (HorarioTaller.Franja franja : horario.franjas()) {
-				if (!fecha.atTime(franja.inicio()).isAfter(ahora)) {
+			for (FranjaHorario franja : franjasPorDia.getOrDefault(fecha.getDayOfWeek(), List.of())) {
+				if (!fecha.atTime(franja.getHoraInicio()).isAfter(ahora)) {
 					continue;
 				}
-				long cupo = horario.cupoPorFranja() - ocupadas.getOrDefault(clave(fecha, franja.id()), 0L);
+				long cupo = franja.getCapacidad() - ocupadas.getOrDefault(clave(fecha, franja.getId()), 0L);
 				if (cupo > 0) {
-					int libres = (int) cupo;
-					disponibles.add(new DisponibilidadApp(fecha, franja.id(), franja.inicio(), franja.fin(), libres));
+					disponibles.add(new DisponibilidadApp(fecha, franja.getId(), franja.getHoraInicio(),
+							franja.getHoraFin(), (int) cupo));
 				}
 			}
 		}
@@ -133,8 +134,8 @@ public class AgendaAppService {
 	 * @throws RecursoNoEncontradoException
 	 *             si el vehículo no existe o no es del cliente (404)
 	 * @throws IllegalArgumentException
-	 *             si falta un dato, el taller no abre ese día, la franja no existe,
-	 *             ya empezó o pasa del límite de anticipación (400)
+	 *             si falta un dato, la franja no existe, no es de ese día, ya
+	 *             empezó o pasa del límite de anticipación (400)
 	 * @throws ConflictoException
 	 *             con {@code FRANJA_SIN_CUPO} si la franja ya no tiene cupo, o con
 	 *             {@code CITA_DUPLICADA} si el vehículo ya tiene cita ese día (409)
@@ -147,10 +148,11 @@ public class AgendaAppService {
 		VehiculoDeCliente vehiculo = vehiculos.buscarPorId(vehiculoId)
 				.filter(propio -> propio.propietario().id().equals(clienteId))
 				.orElseThrow(() -> new RecursoNoEncontradoException("No existe el vehículo " + vehiculoId));
-		HorarioTaller.Franja franja = validarFranja(fecha, franjaId);
-		citaRepository.bloquearFranja(fecha.toEpochDay() * 1_000 + franjaId);
-		verificarDisponible(vehiculoId, fecha, franjaId, SIN_CITA);
-		Cita nueva = Cita.confirmar(clienteId, vehiculoId, fecha, franjaId, franja.inicio(), franja.fin(), motivo);
+		FranjaHorario franja = validarFranja(fecha, franjaId);
+		citaRepository.bloquearFranja(claveDeBloqueo(fecha, franjaId));
+		verificarDisponible(vehiculoId, fecha, franja, SIN_CITA);
+		Cita nueva = Cita.confirmar(clienteId, vehiculoId, fecha, franjaId, franja.getHoraInicio(), franja.getHoraFin(),
+				motivo);
 		return CitaApp.de(citaRepository.save(nueva), CitaApp.describir(vehiculo));
 	}
 
@@ -163,9 +165,9 @@ public class AgendaAppService {
 	 * @throws RecursoNoEncontradoException
 	 *             si la cita no existe o no es del cliente (404)
 	 * @throws IllegalArgumentException
-	 *             si falta la franja, el taller no abre ese día, la franja no
-	 *             existe, ya empezó, pasa del límite de anticipación o es la misma
-	 *             de la cita (400)
+	 *             si falta la franja, la franja no existe, no es de ese día, ya
+	 *             empezó, pasa del límite de anticipación o es la misma de la cita
+	 *             (400)
 	 * @throws ConflictoException
 	 *             con {@code CITA_NO_REPROGRAMABLE}, {@code FRANJA_SIN_CUPO} o
 	 *             {@code CITA_DUPLICADA} (409)
@@ -181,28 +183,25 @@ public class AgendaAppService {
 		if (nuevoDia.equals(cita.getFecha()) && franjaId.equals(cita.getFranjaId())) {
 			throw new IllegalArgumentException("La cita ya está en esa franja");
 		}
-		HorarioTaller.Franja franja = validarFranja(nuevoDia, franjaId);
+		FranjaHorario franja = validarFranja(nuevoDia, franjaId);
 		LocalDateTime ahora = LocalDateTime.now(reloj);
-		citaRepository.bloquearFranja(nuevoDia.toEpochDay() * 1_000 + franjaId);
-		verificarDisponible(cita.getVehiculoClienteId(), nuevoDia, franjaId, cita.getId());
-		cita.reprogramar(ahora, nuevoDia, franjaId, franja.inicio(), franja.fin());
+		citaRepository.bloquearFranja(claveDeBloqueo(nuevoDia, franjaId));
+		verificarDisponible(cita.getVehiculoClienteId(), nuevoDia, franja, cita.getId());
+		cita.reprogramar(ahora, nuevoDia, franjaId, franja.getHoraInicio(), franja.getHoraFin());
 		return CitaApp.de(cita,
 				vehiculos.buscarPorId(cita.getVehiculoClienteId())
 						.filter(vehiculo -> vehiculo.propietario().id().equals(clienteId)).map(CitaApp::describir)
 						.orElse(null));
 	}
 
-	/**
-	 * El taller abre ese día, la franja existe, no ha empezado y hay anticipación.
-	 */
-	private HorarioTaller.Franja validarFranja(LocalDate fecha, Long franjaId) {
-		if (!horario.abre(fecha)) {
-			throw new IllegalArgumentException("El taller no abre ese día");
-		}
-		HorarioTaller.Franja franja = horario.franja(franjaId)
+	private FranjaHorario validarFranja(LocalDate fecha, Long franjaId) {
+		FranjaHorario franja = horario.franja(franjaId)
 				.orElseThrow(() -> new IllegalArgumentException("No existe la franja " + franjaId));
+		if (!franja.esDe(fecha)) {
+			throw new IllegalArgumentException("La franja " + franjaId + " no es de ese día");
+		}
 		LocalDateTime ahora = LocalDateTime.now(reloj);
-		if (!fecha.atTime(franja.inicio()).isAfter(ahora)) {
+		if (!fecha.atTime(franja.getHoraInicio()).isAfter(ahora)) {
 			throw new IllegalArgumentException("La franja ya empezó o ya pasó");
 		}
 		if (fecha.isAfter(ahora.toLocalDate().plusDays(horario.diasDeAnticipacion()))) {
@@ -212,16 +211,12 @@ public class AgendaAppService {
 		return franja;
 	}
 
-	/**
-	 * Sin cita duplicada ese día y con cupo en la franja; {@code excepto} no
-	 * cuenta.
-	 */
-	private void verificarDisponible(Long vehiculoId, LocalDate fecha, Long franjaId, Long excepto) {
+	private void verificarDisponible(Long vehiculoId, LocalDate fecha, FranjaHorario franja, Long excepto) {
 		if (citaRepository.existeCitaDelVehiculoEnElDia(vehiculoId, fecha, EstadoCita.CONFIRMADA, excepto)) {
 			throw new ConflictoException("Ese vehículo ya tiene una cita ese día", CodigosError.CITA_DUPLICADA);
 		}
-		if (citaRepository.countByFechaAndFranjaIdAndEstado(fecha, franjaId, EstadoCita.CONFIRMADA) >= horario
-				.cupoPorFranja()) {
+		if (citaRepository.countByFechaAndFranjaIdAndEstado(fecha, franja.getId(), EstadoCita.CONFIRMADA) >= franja
+				.getCapacidad()) {
 			throw new ConflictoException("La franja ya no tiene cupo", CodigosError.FRANJA_SIN_CUPO);
 		}
 	}
@@ -245,6 +240,10 @@ public class AgendaAppService {
 
 	private static String clave(LocalDate fecha, Long franjaId) {
 		return fecha + "#" + franjaId;
+	}
+
+	private static long claveDeBloqueo(LocalDate fecha, Long franjaId) {
+		return fecha.toEpochDay() * FRANJAS_POR_DIA_EN_BLOQUEO + franjaId;
 	}
 
 	/**
