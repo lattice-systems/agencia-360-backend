@@ -26,7 +26,7 @@ Perfil `prod`. Los valores sensibles son **secretos de la Container App** (nunca
 | --- | --- |
 | `SPRING_PROFILES_ACTIVE` | `prod` |
 | `DB_URL`, `DB_USERNAME`, `DB_PASSWORD` | secretos `db-url`, `db-username`, `db-password` (Neon) |
-| `JWT_SECRET`, `MANUALES_SECRETO` | secretos aleatorios |
+| `JWT_SECRET`, `MANUALES_SECRETO`, `CITAS_QR_SECRETO` | secretos aleatorios |
 | `ADMIN_INICIAL_USUARIO` / `ADMIN_INICIAL_CONTRASENA` | `admin` / secreto `admin-contrasena` |
 | `GERENTE_INICIAL_USUARIO` / `GERENTE_INICIAL_CONTRASENA` | `gerente` / secreto `gerente-contrasena` |
 | `SPRING_MAIL_HOST`, `SPRING_MAIL_PORT`, `SPRING_MAIL_USERNAME` | `smtp.gmail.com`, `587`, la cuenta de Gmail |
