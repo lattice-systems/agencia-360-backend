@@ -4,7 +4,7 @@ Espejo de las historias marcadas **B** en el plan maestro de `carecar-mobile`. *
 
 Al tomar una historia, el planificador o el implementador agrega bajo su sección: migración(es), entidades, eventos publicados/escuchados y endpoints con sus errores.
 
-Total: **110 historias B**.
+Total: **111 historias B**.
 
 ## Alineación con la ficha técnica v2.0 (prioridad máxima)
 
@@ -37,8 +37,9 @@ Detalle: [`carecar-mobile/plan/modulos/M02-vehiculos-y-postventa.md`](https://gi
 | ID | Historia | Criterios de aceptación | Dueño |
 | --- | --- | --- | --- |
 | V2-M02.04 | Como cliente quiero la ficha técnica de mi vehículo para conocer sus especificaciones | Datos desde la API por modelo/año · secciones plegables · respaldo local mientras el backend no los tenga | Juan Pablo |
-| V2-M02.08 | Como cliente quiero agendar una cita eligiendo vehículo, fecha, franja y motivo | Confirmación con resumen · 409 por cupo lleno → ofrece franjas cercanas · 409 por cita duplicada → muestra la existente | Juan Pablo |
-| V2-M02.11 | Como cliente quiero un comprobante con QR de mi cita para recepción rápida | QR con id firmado · PDF · agregable a Wallet (M25) | Juan Pablo |
+| V2-M02.05 | Como cliente quiero el historial de servicios de mi auto para saber qué se le ha hecho | `GET /vehiculos/{id}/servicios` suma el filtro `anio` a la paginación · cada orden trae fecha de cierre, estatus y total | Ricardo |
+| V2-M02.08 | Como cliente quiero agendar una cita eligiendo vehículo, fecha, franja y motivo | Confirmación con resumen · 409 `FRANJA_SIN_CUPO` → ofrece franjas cercanas · 409 `CITA_DUPLICADA` (hoy sin código) → muestra la existente · `cita.motivo` | Juan Pablo |
+| V2-M02.11 | Como cliente quiero un comprobante con QR de mi cita para recepción rápida | QR con id firmado en el PDF que ya entrega `GET /citas/{id}/ticket` · agregable a Wallet (M25) | Juan Pablo |
 | V2-M02.13 | Como cliente quiero reprogramar una cita sin cancelarla | Elige nueva franja; la anterior se libera en la misma operación | Juan Pablo |
 
 ### M03 · Catálogo y calculadora de toma a cuenta — H2 — módulo `carecarapp`
@@ -142,8 +143,8 @@ Detalle: [`carecar-mobile/plan/modulos/M11-asistencia-en-camino.md`](https://git
 
 | ID | Historia | Criterios de aceptación | Dueño |
 | --- | --- | --- | --- |
-| V2-M11.01 | Como cliente varado quiero pedir ayuda con mi ubicación | Permiso de ubicación explicado · envía vehículo y tipo · confirmación inmediata | Juan Pablo |
-| V2-M11.04 | Como cliente quiero ver el estado de mi solicitud | Estados recibida/en camino/atendida con push | Juan Pablo |
+| V2-M11.01 | Como cliente varado quiero pedir ayuda compartiendo mi ubicación para que la agencia me atienda rápido | `POST /asistencia` crea `solicitud_asistencia` (cliente, vehículo propio, tipo, lat/lng opcionales, comentario) → 201 con estado `recibida` · 404 si el vehículo no es del cliente · `GET /asistencia?activa=true` devuelve la abierta | Juan Pablo |
+| V2-M11.04 | Como cliente quiero ver el estado de mi solicitud para saber cuándo llega la ayuda | `GET /asistencia/{id}` solo del dueño · estados `recibida` → `en_camino` → `atendida`/`cancelada` · endpoint interno para el personal mientras el ERP siga congelado · cada cambio publica un evento para el push (M06) | Juan Pablo |
 
 ### M12 · Lealtad y recompensas — H4 — módulo `lealtad (nuevo)`
 
@@ -208,10 +209,10 @@ Detalle: [`carecar-mobile/plan/modulos/M17-recoleccion-y-entrega.md`](https://gi
 
 | ID | Historia | Criterios de aceptación | Dueño |
 | --- | --- | --- | --- |
-| V2-M17.01 | Como cliente quiero guardar mis direcciones | Autocompletado y pin en mapa · validación de zona de cobertura | Juan Pablo |
-| V2-M17.02 | Como cliente quiero pedir recolección al agendar | Costo y horario visibles · se ligan a la cita | Juan Pablo |
-| V2-M17.03 | Como cliente quiero seguir al chofer | Estados con push · mapa en vivo solo durante el traslado | Juan Pablo |
-| V2-M17.04 | Como cliente quiero el checklist con fotos del estado de mi auto | Fotos y firma al recoger y al entregar | Juan Pablo |
+| V2-M17.01 | Como cliente quiero guardar mis direcciones para pedir recolección sin escribirlas cada vez | Tabla `direccion_cliente` · `GET/POST /direcciones` y `PUT/DELETE /direcciones/{id}` solo del dueño · 422 si queda fuera de la zona de cobertura (configurable) | Juan Pablo |
+| V2-M17.02 | Como cliente quiero pedir que recojan mi auto al agendar para no tener que llevarlo | Tabla `traslado` · `GET /recoleccion/cotizacion?direccionId=&fecha=` da costo y franja · `POST /citas` acepta `recoleccion.direccionId` y crea los traslados de recoger y entregar en la misma transacción | Juan Pablo |
+| V2-M17.03 | Como cliente quiero seguir al chofer para saber cuándo llega | `GET /traslados/{id}` con estado y ubicación del chofer solo en `en_camino`/`de_regreso` · endpoint interno para el chofer mientras el ERP siga congelado · evento por cambio de estado para el push | Juan Pablo |
+| V2-M17.04 | Como cliente quiero ver el checklist con fotos del estado de mi auto para comprobar cómo lo recogieron y entregaron | Tabla `checklist_traslado` · `GET /traslados/{id}/checklist` con km, gasolina, fotos y firma con URL firmadas de vida corta (V2-T05.09) · carga por endpoint interno | Juan Pablo |
 
 ### M18 · Bitácora del conductor — H6 — módulo `carecarapp`
 
@@ -219,8 +220,8 @@ Detalle: [`carecar-mobile/plan/modulos/M18-bitacora-conductor.md`](https://githu
 
 | ID | Historia | Criterios de aceptación | Dueño |
 | --- | --- | --- | --- |
-| V2-M18.01 | Como cliente quiero registrar una carga de gasolina | Validaciones numéricas · km no menor al anterior | Juan Pablo |
-| V2-M18.04 | Como cliente quiero registrar otros gastos | Tipos fijos + otro | Juan Pablo |
+| V2-M18.01 | Como cliente quiero registrar una carga de gasolina para llevar el control de lo que gasto | Tabla `gasto_vehiculo` · `POST /vehiculos/{id}/gastos` tipo gasolina con litros, monto, km y fecha · 422 si el km es menor a la última `lectura_km` · crea una `lectura_km` de fuente cliente · `GET` paginado por mes | Juan Pablo |
+| V2-M18.04 | Como cliente quiero registrar otros gastos para conocer el costo total de mi auto | Mismo `POST /vehiculos/{id}/gastos` con tipo estacionamiento, casetas, lavado u otro (descripción obligatoria en otro) · `PUT/DELETE /gastos/{id}` solo del dueño | Juan Pablo |
 
 ### M19 · Cuentas familiares y conductores autorizados — H6 — módulo `carecarapp`
 
@@ -277,8 +278,8 @@ Detalle: [`carecar-mobile/plan/modulos/M25-widgets-y-wallet.md`](https://github.
 
 | ID | Historia | Criterios de aceptación | Dueño |
 | --- | --- | --- | --- |
-| V2-M25.03 | Como cliente quiero guardar mi cita en Wallet | Pase firmado por el backend con QR del comprobante | Juan Pablo |
-| V2-M25.05 | Como cliente de iPhone quiero ver el estado del taller en la pantalla bloqueada | Live Activity durante la orden abierta | Juan Pablo |
+| V2-M25.03 | Como cliente quiero guardar mi cita en Wallet para presentarla en recepción | `GET /citas/{id}/pase?plataforma=apple\|google` firma el pase con el QR del comprobante (V2-M02.11) · certificados fuera del repo (R8) · al cancelar la cita el pase queda vencido | Juan Pablo |
+| V2-M25.05 | Como cliente de iPhone quiero ver el estado del taller en la pantalla bloqueada para seguir mi servicio | Push de ActivityKit (APNs) en cada cambio de etapa de la orden abierta y al cerrarla · llaves de APNs fuera del repo (R8) | Juan Pablo |
 
 ### M26 · Valuación y toma a cuenta avanzada — H5 — módulo `ventascrm`
 
@@ -318,3 +319,4 @@ Detalle: [`carecar-mobile/plan/modulos/T05-contrato-api-v2.md`](https://github.c
 | V2-T05.08 | Como equipo queremos eventos en vivo para la app | SSE para órdenes y WebSocket para chat detrás de JWT | Ricardo |
 | V2-T05.09 | Como equipo queremos almacenamiento de archivos para evidencias y documentos | Interfaz de almacenamiento con implementación local y en la nube · URLs firmadas de corta vida | Ricardo |
 | V2-T05.10 | Como equipo queremos datos de ejemplo para cada módulo nuevo | `scripts/cargar-datos-de-ejemplo.sh` extendido | Ricardo |
+| V2-T05.11 | Como equipo queremos desplegar la API en Azure automáticamente en cada merge a `main` | Workflow que construye la imagen en formato OCI, la publica en GHCR y actualiza `ca-agencia360-api` · credenciales de Azure como secretos de GitHub · verificación de `/actuator/health` tras desplegar · ver `docs/despliegue-azure-neon.md` | Daniel |

@@ -6,8 +6,8 @@ Todo vive en `.github/workflows/` y corre automáticamente en GitHub. Este docum
 
 | Workflow | Archivo | Cuándo corre | Qué revisa |
 |---|---|---|---|
-| CI | `ci.yml` | Push a cualquier rama + PR a `main` | Que el proyecto compile y todas las pruebas pasen (incluidas las de Testcontainers) |
-| Lint | `lint.yml` | Push a cualquier rama + PR a `main` | Formato de código (Spotless) y reglas de estilo (Checkstyle) |
+| CI | `ci.yml` | PR a `main` + push a `main` | Que el proyecto compile y todas las pruebas pasen (incluidas las de Testcontainers) |
+| Lint | `lint.yml` | PR a `main` + push a `main` | Formato de código (Spotless) y reglas de estilo (Checkstyle) |
 | CodeQL | `codeql.yml` | Push/PR a `main` + todos los lunes | Vulnerabilidades y patrones de código inseguro |
 | Dependency Review | `dependency-review.yml` | Solo en PR | Que no se agregue una dependencia con una vulnerabilidad conocida |
 | Trivy | `trivy.yml` | Push/PR a `main` + todos los lunes | CVE en todas las dependencias (no solo las nuevas), secretos y configuración |
@@ -15,7 +15,7 @@ Todo vive en `.github/workflows/` y corre automáticamente en GitHub. Este docum
 
 ## 1. CI: build y pruebas (`ci.yml`)
 
-Corre `./mvnw verify` en **cada push a cualquier rama** y en cada PR hacia `main`: compila el proyecto y ejecuta todas las pruebas (unitarias, de Spring Modulith y de integración con Testcontainers). Los runners `ubuntu-latest` de GitHub ya traen Docker, así que Testcontainers levanta PostgreSQL sin configuración extra. Si llegan varios push seguidos a la misma rama, se cancela la corrida anterior. Si algo falla, el PR queda marcado en rojo y se suben los reportes de `surefire`/`failsafe` como artefacto para poder revisarlos sin tener que reproducir el fallo en local.
+Corre `./mvnw verify` en **cada PR hacia `main`** y en cada push a `main` (el push a una rama sin PR no corre CI; abre el PR temprano, aunque sea en borrador). Si el PR solo cambia documentación (`docs/` salvo `docs/api/`, `plan/`, `.claude/`, `.githooks/` o `.md`), el job previo `Detectar cambios de código` salta el build y el lint, y cuentan como aprobados. En cada corrida: compila el proyecto y ejecuta todas las pruebas (unitarias, de Spring Modulith y de integración con Testcontainers). Los runners `ubuntu-latest` de GitHub ya traen Docker, así que Testcontainers levanta PostgreSQL sin configuración extra. Si llegan varios push seguidos a la misma rama, se cancela la corrida anterior. Si algo falla, el PR queda marcado en rojo y se suben los reportes de `surefire`/`failsafe` como artefacto para poder revisarlos sin tener que reproducir el fallo en local.
 
 ## 2. Lint: formato y estilo (`lint.yml`)
 
