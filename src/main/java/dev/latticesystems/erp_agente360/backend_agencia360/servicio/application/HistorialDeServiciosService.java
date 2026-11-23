@@ -3,8 +3,11 @@ package dev.latticesystems.erp_agente360.backend_agencia360.servicio.application
 import dev.latticesystems.erp_agente360.backend_agencia360.clientes.VehiculosDeClientes;
 import dev.latticesystems.erp_agente360.backend_agencia360.servicio.HistorialDeServicios;
 import dev.latticesystems.erp_agente360.backend_agencia360.servicio.domain.OrdenServicio;
+import dev.latticesystems.erp_agente360.backend_agencia360.servicio.domain.RenglonOrden;
 import dev.latticesystems.erp_agente360.backend_agencia360.servicio.infrastructure.OrdenServicioRepository;
 import dev.latticesystems.erp_agente360.backend_agencia360.shared.exception.RecursoNoEncontradoException;
+import java.time.LocalDate;
+import java.util.List;
 import java.util.Optional;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -13,7 +16,10 @@ import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-/** Implementación de {@link HistorialDeServicios} (APP-3.2). */
+/**
+ * Implementación de {@link HistorialDeServicios} (APP-3.2, V2-M02.05,
+ * V2-M02.06).
+ */
 @Service
 public class HistorialDeServiciosService implements HistorialDeServicios {
 
@@ -32,11 +38,20 @@ public class HistorialDeServiciosService implements HistorialDeServicios {
 
 	@Override
 	@Transactional(readOnly = true)
-	public Page<ServicioDelVehiculo> deVehiculo(Long vehiculoId, Pageable pagina) {
+	public Page<ServicioDelVehiculo> deVehiculo(Long vehiculoId, Integer anio, Pageable pagina) {
 		Pageable ordenada = PageRequest.of(pagina.getPageNumber(), pagina.getPageSize(), RECIENTES_PRIMERO);
-		return ordenServicioRepository.findByVehiculoClienteId(vehiculoId, ordenada)
-				.map(servicio -> new ServicioDelVehiculo(servicio.getId(), servicio.getFecha(),
-						servicio.getKilometraje(), servicio.getEstatus(), servicio.getTotal()));
+		Page<OrdenServicio> ordenes = anio == null
+				? ordenServicioRepository.findByVehiculoClienteId(vehiculoId, ordenada)
+				: ordenServicioRepository.findByVehiculoClienteIdAndFechaBetween(vehiculoId, LocalDate.of(anio, 1, 1),
+						LocalDate.of(anio, 12, 31), ordenada);
+		return ordenes.map(servicio -> new ServicioDelVehiculo(servicio.getId(), servicio.getFecha(),
+				servicio.getKilometraje(), servicio.getEstatus(), servicio.getFechaCierre(), servicio.getTotal()));
+	}
+
+	@Override
+	@Transactional(readOnly = true)
+	public List<Integer> aniosDeVehiculo(Long vehiculoId) {
+		return ordenServicioRepository.aniosConServicios(vehiculoId);
 	}
 
 	@Override
@@ -47,10 +62,26 @@ public class HistorialDeServiciosService implements HistorialDeServicios {
 
 	@Override
 	@Transactional(readOnly = true)
+	public Optional<DetalleDelServicio> detalle(Long servicioId) {
+		return ordenServicioRepository.findById(servicioId)
+				.map(orden -> new DetalleDelServicio(orden.getId(), orden.getVehiculoClienteId(), orden.getFecha(),
+						orden.getKilometraje(), orden.getEstatus(), orden.getFechaCierre(),
+						renglones(orden.getRenglonesManoDeObra()), renglones(orden.getRenglonesRefaccion()),
+						orden.getManoDeObra(), orden.getRefacciones(), orden.getSubtotal(), orden.getIva(),
+						orden.getTotal()));
+	}
+
+	@Override
+	@Transactional(readOnly = true)
 	public byte[] ticket(Long servicioId) {
 		OrdenServicio servicio = ordenServicioRepository.findById(servicioId)
 				.orElseThrow(() -> new RecursoNoEncontradoException("No existe el servicio " + servicioId));
 		return ticketPdf.armar(ServicioDetalle.de(servicio, null),
 				vehiculos.buscarPorId(servicio.getVehiculoClienteId()).orElse(null));
+	}
+
+	private static List<RenglonDelServicio> renglones(List<? extends RenglonOrden> renglones) {
+		return renglones.stream().map(renglon -> new RenglonDelServicio(renglon.getConcepto(), renglon.getCantidad(),
+				renglon.getPrecio(), renglon.getImporte())).toList();
 	}
 }

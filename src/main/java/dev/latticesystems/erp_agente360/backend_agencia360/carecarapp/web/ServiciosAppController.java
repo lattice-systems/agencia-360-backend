@@ -2,10 +2,12 @@ package dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.web;
 
 import dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.application.Pagina;
 import dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.application.ServicioApp;
+import dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.application.ServicioDetalleApp;
 import dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.application.ServiciosAppService;
 import dev.latticesystems.erp_agente360.backend_agencia360.shared.security.UsuarioAutenticado;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import java.util.List;
 import org.springframework.http.ContentDisposition;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
@@ -36,10 +38,29 @@ public class ServiciosAppController {
 	@GetMapping("/vehiculos/{vehiculoId}/servicios")
 	@PreAuthorize("hasRole('CLIENTE_CARECAR')")
 	@Operation(summary = "Historial de servicios del vehículo", description = "El más reciente primero. Paginado "
-			+ "con pagina (desde 0) y tamano (1 a 50, 20 por omisión). Responde 404 si el vehículo no es del cliente.")
-	public Pagina<ServicioApp> servicios(@PathVariable Long vehiculoId, @RequestParam(required = false) Integer pagina,
-			@RequestParam(required = false) Integer tamano, @AuthenticationPrincipal UsuarioAutenticado cliente) {
-		return serviciosAppService.servicios(cliente.id(), vehiculoId, pagina, tamano);
+			+ "con pagina (desde 0) y tamano (1 a 50, 20 por omisión); anio filtra por el año del servicio. "
+			+ "Responde 404 si el vehículo no es del cliente.")
+	public Pagina<ServicioApp> servicios(@PathVariable Long vehiculoId, @RequestParam(required = false) Integer anio,
+			@RequestParam(required = false) Integer pagina, @RequestParam(required = false) Integer tamano,
+			@AuthenticationPrincipal UsuarioAutenticado cliente) {
+		return serviciosAppService.servicios(cliente.id(), vehiculoId, anio, pagina, tamano);
+	}
+
+	@GetMapping("/vehiculos/{vehiculoId}/servicios/anios")
+	@PreAuthorize("hasRole('CLIENTE_CARECAR')")
+	@Operation(summary = "Años con servicios del vehículo", description = "Del más reciente al más antiguo, para el "
+			+ "filtro del historial. Responde 404 si el vehículo no es del cliente.")
+	public List<Integer> anios(@PathVariable Long vehiculoId, @AuthenticationPrincipal UsuarioAutenticado cliente) {
+		return serviciosAppService.anios(cliente.id(), vehiculoId);
+	}
+
+	@GetMapping("/servicios/{servicioId}")
+	@PreAuthorize("hasRole('CLIENTE_CARECAR')")
+	@Operation(summary = "Ticket de una orden de servicio", description = "Mano de obra y refacciones con cantidad, "
+			+ "precio e importe, y los totales. Responde 404 si el servicio no existe o es de un vehículo ajeno.")
+	public ServicioDetalleApp detalle(@PathVariable Long servicioId,
+			@AuthenticationPrincipal UsuarioAutenticado cliente) {
+		return serviciosAppService.detalle(cliente.id(), servicioId);
 	}
 
 	@GetMapping(path = "/servicios/{servicioId}/ticket", produces = MediaType.APPLICATION_PDF_VALUE)

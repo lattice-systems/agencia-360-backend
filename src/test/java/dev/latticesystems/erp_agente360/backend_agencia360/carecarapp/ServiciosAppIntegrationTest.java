@@ -149,6 +149,64 @@ class ServiciosAppIntegrationTest extends AbstractIntegrationTest {
 		mockMvc.perform(get("/api/v1/app/servicios/{id}/ticket", deBruno)).andExpect(status().isUnauthorized());
 	}
 
+	@Test
+	void filtraElHistorialPorAnioYDiceQueAniosTienenServicios() throws Exception {
+		int esteAnio = hoy().getYear();
+		Long delAnioPasado = registrar(marchDeAna, hoy().minusYears(1), "800.00");
+		registrar(marchDeAna, hoy(), "450.00");
+
+		mockMvc.perform(get("/api/v1/app/vehiculos/{id}/servicios/anios", marchDeAna).header(HttpHeaders.AUTHORIZATION,
+				"Bearer " + tokenDeAna)).andExpect(status().isOk()).andExpect(jsonPath("$.length()").value(2))
+				.andExpect(jsonPath("$[0]").value(esteAnio)).andExpect(jsonPath("$[1]").value(esteAnio - 1));
+		mockMvc.perform(get("/api/v1/app/vehiculos/{id}/servicios", marchDeAna)
+				.param("anio", String.valueOf(esteAnio - 1)).header(HttpHeaders.AUTHORIZATION, "Bearer " + tokenDeAna))
+				.andExpect(status().isOk()).andExpect(jsonPath("$.contenido.length()").value(1))
+				.andExpect(jsonPath("$.contenido[0].id").value(delAnioPasado))
+				.andExpect(jsonPath("$.contenido[0].fechaCierre")
+						.value(org.hamcrest.Matchers.matchesPattern("\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}")));
+		mockMvc.perform(get("/api/v1/app/vehiculos/{id}/servicios", marchDeAna).param("anio", "1800")
+				.header(HttpHeaders.AUTHORIZATION, "Bearer " + tokenDeAna)).andExpect(status().isBadRequest())
+				.andExpect(jsonPath("$.codigo").value("DATOS_INVALIDOS"));
+		mockMvc.perform(get("/api/v1/app/vehiculos/{id}/servicios/anios", vehiculoDeBruno)
+				.header(HttpHeaders.AUTHORIZATION, "Bearer " + tokenDeAna)).andExpect(status().isNotFound());
+	}
+
+	@Test
+	void elTicketTraeLaManoDeObraYLasRefaccionesQueSumanElTotal() throws Exception {
+		RenglonNuevo filtro = new RenglonNuevo(TipoRenglon.REFACCION, "Filtro de aceite", 2, new BigDecimal("175.50"));
+		RenglonNuevo aceite = new RenglonNuevo(TipoRenglon.REFACCION, "Aceite sintético", 4, new BigDecimal("120.25"));
+		NuevoServicio nuevo = new NuevoServicio(hoy(), 15000, List.of(filtro, afinacion("450.00"), aceite));
+		Long servicioId = expedienteService.registrar(marchDeAna, nuevo, servicio).id();
+
+		mockMvc.perform(
+				get("/api/v1/app/servicios/{id}", servicioId).header(HttpHeaders.AUTHORIZATION, "Bearer " + tokenDeAna))
+				.andExpect(status().isOk()).andExpect(jsonPath("$.id").value(servicioId))
+				.andExpect(jsonPath("$.vehiculoId").value(marchDeAna))
+				.andExpect(jsonPath("$.estatus").value("TERMINADO")).andExpect(jsonPath("$.kilometraje").value(15000))
+				.andExpect(jsonPath("$.manoDeObra.length()").value(1))
+				.andExpect(jsonPath("$.manoDeObra[0].concepto").value("Afinación"))
+				.andExpect(jsonPath("$.refacciones.length()").value(2))
+				.andExpect(jsonPath("$.refacciones[0].concepto").value("Filtro de aceite"))
+				.andExpect(jsonPath("$.refacciones[0].cantidad").value(2))
+				.andExpect(jsonPath("$.refacciones[0].precio").value(175.5))
+				.andExpect(jsonPath("$.refacciones[0].importe").value(351.0))
+				.andExpect(jsonPath("$.totalManoDeObra").value(450.0))
+				.andExpect(jsonPath("$.totalRefacciones").value(832.0)).andExpect(jsonPath("$.total").value(1282.0))
+				.andExpect(jsonPath("$.subtotal").value(1105.17)).andExpect(jsonPath("$.iva").value(176.83));
+	}
+
+	@Test
+	void elTicketDeUnServicioAjenoNoSeMuestra() throws Exception {
+		Long deBruno = registrar(vehiculoDeBruno, hoy(), "300.00");
+
+		mockMvc.perform(
+				get("/api/v1/app/servicios/{id}", deBruno).header(HttpHeaders.AUTHORIZATION, "Bearer " + tokenDeAna))
+				.andExpect(status().isNotFound());
+		mockMvc.perform(
+				get("/api/v1/app/servicios/{id}", 999_999).header(HttpHeaders.AUTHORIZATION, "Bearer " + tokenDeAna))
+				.andExpect(status().isNotFound());
+	}
+
 	private static LocalDate hoy() {
 		return LocalDate.now(ZoneId.of("America/Mexico_City"));
 	}
