@@ -26,7 +26,7 @@ Perfil `prod`. Los valores sensibles son **secretos de la Container App** (nunca
 | --- | --- |
 | `SPRING_PROFILES_ACTIVE` | `prod` |
 | `DB_URL`, `DB_USERNAME`, `DB_PASSWORD` | secretos `db-url`, `db-username`, `db-password` (Neon) |
-| `JWT_SECRET`, `MANUALES_SECRETO`, `CITAS_QR_SECRETO` | secretos aleatorios `jwt-secret`, `manuales-secreto`, `citas-qr-secreto` (este último **pendiente de crear**, ver Limitaciones) |
+| `JWT_SECRET`, `MANUALES_SECRETO`, `CITAS_QR_SECRETO` | secretos aleatorios `jwt-secret`, `manuales-secreto`, `citas-qr-secreto` |
 | `ADMIN_INICIAL_USUARIO` / `ADMIN_INICIAL_CONTRASENA` | `admin` / secreto `admin-contrasena` |
 | `GERENTE_INICIAL_USUARIO` / `GERENTE_INICIAL_CONTRASENA` | `gerente` / secreto `gerente-contrasena` |
 | `SPRING_MAIL_HOST`, `SPRING_MAIL_PORT`, `SPRING_MAIL_USERNAME` | `smtp.gmail.com`, `587`, la cuenta de Gmail |
@@ -62,7 +62,7 @@ Solo corre un despliegue a la vez (`concurrency: despliegue-azure`); si se integ
 | Pieza | Valor |
 | --- | --- |
 | Identidad administrada (asignada por el usuario) | `id-agencia360-deploy`, en `rg-agencia360` |
-| Credencial federada | `github-main`: emisor `https://token.actions.githubusercontent.com`, sujeto `repo:lattice-systems/agencia-360-backend:ref:refs/heads/main`, audiencia `api://AzureADTokenExchange` |
+| Credencial federada | `github-main`: emisor `https://token.actions.githubusercontent.com`, sujeto `repo:lattice-systems@259185439/agencia-360-backend@1391219760:ref:refs/heads/main` (la org usa el formato de sujeto inmutable de GitHub, con los ID de org y repo; el formato corto da `AADSTS700213`), audiencia `api://AzureADTokenExchange` |
 | Rol | **Contributor solo sobre la Container App** `ca-agencia360-api` (no sobre el grupo ni la suscripción) |
 | Variables del repositorio (no son secretos) | `AZURE_CLIENT_ID` (client id de la identidad), `AZURE_TENANT_ID`, `AZURE_SUBSCRIPTION_ID` |
 
@@ -120,8 +120,3 @@ La base de Neon tiene los **datos de ejemplo** (`scripts/cargar-datos-de-ejemplo
 - **Usuarios de ejemplo con contraseñas públicas**: aceptable mientras la base solo tenga datos de prueba; antes de datos reales hay que borrarlos (`scripts/limpiar-datos.sh`) y rotar contraseñas.
 - **Sin logs en Azure**: el entorno se creó sin Log Analytics (cuesta por GB). Para depurar: `az containerapp logs show -n ca-agencia360-api -g rg-agencia360 --follow`.
 - **Arranque en frío** de 20–40 s tras inactividad.
-- **`CITAS_QR_SECRETO` aún no está en la Container App**: mientras falte, la API firma el QR del comprobante de cita (V2-M02.11) con el valor de solo-desarrollo. Se crea con un valor aleatorio y una revisión nueva:
-  ```bash
-  az containerapp secret set -n ca-agencia360-api -g rg-agencia360 --secrets citas-qr-secreto="$(openssl rand -base64 48)"
-  az containerapp update -n ca-agencia360-api -g rg-agencia360 --set-env-vars CITAS_QR_SECRETO=secretref:citas-qr-secreto -o none
-  ```
