@@ -216,7 +216,7 @@ Con **Podman** también funciona (`podman compose up -d`), siempre que tenga act
 
 | Servicio | Imagen | Puerto local | Datos de conexión | ¿Los datos se conservan? |
 |---|---|---|---|---|
-| `postgres` | `postgres:16-alpine` | `5432` | BD `agencia360`, usuario `agencia360`, contraseña `agencia360` | Sí, en el volumen `postgres-data` (sobreviven a `docker compose down`) |
+| `postgres` | `pgvector/pgvector:pg16` (PostgreSQL 16 con pgvector, para el asistente) | `5432` | BD `agencia360`, usuario `agencia360`, contraseña `agencia360` | Sí, en el volumen `postgres-data` (sobreviven a `docker compose down`) |
 | `mailpit` | `axllent/mailpit` | `1025` (SMTP) y `8025` (bandeja web) | Sin contraseña | No: atrapa los correos de desarrollo (códigos de recuperación de la app) |
 
 Estas credenciales son **solo para desarrollo local** y coinciden con los valores por defecto de `src/main/resources/application.properties`, así que no hay que configurar nada para que la API se conecte.
