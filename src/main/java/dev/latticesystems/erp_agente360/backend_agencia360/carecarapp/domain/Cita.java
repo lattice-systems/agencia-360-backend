@@ -60,12 +60,16 @@ public class Cita extends Auditable {
 	@Column(name = "cancelada_en")
 	private Instant canceladaEn;
 
+	@Enumerated(EnumType.STRING)
+	@Column(length = 15)
+	private MotivoCita motivo;
+
 	protected Cita() {
 		// Requerido por JPA
 	}
 
 	private Cita(Long clienteId, Long vehiculoClienteId, LocalDate fecha, Long franjaId, LocalTime horaInicio,
-			LocalTime horaFin) {
+			LocalTime horaFin, MotivoCita motivo) {
 		this.clienteId = clienteId;
 		this.vehiculoClienteId = vehiculoClienteId;
 		this.fecha = fecha;
@@ -73,11 +77,18 @@ public class Cita extends Auditable {
 		this.horaInicio = horaInicio;
 		this.horaFin = horaFin;
 		this.estado = EstadoCita.CONFIRMADA;
+		this.motivo = motivo;
 	}
 
 	/** Una cita confirmada en la franja; el cupo lo revisa quien la agenda. */
 	public static Cita confirmar(Long clienteId, Long vehiculoClienteId, LocalDate fecha, Long franjaId,
 			LocalTime horaInicio, LocalTime horaFin) {
+		return confirmar(clienteId, vehiculoClienteId, fecha, franjaId, horaInicio, horaFin, null);
+	}
+
+	/** Una cita confirmada con el motivo que dio el cliente (puede ser nulo). */
+	public static Cita confirmar(Long clienteId, Long vehiculoClienteId, LocalDate fecha, Long franjaId,
+			LocalTime horaInicio, LocalTime horaFin, MotivoCita motivo) {
 		Objects.requireNonNull(clienteId, "clienteId");
 		Objects.requireNonNull(vehiculoClienteId, "vehiculoClienteId");
 		Objects.requireNonNull(fecha, "fecha");
@@ -85,7 +96,35 @@ public class Cita extends Auditable {
 		if (!horaFin.isAfter(horaInicio)) {
 			throw new IllegalArgumentException("La franja debe terminar después de empezar");
 		}
-		return new Cita(clienteId, vehiculoClienteId, fecha, franjaId, horaInicio, horaFin);
+		return new Cita(clienteId, vehiculoClienteId, fecha, franjaId, horaInicio, horaFin, motivo);
+	}
+
+	/**
+	 * Mueve la cita a otra franja sin cancelarla: la franja anterior queda libre
+	 * porque el cupo se cuenta por citas confirmadas. El cupo de la nueva lo revisa
+	 * quien reprograma.
+	 *
+	 * @param ahora
+	 *            hora local de la agencia
+	 * @throws ConflictoException
+	 *             con {@code CITA_NO_REPROGRAMABLE} si ya no está confirmada o ya
+	 *             empezó (409)
+	 */
+	public void reprogramar(LocalDateTime ahora, LocalDate nuevaFecha, Long nuevaFranjaId, LocalTime nuevaHoraInicio,
+			LocalTime nuevaHoraFin) {
+		Objects.requireNonNull(nuevaFecha, "nuevaFecha");
+		Objects.requireNonNull(nuevaFranjaId, "nuevaFranjaId");
+		if (!nuevaHoraFin.isAfter(nuevaHoraInicio)) {
+			throw new IllegalArgumentException("La franja debe terminar después de empezar");
+		}
+		if (estado != EstadoCita.CONFIRMADA || !fecha.atTime(horaInicio).isAfter(ahora)) {
+			throw new ConflictoException("Solo se puede reprogramar una cita confirmada que no ha empezado",
+					CodigosError.CITA_NO_REPROGRAMABLE);
+		}
+		fecha = nuevaFecha;
+		franjaId = nuevaFranjaId;
+		horaInicio = nuevaHoraInicio;
+		horaFin = nuevaHoraFin;
 	}
 
 	/**
@@ -146,5 +185,9 @@ public class Cita extends Auditable {
 
 	public Instant getCanceladaEn() {
 		return canceladaEn;
+	}
+
+	public MotivoCita getMotivo() {
+		return motivo;
 	}
 }
