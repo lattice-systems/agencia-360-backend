@@ -9,14 +9,18 @@ import java.util.Optional;
 import java.util.UUID;
 import java.util.regex.Pattern;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
 /**
  * Guarda los manuales en una carpeta del servidor
- * ({@code app.manuales.directorio}). Sirve para desarrollo y pruebas mientras
- * no haya Azure Blob Storage.
+ * ({@code app.manuales.directorio}). Solo se usa con
+ * {@code app.manuales.almacen=local}; por omisión van a la base
+ * ({@link AlmacenManualesEnBase}), porque el disco del contenedor en Azure no
+ * se conserva.
  */
 @Component
+@ConditionalOnProperty(name = "app.manuales.almacen", havingValue = "local")
 public class AlmacenManualesLocal implements AlmacenManuales {
 
 	/** Solo claves generadas aquí: así nadie puede leer fuera de la carpeta. */
