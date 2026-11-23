@@ -32,9 +32,8 @@ public class VehiculosAppService {
 	}
 
 	/**
-	 * La ficha técnica del modelo y año del vehículo (V2-M02.04), en secciones.
-	 * Sin marca se busca solo por modelo y año; sin datos, las secciones vienen
-	 * vacías.
+	 * La ficha técnica del modelo y año del vehículo (V2-M02.04), en secciones. Sin
+	 * marca se busca solo por modelo y año; sin datos, las secciones vienen vacías.
 	 *
 	 * @throws RecursoNoEncontradoException
 	 *             si el vehículo no existe o no es del cliente (404)
