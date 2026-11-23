@@ -16,7 +16,7 @@ Antes que cualquier módulo nuevo: `V2-T05.03`–`V2-T05.07` dejan las tablas co
 | `token_recuperacion` | `codigo_recuperacion` (código de 6 dígitos) | V2-T05.04 |
 | `manual.archivo_pdf` | `manual.archivo` | V2-T05.05 |
 | `orden_servicio`, `orden_refaccion` | `servicio`, `renglon_servicio` | V2-T05.06 |
-| `franja_horario` | No existe (`HorarioTaller` en código) | V2-T05.07 |
+| `franja_horario` | Tabla `franja_horario`; `cita.franja_id` con FK | V2-T05.07 |
 
 ## Historias por módulo
 
@@ -55,7 +55,7 @@ Estado: en curso en la rama `feat/v2-juan-pablo-citas-b`. Los nombres de campos 
 
 **V2-M02.13 · Reprogramar sin cancelar**
 
-- `POST /api/v1/app/citas/{citaId}/reprogramar` con `{ "franjaId": 5, "fecha": "2026-12-03" }`. `franjaId` es obligatorio; `fecha` es opcional y, si falta, se queda el día de la cita (la franja es el número dentro del día, así que cambiar de día pide la fecha; a alinear con la app).
+- `POST /api/v1/app/citas/{citaId}/reprogramar` con `{ "franjaId": 5, "fecha": "2026-12-03" }`. `franjaId` es obligatorio; `fecha` es opcional y, si falta, se queda el día de la cita. Desde V2-T05.07 `franjaId` es el id de `franja_horario`, que es de un solo día de la semana: cambiar de día pide la fecha y una franja de ese día.
 - Responde 200 con la `Cita` actualizada. Sin migración: se actualizan `fecha`, `franja_id`, `hora_inicio` y `hora_fin` de la misma fila, así que liberar la franja anterior y ocupar la nueva es una sola transacción (el cupo se cuenta por citas confirmadas).
 - Reglas: la cita debe ser del cliente (404 si no), estar `CONFIRMADA` y no haber empezado; si no, 409 `CITA_NO_REPROGRAMABLE`. La nueva franja pasa las mismas validaciones que agendar (400 si el taller no abre, la franja no existe, ya empezó o pasa del límite de anticipación; 400 si es la misma franja y fecha). 409 `FRANJA_SIN_CUPO` si no hay lugar y 409 `CITA_DUPLICADA` si el vehículo ya tiene otra cita ese día. Bloquea la franja nueva con el mismo candado que agendar.
 
@@ -516,3 +516,27 @@ Detalle: [`carecar-mobile/plan/modulos/T05-contrato-api-v2.md`](https://github.c
 **Copia en la app.** `carecar-mobile/api/agencia360-api-app-v2.yaml` se agrega en un PR del repo de la app. La prueba de contrato de la app sigue leyendo el v1 hasta que V2-T03.06 la cambie al v2.
 
 **Sin código.** No hay migración, entidades, endpoints ni eventos nuevos.
+
+#### Diseño de V2-T05.07: `franja_horario`
+
+**Tabla.** `franja_horario` con los campos de la ficha (`id`, `dia_semana`, `hora_inicio`, `hora_fin`, `capacidad`) y dos agregados: `activa` (una franja se desactiva, no se borra, porque las citas la referencian) y la auditoría `created_at`/`updated_at`. `dia_semana` va de 1 (lunes) a 7 (domingo), como `isodow` de PostgreSQL y `DayOfWeek` de Java. Restricciones: `hora_fin > hora_inicio`, `capacidad > 0` y una sola franja por día y hora de inicio.
+
+**Migración.** Una nueva (número al integrar) que:
+
+1. Crea `franja_horario`.
+2. La siembra con el horario que tenía `HorarioTaller` en `app.agenda.*`: lunes a sábado, de 9:00 a 17:00, ocho franjas de una hora con capacidad 3 (48 filas).
+3. Agrega como inactivas (capacidad 1) las combinaciones de día y hora de inicio que tengan citas y no estén en el horario, para que ninguna cita quede sin franja.
+4. Reescribe `cita.franja_id`, que era el número de la franja dentro del día (1 a 8), con el id de la fila del mismo día de la semana y hora de inicio.
+5. Quita el `check` `ck_cita_franja` y agrega `fk_cita_franja_horario` hacia `franja_horario(id)`.
+
+**Código.** Entidad `FranjaHorario` y `FranjaHorarioRepository` en `carecarapp`. `HorarioTaller` deja de calcular franjas y las lee de la tabla (solo activas, por día y hora de inicio); conserva `app.agenda.horas-para-cancelar` y `app.agenda.dias-de-anticipacion`. Se retiran `app.agenda.dias`, `apertura`, `cierre`, `duracion-franja-minutos` y `cupo-por-franja`. El cupo de una franja en una fecha es su `capacidad` menos sus citas confirmadas de esa fecha. El candado de agendar y reprogramar sigue siendo por fecha y franja, ahora con el id de la tabla.
+
+**Endpoints.** Mismas rutas y formas. `franjaId` pasa a ser el id de `franja_horario`; la app ya lo toma de `GET /agenda/disponibilidad` y lo devuelve tal cual, así que sigue funcionando. Contrato v2 en 2.1.0 con la descripción de `franjaId`.
+
+**Errores.** 400 `DATOS_INVALIDOS` si la franja no existe, está inactiva o no es del día de la fecha pedida; los demás (ya empezó, fuera de anticipación, `FRANJA_SIN_CUPO`, `CITA_DUPLICADA`, `CITA_NO_REPROGRAMABLE`) no cambian.
+
+**Administración.** No hay pantalla ni endpoint para editar franjas (el ERP está congelado): cambiar capacidad, agregar o desactivar franjas se hace con SQL sobre `franja_horario`. La disponibilidad lo refleja al momento.
+
+**Eventos.** Ninguno.
+
+**Pruebas.** `FranjaHorarioTest` (dominio), `HorarioTallerTest` (Mockito) y `AgendaAppIntegrationTest`: las franjas sembradas, el cupo desde `capacidad`, una franja de otro día o inactiva responde 400 y una franja nueva aparece en la disponibilidad de su día.
