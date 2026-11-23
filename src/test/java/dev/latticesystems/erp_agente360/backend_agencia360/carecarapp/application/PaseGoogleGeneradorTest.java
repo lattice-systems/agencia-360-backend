@@ -47,10 +47,9 @@ class PaseGoogleGeneradorTest {
 	void unJwtVerificadoConOtraLlaveSeRechaza() {
 		String url = new PaseGoogleGenerador(CredencialesWalletDePrueba.nuevas().configuracion()).generar(datos());
 		String jwt = url.substring("https://pay.google.com/gp/v/save/".length());
+		var otraLlave = CredencialesWalletDePrueba.nuevas().llaveGooglePublica();
 		org.assertj.core.api.Assertions
-				.assertThatThrownBy(
-						() -> Jwts.parser().verifyWith(CredencialesWalletDePrueba.nuevas().llaveGooglePublica()).build()
-								.parseSignedClaims(jwt))
+				.assertThatThrownBy(() -> Jwts.parser().verifyWith(otraLlave).build().parseSignedClaims(jwt))
 				.isInstanceOf(io.jsonwebtoken.security.SignatureException.class);
 	}
 }
