@@ -2,48 +2,72 @@ package dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.applicati
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.when;
 
+import dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.domain.FranjaHorario;
+import dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.infrastructure.FranjaHorarioRepository;
 import java.time.DayOfWeek;
 import java.time.Duration;
-import java.time.LocalDate;
 import java.time.LocalTime;
 import java.util.List;
+import java.util.Map;
+import java.util.Optional;
 import org.junit.jupiter.api.Test;
 
 class HorarioTallerTest {
 
-	private static HorarioTaller horario(LocalTime apertura, LocalTime cierre, int minutos) {
-		return new HorarioTaller(List.of(DayOfWeek.MONDAY, DayOfWeek.SATURDAY), apertura, cierre, minutos, 3, 24, 60);
+	private final FranjaHorarioRepository repositorio = mock(FranjaHorarioRepository.class);
+
+	private static FranjaHorario franja(DayOfWeek dia, int hora) {
+		return FranjaHorario.nueva(dia, LocalTime.of(hora, 0), LocalTime.of(hora + 1, 0), 3);
 	}
 
 	@Test
-	void parteElDiaEnFranjasNumeradasDesdeUno() {
-		HorarioTaller horario = horario(LocalTime.of(9, 0), LocalTime.of(17, 0), 60);
-		assertThat(horario.franjas()).hasSize(8);
-		assertThat(horario.franjas().getFirst())
-				.isEqualTo(new HorarioTaller.Franja(1, LocalTime.of(9, 0), LocalTime.of(10, 0)));
-		assertThat(horario.franja(8)).map(HorarioTaller.Franja::inicio).contains(LocalTime.of(16, 0));
-		assertThat(horario.franja(9)).isEmpty();
-		assertThat(horario.plazoParaCancelar()).isEqualTo(Duration.ofHours(24));
+	void agrupaLasFranjasActivasPorDiaEnSuOrden() {
+		FranjaHorario lunesNueve = franja(DayOfWeek.MONDAY, 9);
+		FranjaHorario lunesDiez = franja(DayOfWeek.MONDAY, 10);
+		FranjaHorario sabadoNueve = franja(DayOfWeek.SATURDAY, 9);
+		when(repositorio.findByActivaTrueOrderByDiaSemanaAscHoraInicioAsc())
+				.thenReturn(List.of(lunesNueve, lunesDiez, sabadoNueve));
+
+		Map<DayOfWeek, List<FranjaHorario>> porDia = new HorarioTaller(repositorio, 24, 60).franjasPorDia();
+
+		assertThat(porDia).containsOnlyKeys(DayOfWeek.MONDAY, DayOfWeek.SATURDAY);
+		assertThat(porDia.get(DayOfWeek.MONDAY)).containsExactly(lunesNueve, lunesDiez);
+		assertThat(porDia.get(DayOfWeek.SATURDAY)).containsExactly(sabadoNueve);
+		assertThat(porDia.get(DayOfWeek.SUNDAY)).isNull();
 	}
 
 	@Test
-	void unaFranjaQueNoCabeAntesDelCierreNoSeOfrece() {
-		assertThat(horario(LocalTime.of(9, 0), LocalTime.of(10, 30), 60).franjas()).hasSize(1);
+	void buscaSoloFranjasActivasPorSuId() {
+		FranjaHorario lunesNueve = franja(DayOfWeek.MONDAY, 9);
+		when(repositorio.findByIdAndActivaTrue(7L)).thenReturn(Optional.of(lunesNueve));
+		when(repositorio.findByIdAndActivaTrue(8L)).thenReturn(Optional.empty());
+		HorarioTaller horario = new HorarioTaller(repositorio, 24, 60);
+
+		assertThat(horario.franja(7L)).contains(lunesNueve);
+		assertThat(horario.franja(8L)).isEmpty();
 	}
 
 	@Test
-	void soloAbreLosDiasConfigurados() {
-		HorarioTaller horario = horario(LocalTime.of(9, 0), LocalTime.of(17, 0), 60);
-		assertThat(horario.abre(LocalDate.of(2026, 11, 23))).isTrue();
-		assertThat(horario.abre(LocalDate.of(2026, 11, 22))).isFalse();
+	void sinIdNoConsultaLaTabla() {
+		assertThat(new HorarioTaller(repositorio, 24, 60).franja(null)).isEmpty();
+		verifyNoInteractions(repositorio);
+	}
+
+	@Test
+	void conservaElPlazoParaCancelarYLaAnticipacion() {
+		HorarioTaller horario = new HorarioTaller(repositorio, 12, 30);
+
+		assertThat(horario.plazoParaCancelar()).isEqualTo(Duration.ofHours(12));
+		assertThat(horario.diasDeAnticipacion()).isEqualTo(30);
 	}
 
 	@Test
 	void rechazaUnaConfiguracionInvalida() {
-		assertThatThrownBy(() -> horario(LocalTime.of(17, 0), LocalTime.of(9, 0), 60))
-				.isInstanceOf(IllegalStateException.class);
-		assertThatThrownBy(() -> horario(LocalTime.of(9, 0), LocalTime.of(9, 30), 60))
-				.isInstanceOf(IllegalStateException.class);
+		assertThatThrownBy(() -> new HorarioTaller(repositorio, -1, 60)).isInstanceOf(IllegalStateException.class);
+		assertThatThrownBy(() -> new HorarioTaller(repositorio, 24, 0)).isInstanceOf(IllegalStateException.class);
 	}
 }
