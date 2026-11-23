@@ -2,6 +2,7 @@ package dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.web;
 
 import dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.application.AgendaAppService;
 import dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.application.CitaApp;
+import dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.application.ComprobanteCitaApp;
 import dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.application.DisponibilidadApp;
 import dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.application.Pagina;
 import dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.domain.EstadoCita;
@@ -86,6 +87,15 @@ public class AgendaAppController {
 	public CitaApp reprogramar(@PathVariable Long citaId, @Valid @RequestBody ReprogramarCitaRequest request,
 			@AuthenticationPrincipal UsuarioAutenticado cliente) {
 		return agendaAppService.reprogramar(cliente.id(), citaId, request.franjaId(), request.fecha());
+	}
+
+	@GetMapping("/citas/{citaId}/comprobante")
+	@PreAuthorize("hasRole('CLIENTE_CARECAR')")
+	@Operation(summary = "Código QR firmado de una cita", description = "El mismo texto del QR del PDF. Responde 404 "
+			+ "si la cita no existe o es de otro cliente y 409 CITA_CANCELADA si está cancelada.")
+	public ComprobanteCitaApp comprobante(@PathVariable Long citaId,
+			@AuthenticationPrincipal UsuarioAutenticado cliente) {
+		return agendaAppService.comprobante(cliente.id(), citaId);
 	}
 
 	@GetMapping(path = "/citas/{citaId}/ticket", produces = org.springframework.http.MediaType.APPLICATION_PDF_VALUE)
