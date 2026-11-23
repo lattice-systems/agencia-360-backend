@@ -14,6 +14,7 @@ public final class CodigosError {
 	public static final String FRANJA_SIN_CUPO = "FRANJA_SIN_CUPO";
 	public static final String FUERA_DE_PLAZO = "FUERA_DE_PLAZO";
 	public static final String CITA_NO_CANCELABLE = "CITA_NO_CANCELABLE";
+	public static final String CITA_CANCELADA = "CITA_CANCELADA";
 	public static final String CITA_DUPLICADA = "CITA_DUPLICADA";
 	public static final String CITA_NO_REPROGRAMABLE = "CITA_NO_REPROGRAMABLE";
 
