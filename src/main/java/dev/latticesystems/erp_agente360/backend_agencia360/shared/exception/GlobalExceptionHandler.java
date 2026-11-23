@@ -98,9 +98,9 @@ public class GlobalExceptionHandler {
 	@ExceptionHandler(ServicioNoDisponibleException.class)
 	public ResponseEntity<ApiError> handleServicioNoDisponible(ServicioNoDisponibleException ex,
 			HttpServletRequest request) {
-		return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).body(ApiError.of(
-				HttpStatus.SERVICE_UNAVAILABLE.value(), "Service Unavailable", ex.getMessage(),
-				request.getRequestURI(), ex.getCodigo()));
+		return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
+				.body(ApiError.of(HttpStatus.SERVICE_UNAVAILABLE.value(), "Service Unavailable", ex.getMessage(),
+						request.getRequestURI(), ex.getCodigo()));
 	}
 
 	@ExceptionHandler(DataIntegrityViolationException.class)
