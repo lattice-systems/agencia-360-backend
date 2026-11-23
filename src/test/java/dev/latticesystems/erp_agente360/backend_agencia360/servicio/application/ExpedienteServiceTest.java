@@ -11,6 +11,8 @@ import dev.latticesystems.erp_agente360.backend_agencia360.acceso.DirectorioUsua
 import dev.latticesystems.erp_agente360.backend_agencia360.clientes.VehiculosDeClientes;
 import dev.latticesystems.erp_agente360.backend_agencia360.clientes.VehiculosDeClientes.Propietario;
 import dev.latticesystems.erp_agente360.backend_agencia360.clientes.VehiculosDeClientes.VehiculoDeCliente;
+import dev.latticesystems.erp_agente360.backend_agencia360.servicio.EstatusOrden;
+import dev.latticesystems.erp_agente360.backend_agencia360.servicio.OrdenServicioCambiada;
 import dev.latticesystems.erp_agente360.backend_agencia360.servicio.domain.OrdenServicio;
 import dev.latticesystems.erp_agente360.backend_agencia360.servicio.domain.RenglonNuevo;
 import dev.latticesystems.erp_agente360.backend_agencia360.servicio.domain.TipoRenglon;
@@ -31,6 +33,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.context.ApplicationEventPublisher;
 
 @ExtendWith(MockitoExtension.class)
 class ExpedienteServiceTest {
@@ -54,11 +57,14 @@ class ExpedienteServiceTest {
 	@Mock
 	private DirectorioUsuarios directorioUsuarios;
 
+	@Mock
+	private ApplicationEventPublisher eventos;
+
 	private ExpedienteService service;
 
 	@BeforeEach
 	void setUp() {
-		service = new ExpedienteService(vehiculos, ordenServicioRepository, directorioUsuarios,
+		service = new ExpedienteService(vehiculos, ordenServicioRepository, directorioUsuarios, eventos,
 				Clock.fixed(AHORA, ExpedienteService.ZONA_AGENCIA));
 	}
 
@@ -109,6 +115,7 @@ class ExpedienteServiceTest {
 		assertThat(detalle.total()).isEqualByComparingTo("580.00");
 		assertThat(detalle.renglones()).singleElement()
 				.satisfies(renglon -> assertThat(renglon.importe()).isEqualByComparingTo("580.00"));
+		verify(eventos).publishEvent(new OrdenServicioCambiada(null, 3L, 9L, EstatusOrden.TERMINADO));
 	}
 
 	@Test

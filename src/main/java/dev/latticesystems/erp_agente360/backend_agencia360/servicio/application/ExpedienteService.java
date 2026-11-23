@@ -3,6 +3,7 @@ package dev.latticesystems.erp_agente360.backend_agencia360.servicio.application
 import dev.latticesystems.erp_agente360.backend_agencia360.acceso.DirectorioUsuarios;
 import dev.latticesystems.erp_agente360.backend_agencia360.clientes.VehiculosDeClientes;
 import dev.latticesystems.erp_agente360.backend_agencia360.clientes.VehiculosDeClientes.VehiculoDeCliente;
+import dev.latticesystems.erp_agente360.backend_agencia360.servicio.OrdenServicioCambiada;
 import dev.latticesystems.erp_agente360.backend_agencia360.servicio.domain.OrdenServicio;
 import dev.latticesystems.erp_agente360.backend_agencia360.servicio.infrastructure.OrdenServicioRepository;
 import dev.latticesystems.erp_agente360.backend_agencia360.shared.exception.RecursoNoEncontradoException;
@@ -13,6 +14,7 @@ import java.time.ZonedDateTime;
 import java.util.List;
 import java.util.Map;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -32,19 +34,21 @@ public class ExpedienteService {
 	private final VehiculosDeClientes vehiculos;
 	private final OrdenServicioRepository ordenServicioRepository;
 	private final DirectorioUsuarios directorioUsuarios;
+	private final ApplicationEventPublisher eventos;
 	private final Clock reloj;
 
 	@Autowired
 	public ExpedienteService(VehiculosDeClientes vehiculos, OrdenServicioRepository ordenServicioRepository,
-			DirectorioUsuarios directorioUsuarios) {
-		this(vehiculos, ordenServicioRepository, directorioUsuarios, Clock.system(ZONA_AGENCIA));
+			DirectorioUsuarios directorioUsuarios, ApplicationEventPublisher eventos) {
+		this(vehiculos, ordenServicioRepository, directorioUsuarios, eventos, Clock.system(ZONA_AGENCIA));
 	}
 
 	ExpedienteService(VehiculosDeClientes vehiculos, OrdenServicioRepository ordenServicioRepository,
-			DirectorioUsuarios directorioUsuarios, Clock reloj) {
+			DirectorioUsuarios directorioUsuarios, ApplicationEventPublisher eventos, Clock reloj) {
 		this.vehiculos = vehiculos;
 		this.ordenServicioRepository = ordenServicioRepository;
 		this.directorioUsuarios = directorioUsuarios;
+		this.eventos = eventos;
 		this.reloj = reloj;
 	}
 
@@ -90,9 +94,11 @@ public class ExpedienteService {
 	 */
 	@Transactional
 	public ServicioDetalle registrar(Long vehiculoId, NuevoServicio nuevo, UsuarioAutenticado actor) {
-		vehiculo(vehiculoId);
+		VehiculoDeCliente vehiculo = vehiculo(vehiculoId);
 		OrdenServicio servicio = ordenServicioRepository.save(OrdenServicio.registrar(vehiculoId, nuevo.fecha(),
 				nuevo.kilometraje(), actor.id(), nuevo.renglones(), ZonedDateTime.now(reloj)));
+		eventos.publishEvent(new OrdenServicioCambiada(servicio.getId(), vehiculoId, vehiculo.propietario().id(),
+				servicio.getEstatus()));
 		return ServicioDetalle.de(servicio, nombreDe(directorioUsuarios.nombresDe(List.of(actor.id())), servicio));
 	}
 

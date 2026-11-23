@@ -101,8 +101,8 @@ El PDF marca la división de módulos como **pendiente de definir** (sección 9)
 ```
 src/main/java/dev/latticesystems/erp_agente360/backend_agencia360/
 ├── shared/          # kernel compartido (abierto a todos los módulos)
-│   ├── config/      # OpenAPI, CORS, JPA auditing
-│   ├── security/    # Spring Security, JWT, roles
+│   ├── config/      # OpenAPI, CORS, JPA auditing, WebSocket (STOMP en /ws)
+│   ├── security/    # Spring Security, JWT, roles, JWT en el CONNECT de STOMP
 │   ├── exception/   # manejo global de errores
 │   └── domain/      # clases base (auditoría)
 ├── acceso/          # Usuarios, roles y login del personal — ERP-0.1 · CRM-0.1
@@ -114,7 +114,8 @@ src/main/java/dev/latticesystems/erp_agente360/backend_agencia360/
 ├── refacciones/     # Ventas directas de refacciones     — ERP HU 3.2
 ├── caja/            # Caja (pagos, cobros, cancelaciones) — ERP HU 4.1
 ├── contabilidad/    # Balance de ingresos y egresos       — ERP HU 4.2
-└── carecarapp/      # API para la app móvil de clientes  — CareCar HU 2.1, 2.2, 3.1, 3.2, 3.3, 4.1
+├── carecarapp/      # API para la app móvil de clientes  — CareCar HU 2.1, 2.2, 3.1, 3.2, 3.3, 4.1
+└── archivos/        # Archivos con URL temporal firmada  — V2-T05.09
 ```
 
 Cada módulo de negocio sigue la misma convención interna (capas, no sub-módulos de Modulith):
@@ -163,6 +164,9 @@ Todos van bajo `/api/v1` y, salvo el login, piden el token en `Authorization: Be
 | `carecarapp` | `GET /catalogo`, `POST /catalogo`, `POST /catalogo/{id}/retirar` | Administrador y Gerente de marketing |
 | `carecarapp` | `GET /app/manuales/{id}/archivo?expira=&firma=` (URL temporal del PDF, vence a los 15 minutos) | Clientes de la app (sin token: la URL va firmada) |
 | `carecarapp` | `POST /manuales` (multipart: `marca`, `modelo`, `anio`, `archivo`; si ya hay uno, lo reemplaza) | Gerente de marketing |
+| `carecarapp` | `GET /app/eventos` (Server-Sent Events: evento `orden` cuando cambia una orden de servicio del cliente) | Clientes de la app (rol `CLIENTE_CARECAR`) |
+| `archivos` | `GET /archivos/{carpeta}/{id}?expira=&firma=` (URL temporal de un archivo, vence a los 15 minutos) | Cualquiera con la URL firmada (sin token) |
+| `shared` | WebSocket STOMP en `/ws` (fuera de `/api/v1`): el `CONNECT` lleva `Authorization: Bearer <token>`; solo se suscribe a `/user/queue/...` y solo manda a `/app/...` | Personal y clientes con token |
 
 Reglas del inventario (decisiones del PO del 13 de octubre):
 - Las unidades y refacciones se editan, pero no se eliminan.
@@ -304,6 +308,9 @@ La API lee su configuración de variables de entorno. Si no defines ninguna, usa
 | `JWT_EXPIRATION_MINUTES` | `60` | Duración del token |
 | `MANUALES_DIRECTORIO` | Carpeta `agencia360/manuales` dentro de la carpeta temporal del sistema | Dónde se guardan los PDF de los manuales mientras no haya Azure Blob Storage |
 | `MANUALES_SECRETO` | Valor de solo-desarrollo | Llave para firmar las URL temporales de los manuales; al menos 32 caracteres |
+| `ARCHIVOS_ALMACEN` | `base` | Dónde viven los archivos de la v2 (evidencias, documentos): `base` (tabla `archivo`) o `local` (carpeta) |
+| `ARCHIVOS_DIRECTORIO` | Carpeta `agencia360/archivos` dentro de la carpeta temporal del sistema | Carpeta de los archivos con `ARCHIVOS_ALMACEN=local` |
+| `ARCHIVOS_SECRETO` | Valor de solo-desarrollo (en `prod`, si falta, usa `MANUALES_SECRETO`) | Llave para firmar las URL temporales de los archivos; al menos 32 caracteres |
 | `CITAS_QR_SECRETO` | Valor de solo-desarrollo | Llave que firma el QR del comprobante de la cita (V2-M02.11); al menos 32 caracteres |
 | `WALLET_APPLE_PASS_TYPE_ID`, `WALLET_APPLE_TEAM_ID`, `WALLET_APPLE_CERT_P12_BASE64`, `WALLET_APPLE_CERT_PASSWORD`, `WALLET_APPLE_WWDR_PEM_BASE64` | Vacío | Pase de Apple Wallet de la cita (V2-M25.03): Pass Type ID, Team ID, certificado `.p12` en base64 con su contraseña y certificado WWDR en PEM base64. Opcionales: sin ellas el arranque sigue y `GET /citas/{id}/pase?plataforma=apple` responde 503 `WALLET_NO_CONFIGURADO` |
 | `WALLET_GOOGLE_ISSUER_ID`, `WALLET_GOOGLE_SERVICE_ACCOUNT_JSON_BASE64` | Vacío | Pase de Google Wallet: ID de emisor y JSON de la cuenta de servicio en base64. Opcionales, igual que las de Apple |

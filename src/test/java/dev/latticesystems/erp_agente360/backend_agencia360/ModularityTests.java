@@ -1,5 +1,7 @@
 package dev.latticesystems.erp_agente360.backend_agencia360;
 
+import static org.assertj.core.api.Assertions.assertThat;
+
 import org.junit.jupiter.api.Test;
 import org.springframework.modulith.core.ApplicationModules;
 
@@ -15,5 +17,10 @@ class ModularityTests {
 	@Test
 	void verifiesModularStructure() {
 		modules.verify();
+	}
+
+	@Test
+	void archivosEsUnModuloDeLaV2() {
+		assertThat(modules.getModuleByName("archivos")).isPresent();
 	}
 }

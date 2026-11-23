@@ -25,11 +25,11 @@ El plan maestro (propósito, objetivos, hitos, módulos, reparto y tablero) vive
 
 | Módulo | Estado hoy | Uso en la v2 |
 | --- | --- | --- |
-| `carecarapp` | Con código (acceso, vehículos, manuales, servicios, citas, catálogo) | Puerta de entrada `/api/v1/app`; orquesta lecturas para la app |
+| `carecarapp` | Con código (acceso, vehículos, manuales, servicios, citas, catálogo, asistente, avisos en vivo) | Puerta de entrada `/api/v1/app`; orquesta lecturas para la app; el asistente (M24) vive aquí mientras no crezca |
 | `clientes` | Con código | Cliente y vehículos del cliente (ficha) |
-| `servicio` | Vacío | Orden de servicio, etapas, inspección, adicionales, mantenimiento, garantía, traslados |
+| `servicio` | Con código (`orden_servicio`, `orden_refaccion`, `orden_mano_de_obra`; publica `OrdenServicioCambiada`) | Orden de servicio, etapas, inspección, adicionales, mantenimiento, garantía, traslados (lo que V2-T05.01 llamaba `postventa`) |
 | `refacciones`, `inventario` | Inventario con código | Tienda y apartados (M14) |
-| `caja`, `facturacion` | Facturación con código | Pagos en app y CFDI (M08) |
+| `caja`, `facturacion` | Facturación con código | Pagos en app y CFDI (M08; lo que V2-T05.01 llamaba `pagosapp`) |
 | `ventascrm` | Con código | Prospectos desde la app (M16, M26, referidos M12) |
 | `notificaciones` | **Nuevo** | Push FCM, bandeja y preferencias (M06) |
 | `mensajeria` | **Nuevo** | Chat cliente–asesor (M07) |
@@ -38,9 +38,16 @@ El plan maestro (propósito, objetivos, hitos, módulos, reparto y tablero) vive
 | `promociones` | **Nuevo** | Ofertas segmentadas (M13) |
 | `encuestas` | **Nuevo** | NPS (M15) |
 | `asistencia` | **Nuevo** | SOS (M11) |
-| `asistente` | **Nuevo** | IA sobre manuales (M24) |
+| `asistente` | Dentro de `carecarapp` | IA sobre manuales (M24); se separa si crece |
+| `archivos` | **Nuevo, con código** (V2-T05.01, V2-T05.09) | Archivos de evidencias, documentos y fotos con URL temporal firmada (`AlmacenArchivos`) |
 
-Los módulos nuevos se crean solo cuando su primera historia se implementa (no se crean carpetas vacías por adelantado).
+Los módulos nuevos se crean solo cuando su primera historia se implementa (no se crean carpetas vacías por adelantado). V2-T05.01 fija este catálogo y crea `archivos`, el primero que hace falta; `notificaciones` y `lealtad` nacen con V2-M06.01 y V2-M12.01. `ModularityTests` verifica el catálogo.
+
+### Tiempo real (V2-T05.08)
+
+- **Órdenes, por Server-Sent Events:** `GET /api/v1/app/eventos` con el token de la app. Cuando `servicio` publica `OrdenServicioCambiada`, `carecarapp` manda el evento `orden` (`ordenId`, `vehiculoId`, `estatus`) solo a las conexiones de ese cliente, después del commit. La app vuelve a consultar la orden.
+- **Chat, por WebSocket STOMP:** `/ws`. El `CONNECT` lleva `Authorization: Bearer <token>` (sin token o con uno inválido se rechaza); solo se puede suscribir a `/user/queue/...` y mandar a `/app/...`. El destino de usuario es `UsuarioAutenticado.getName()` (el correo del cliente o el usuario del personal). Lo usa `mensajeria` (M07) con `SimpMessagingTemplate.convertAndSendToUser`.
+- Las conexiones viven en la memoria de la réplica (ver `docs/despliegue-azure-neon.md`).
 
 ## Cómo se mantiene
 
