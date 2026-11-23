@@ -16,6 +16,5 @@ import java.time.ZonedDateTime;
  * @param vehiculoNombre
  *            nombre del vehículo, o {@code null}
  */
-public record DatosPase(Long citaId, String codigoQr, ZonedDateTime inicio, ZonedDateTime fin,
-		String vehiculoNombre) {
+public record DatosPase(Long citaId, String codigoQr, ZonedDateTime inicio, ZonedDateTime fin, String vehiculoNombre) {
 }
