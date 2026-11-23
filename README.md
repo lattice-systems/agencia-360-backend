@@ -298,12 +298,13 @@ La API lee su configuración de variables de entorno. Si no defines ninguna, usa
 | `JWT_EXPIRATION_MINUTES` | `60` | Duración del token |
 | `MANUALES_DIRECTORIO` | Carpeta `agencia360/manuales` dentro de la carpeta temporal del sistema | Dónde se guardan los PDF de los manuales mientras no haya Azure Blob Storage |
 | `MANUALES_SECRETO` | Valor de solo-desarrollo | Llave para firmar las URL temporales de los manuales; al menos 32 caracteres |
+| `CITAS_QR_SECRETO` | Valor de solo-desarrollo | Llave que firma el QR del comprobante de la cita (V2-M02.11); al menos 32 caracteres |
 | `ADMIN_INICIAL_USUARIO` / `ADMIN_INICIAL_CONTRASENA` | Vacío | Si tienen valor, al arrancar se crea el primer Administrador (ERP) cuando todavía no existe |
 | `GERENTE_INICIAL_USUARIO` / `GERENTE_INICIAL_CONTRASENA` | Vacío | Igual, para el primer Gerente de marketing (administrador del CRM) |
 | `AGENCIA_MARCA` | `Nissan` | Marca que vende la agencia; va en la factura y en la unidad del expediente |
 | `FACTURA_EMISOR_RFC`, `FACTURA_EMISOR_NOMBRE`, `FACTURA_EMISOR_DOMICILIO`, `FACTURA_EMISOR_REGIMEN` | Datos ficticios de desarrollo | Datos fiscales de la agencia que emite las facturas |
 
-**`JWT_SECRET` y `MANUALES_SECRETO` traen un valor de solo-desarrollo por defecto: hay que sobrescribirlos en cualquier ambiente real** (en Azure, vía Key Vault según la sección 5 del PDF).
+**`JWT_SECRET`, `MANUALES_SECRETO` y `CITAS_QR_SECRETO` traen un valor de solo-desarrollo por defecto: hay que sobrescribirlos en cualquier ambiente real** (en Azure, vía Key Vault según la sección 5 del PDF).
 
 Ejemplo, para apuntar a otro PostgreSQL sin tocar código:
 

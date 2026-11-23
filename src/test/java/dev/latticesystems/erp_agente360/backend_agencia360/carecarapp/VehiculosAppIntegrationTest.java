@@ -14,6 +14,8 @@ import dev.latticesystems.erp_agente360.backend_agencia360.acceso.infrastructure
 import dev.latticesystems.erp_agente360.backend_agencia360.acceso.infrastructure.UsuarioRepository;
 import dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.application.CuentasAppService;
 import dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.application.EnvioCorreos;
+import dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.domain.FichaTecnicaModelo;
+import dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.infrastructure.FichaTecnicaModeloRepository;
 import dev.latticesystems.erp_agente360.backend_agencia360.clientes.application.NuevoCliente;
 import dev.latticesystems.erp_agente360.backend_agencia360.clientes.application.RegistroClientesService;
 import dev.latticesystems.erp_agente360.backend_agencia360.clientes.application.VehiculoNuevo;
@@ -62,6 +64,9 @@ class VehiculosAppIntegrationTest extends AbstractIntegrationTest {
 
 	@Autowired
 	private JwtService jwtService;
+
+	@Autowired
+	private FichaTecnicaModeloRepository fichaTecnicaModeloRepository;
 
 	@MockitoBean
 	private EnvioCorreos envioCorreos;
@@ -168,6 +173,38 @@ class VehiculosAppIntegrationTest extends AbstractIntegrationTest {
 		mockMvc.perform(get("/api/v1/app/vehiculos").header(HttpHeaders.AUTHORIZATION,
 				"Bearer " + tokenDePersonal("GERENTE_MARKETING"))).andExpect(status().isForbidden());
 		mockMvc.perform(get("/api/v1/app/vehiculos")).andExpect(status().isUnauthorized());
+	}
+
+	@Test
+	void laFichaTecnicaSeAgrupaEnSeccionesPorModeloYAnio() throws Exception {
+		fichaTecnicaModeloRepository
+				.save(FichaTecnicaModelo.de("Nissan", "Sentra", 2025, "Seguridad", "Bolsas de aire", "6", 2));
+		fichaTecnicaModeloRepository
+				.save(FichaTecnicaModelo.de("Nissan", "Sentra", 2025, "Motor", "Potencia", "149 hp", 2));
+		fichaTecnicaModeloRepository
+				.save(FichaTecnicaModelo.de("nissan", "SENTRA", 2025, "Motor", "Cilindrada", "2.0 L", 1));
+		fichaTecnicaModeloRepository
+				.save(FichaTecnicaModelo.de("Nissan", "Sentra", 2024, "Motor", "Potencia", "otro año", 1));
+
+		mockMvc.perform(get("/api/v1/app/vehiculos/{id}/ficha-tecnica", sentraId).header(HttpHeaders.AUTHORIZATION,
+				"Bearer " + tokenDeAna)).andExpect(status().isOk()).andExpect(jsonPath("$.vehiculoId").value(sentraId))
+				.andExpect(jsonPath("$.modelo").value("Sentra")).andExpect(jsonPath("$.anio").value(2025))
+				.andExpect(jsonPath("$.version").value("Advance")).andExpect(jsonPath("$.secciones.length()").value(2))
+				.andExpect(jsonPath("$.secciones[0].nombre").value("Motor"))
+				.andExpect(jsonPath("$.secciones[0].especificaciones.length()").value(2))
+				.andExpect(jsonPath("$.secciones[0].especificaciones[0].nombre").value("Cilindrada"))
+				.andExpect(jsonPath("$.secciones[0].especificaciones[1].valor").value("149 hp"))
+				.andExpect(jsonPath("$.secciones[1].nombre").value("Seguridad"));
+	}
+
+	@Test
+	void sinDatosLaFichaTecnicaVieneVaciaYUnVehiculoAjenoEs404() throws Exception {
+		mockMvc.perform(get("/api/v1/app/vehiculos/{id}/ficha-tecnica", sentraId).header(HttpHeaders.AUTHORIZATION,
+				"Bearer " + tokenDeAna)).andExpect(status().isOk())
+				.andExpect(jsonPath("$.secciones.length()").value(0));
+		mockMvc.perform(get("/api/v1/app/vehiculos/{id}/ficha-tecnica", vehiculoDeBrunoId)
+				.header(HttpHeaders.AUTHORIZATION, "Bearer " + tokenDeAna)).andExpect(status().isNotFound());
+		mockMvc.perform(get("/api/v1/app/vehiculos/{id}/ficha-tecnica", sentraId)).andExpect(status().isUnauthorized());
 	}
 
 	private ResultActions subirManual(String marca, String modelo, int anio, byte[] contenido) throws Exception {

@@ -55,4 +55,38 @@ class CitaTest {
 		assertThatThrownBy(() -> Cita.confirmar(1L, 2L, DIA, 1L, LocalTime.of(10, 0), LocalTime.of(10, 0)))
 				.isInstanceOf(IllegalArgumentException.class);
 	}
+
+	@Test
+	void guardaElMotivoYSinElQuedaNulo() {
+		assertThat(cita().getMotivo()).isNull();
+		Cita conMotivo = Cita.confirmar(1L, 2L, DIA, 1L, LocalTime.of(9, 0), LocalTime.of(10, 0), MotivoCita.GARANTIA);
+		assertThat(conMotivo.getMotivo()).isEqualTo(MotivoCita.GARANTIA);
+	}
+
+	@Test
+	void reprogramaCambiandoDeDiaYFranja() {
+		Cita cita = cita();
+		LocalDate nuevoDia = DIA.plusDays(2);
+		cita.reprogramar(DIA.minusDays(1).atTime(8, 0), nuevoDia, 5L, LocalTime.of(13, 0), LocalTime.of(14, 0));
+		assertThat(cita.getEstado()).isEqualTo(EstadoCita.CONFIRMADA);
+		assertThat(cita.getFecha()).isEqualTo(nuevoDia);
+		assertThat(cita.getFranjaId()).isEqualTo(5L);
+		assertThat(cita.getHoraInicio()).isEqualTo(LocalTime.of(13, 0));
+		assertThat(cita.getHoraFin()).isEqualTo(LocalTime.of(14, 0));
+	}
+
+	@Test
+	void unaCitaCanceladaOQueYaEmpezoNoSeReprograma() {
+		Cita cancelada = cita();
+		cancelada.cancelar(DIA.minusDays(5).atStartOfDay(), PLAZO, Instant.EPOCH);
+		assertThatThrownBy(() -> cancelada.reprogramar(DIA.minusDays(5).atStartOfDay(), DIA, 2L, LocalTime.of(10, 0),
+				LocalTime.of(11, 0))).isInstanceOf(ConflictoException.class).extracting("codigo")
+				.isEqualTo("CITA_NO_REPROGRAMABLE");
+
+		Cita empezada = cita();
+		assertThatThrownBy(
+				() -> empezada.reprogramar(DIA.atTime(9, 0), DIA, 2L, LocalTime.of(10, 0), LocalTime.of(11, 0)))
+				.isInstanceOf(ConflictoException.class).extracting("codigo").isEqualTo("CITA_NO_REPROGRAMABLE");
+		assertThat(empezada.getFranjaId()).isEqualTo(1L);
+	}
 }

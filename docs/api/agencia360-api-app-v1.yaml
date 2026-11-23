@@ -279,6 +279,29 @@ paths:
         '404':
           $ref: '#/components/responses/NoEncontrado'
 
+  /vehiculos/{vehiculoId}/ficha-tecnica:
+    get:
+      tags: [Vehículos]
+      summary: Ficha técnica del modelo del vehículo
+      description: |
+        V2-M02.04 · Especificaciones por marca, modelo y año agrupadas en secciones. Si la agencia
+        aún no las carga, `secciones` viene vacía y la app usa su respaldo local.
+      parameters:
+        - $ref: '#/components/parameters/VehiculoId'
+      responses:
+        '200':
+          description: Ficha técnica
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FichaTecnica'
+        '401':
+          $ref: '#/components/responses/NoAutenticado'
+        '403':
+          $ref: '#/components/responses/CuentaDesactivada'
+        '404':
+          $ref: '#/components/responses/NoEncontrado'
+
   /vehiculos/{vehiculoId}/servicios:
     get:
       tags: [Servicios y tickets]
@@ -438,7 +461,9 @@ paths:
         '404':
           $ref: '#/components/responses/NoEncontrado'
         '409':
-          description: La franja ya no tiene cupo (`codigo` FRANJA_SIN_CUPO)
+          description: |
+            La franja ya no tiene cupo (`codigo` FRANJA_SIN_CUPO) o el vehículo ya tiene una cita
+            confirmada ese día (`codigo` CITA_DUPLICADA)
           content:
             application/json:
               schema:
@@ -473,6 +498,131 @@ paths:
           description: |
             Fuera del plazo de cancelación (`codigo` FUERA_DE_PLAZO) o la cita ya no está
             confirmada (`codigo` CITA_NO_CANCELABLE)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Problema'
+
+  /citas/{citaId}/reprogramar:
+    post:
+      tags: [Agenda]
+      summary: Reprogramar una cita sin cancelarla
+      description: |
+        V2-M02.13 · Mueve la cita a otra franja (y opcionalmente otro día): libera la franja
+        anterior y ocupa la nueva en la misma operación. Solo citas confirmadas que no han empezado.
+      parameters:
+        - name: citaId
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReprogramarCita'
+      responses:
+        '200':
+          description: Cita reprogramada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Cita'
+        '400':
+          $ref: '#/components/responses/DatosInvalidos'
+        '401':
+          $ref: '#/components/responses/NoAutenticado'
+        '403':
+          $ref: '#/components/responses/CuentaDesactivada'
+        '404':
+          $ref: '#/components/responses/NoEncontrado'
+        '409':
+          description: |
+            La nueva franja no tiene cupo (`codigo` FRANJA_SIN_CUPO), el vehículo ya tiene otra cita
+            ese día (`codigo` CITA_DUPLICADA) o la cita ya no es reprogramable (`codigo`
+            CITA_NO_REPROGRAMABLE)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Problema'
+
+  /citas/{citaId}/ticket:
+    get:
+      tags: [Agenda]
+      summary: Descargar el comprobante PDF de una cita
+      description: |
+        PDF con un QR (`CARECAR-CITA:<id>.<firma>`) que recepción puede verificar; la firma es un
+        HMAC-SHA256 con una llave que solo conoce el backend (V2-M02.11).
+      parameters:
+        - name: citaId
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+      responses:
+        '200':
+          description: PDF del comprobante
+          content:
+            application/pdf:
+              schema:
+                type: string
+                format: binary
+        '401':
+          $ref: '#/components/responses/NoAutenticado'
+        '403':
+          $ref: '#/components/responses/CuentaDesactivada'
+        '404':
+          $ref: '#/components/responses/NoEncontrado'
+
+  /citas/{citaId}/comprobante:
+    get:
+      tags: [Agenda]
+      summary: Código QR firmado de una cita
+      description: |
+        V2-M02.11 · `codigo` es el mismo texto del QR del PDF (`CARECAR-CITA:<id>.<firma>`).
+        Solo citas confirmadas del cliente.
+      parameters:
+        - name: citaId
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+      responses:
+        '200':
+          description: Datos del comprobante
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [citaId, codigo, fecha, horaInicio, horaFin]
+                properties:
+                  citaId:
+                    type: integer
+                    format: int64
+                  codigo:
+                    type: string
+                  fecha:
+                    type: string
+                    format: date
+                  horaInicio:
+                    type: string
+                  horaFin:
+                    type: string
+                  vehiculoNombre:
+                    type: string
+                    nullable: true
+        '401':
+          $ref: '#/components/responses/NoAutenticado'
+        '403':
+          $ref: '#/components/responses/CuentaDesactivada'
+        '404':
+          $ref: '#/components/responses/NoEncontrado'
+        '409':
+          description: La cita está cancelada (`codigo` CITA_CANCELADA)
           content:
             application/json:
               schema:
@@ -907,6 +1057,63 @@ components:
         fecha:
           type: string
           format: date
+        motivo:
+          $ref: '#/components/schemas/MotivoCita'
+
+    MotivoCita:
+      type: string
+      nullable: true
+      description: V2-M02.08 · Opcional. Se acepta sin importar mayúsculas y siempre se devuelve en minúsculas.
+      enum: [mantenimiento, reparacion, revision, garantia, otro]
+
+    ReprogramarCita:
+      type: object
+      required: [franjaId]
+      properties:
+        franjaId:
+          type: integer
+          format: int64
+        fecha:
+          type: string
+          format: date
+          description: Opcional; si falta se queda el día de la cita.
+
+    FichaTecnica:
+      type: object
+      required: [vehiculoId, modelo, anio, secciones]
+      properties:
+        vehiculoId:
+          type: integer
+          format: int64
+        marca:
+          type: string
+          nullable: true
+        modelo:
+          type: string
+        anio:
+          type: integer
+        version:
+          type: string
+          nullable: true
+        secciones:
+          type: array
+          description: Vacía si la agencia aún no carga la ficha de ese modelo y año.
+          items:
+            type: object
+            required: [nombre, especificaciones]
+            properties:
+              nombre:
+                type: string
+              especificaciones:
+                type: array
+                items:
+                  type: object
+                  required: [nombre, valor]
+                  properties:
+                    nombre:
+                      type: string
+                    valor:
+                      type: string
 
     EstadoCita:
       type: string
@@ -938,6 +1145,8 @@ components:
           type: string
         estado:
           $ref: '#/components/schemas/EstadoCita'
+        motivo:
+          $ref: '#/components/schemas/MotivoCita'
 
     PaginaCitas:
       type: object
@@ -1268,6 +1477,9 @@ components:
             - FUERA_DE_PLAZO
             - CITA_NO_CANCELABLE
             - SIN_PARAMETROS_DE_VALUACION
+            - CITA_DUPLICADA
+            - CITA_NO_REPROGRAMABLE
+            - CITA_CANCELADA
           example: FRANJA_SIN_CUPO
         path:
           type: string

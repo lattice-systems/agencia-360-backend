@@ -23,8 +23,13 @@ public interface CitaRepository extends JpaRepository<Cita, Long> {
 
 	long countByFechaAndFranjaIdAndEstado(LocalDate fecha, Long franjaId, EstadoCita estado);
 
-	boolean existsByVehiculoClienteIdAndFechaAndFranjaIdAndEstado(Long vehiculoClienteId, LocalDate fecha,
-			Long franjaId, EstadoCita estado);
+	/**
+	 * Si el vehículo ya tiene una cita en el día, sin contar la {@code excepto}.
+	 */
+	@Query("select count(c) > 0 from Cita c where c.vehiculoClienteId = :vehiculoId and c.fecha = :fecha "
+			+ "and c.estado = :estado and c.id <> :excepto")
+	boolean existeCitaDelVehiculoEnElDia(@Param("vehiculoId") Long vehiculoId, @Param("fecha") LocalDate fecha,
+			@Param("estado") EstadoCita estado, @Param("excepto") Long excepto);
 
 	@Query("select c from Cita c where c.clienteId = :clienteId and c.estado in :estados "
 			+ "and c.fecha between :desde and :hasta order by c.fecha asc, c.horaInicio asc, c.id asc")
