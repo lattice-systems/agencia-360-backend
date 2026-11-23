@@ -503,6 +503,14 @@ Detalle: [`carecar-mobile/plan/modulos/T05-contrato-api-v2.md`](https://github.c
 | V2-T05.10 | Como equipo queremos datos de ejemplo para cada módulo nuevo | `scripts/cargar-datos-de-ejemplo.sh` extendido | Ricardo |
 | V2-T05.11 | Como equipo queremos desplegar la API en Azure automáticamente en cada merge a `main` | Workflow que construye la imagen en formato OCI, la publica en GHCR y actualiza `ca-agencia360-api` · entrada a Azure por OIDC con una identidad administrada (Contributor solo sobre la app; variables de repositorio, sin secretos) · verificación de `/actuator/health` tras desplegar · ver `docs/despliegue-azure-neon.md` · **Hecha** (`.github/workflows/despliegue.yml`) | Daniel |
 
+#### Diseño de V2-T05.01: módulos de Modulith de la v2
+
+**Catálogo.** Queda en `plan/README.md`. Lo que esta historia llamaba `postventa` vive en `servicio` (ya tiene `orden_servicio`), `pagosapp` en `caja` y `facturacion`, y `asistente` dentro de `carecarapp` mientras no crezca. Los módulos nuevos se crean con su primera historia, no como carpetas vacías.
+
+**Módulo nuevo.** `archivos` (V2-T05.09), el primero que hace falta: lo usarán evidencias de la orden (M04), documentos (M09) y traslados (M17). Su API pública es `archivos.AlmacenArchivos`; lo demás (`application`, `infrastructure`, `web`) es interno.
+
+**Pruebas.** `ModularityTests`: `verify()` en verde y el módulo `archivos` registrado.
+
 #### Diseño de V2-T05.02: contrato v2
 
 **Archivo.** `docs/api/agencia360-api-app-v2.yaml`, versión 2.0.0. Nace como copia de `agencia360-api-app-v1.yaml` en 1.4.0 (todo lo integrado hasta hoy, incluidos los diseños de M02 y M03), con la descripción reescrita para la v2. No agrega ni quita rutas.
@@ -606,3 +614,31 @@ Los precios siguen con IVA incluido: `mano_de_obra` y `refacciones` suman los im
 **Eventos.** Ninguno.
 
 **Pruebas.** `FranjaHorarioTest` (dominio), `HorarioTallerTest` (Mockito) y `AgendaAppIntegrationTest`: las franjas sembradas, el cupo desde `capacidad`, una franja de otro día o inactiva responde 400 y una franja nueva aparece en la disponibilidad de su día.
+
+#### Diseño de V2-T05.08: eventos en vivo
+
+**Órdenes (SSE).** `GET /api/v1/app/eventos` (`text/event-stream`, rol `CLIENTE_CARECAR`; la cuenta desactivada responde 403 como el resto de la app). `servicio` publica `servicio.OrdenServicioCambiada(ordenId, vehiculoId, clienteId, estatus)` al registrar una orden; M04 lo publicará en cada cambio de etapa. `carecarapp` lo escucha después del commit y manda el evento `orden` con `ordenId`, `vehiculoId` y `estatus` solo a las conexiones de ese cliente. Comentario de latido cada 25 s; la conexión se cierra a los 30 min para que la app se reconecte con su token.
+
+**Chat (WebSocket).** STOMP en `/ws` con broker simple (`/queue`), prefijo de aplicación `/app` y de usuario `/user`. `shared.security.AutenticacionStomp` valida el JWT del `CONNECT` (`Authorization: Bearer <token>`) y pone el usuario de la sesión; sin token o con uno inválido el `CONNECT` se rechaza. Solo se puede suscribir a `/user/queue/...` y mandar a `/app/...`. Los orígenes permitidos son los de CORS (`CORS_ALLOWED_ORIGINS`); la app móvil no manda `Origin`. Dependencia nueva: `spring-boot-starter-websocket`.
+
+**Contrato.** v2 en 2.4.0 con `GET /eventos` bajo la etiqueta «En vivo» y el WebSocket descrito en `info`.
+
+**Errores.** SSE: 401 sin token, 403 con rol que no es de la app o cuenta desactivada. WebSocket: frame `ERROR` y cierre.
+
+**Límite.** Conexiones y broker en la memoria de la réplica; con varias réplicas hará falta un bus externo.
+
+**Pruebas.** `EventosEnVivoAppIntegrationTest` (el cliente recibe su orden y no la de otro, 401 y 403) y `WebSocketIntegrationTest` (recibe sus avisos y no los de otro usuario, sin token o con token falso no conecta, no se suscribe fuera de `/user/queue`); `ExpedienteServiceTest` revisa que registrar publique el evento.
+
+#### Diseño de V2-T05.09: almacenamiento de archivos
+
+**API.** `archivos.AlmacenArchivos`: `guardar(carpeta, tipoContenido, contenido)` → `ArchivoGuardado(clave, tipoContenido, tamanoBytes)`; `leer(clave)`; `borrar(clave)`; `urlTemporal(clave)` → `/api/v1/archivos/{carpeta}/{id}?expira=&firma=`. La clave es `carpeta/uuid`. Solo JPEG, PNG, WebP y PDF, hasta 20 MB.
+
+**Implementaciones.** `ARCHIVOS_ALMACEN=base` (por omisión): tabla `archivo` en PostgreSQL, que en producción es Neon, en la nube. `ARCHIVOS_ALMACEN=local`: carpeta `ARCHIVOS_DIRECTORIO`, para desarrollo. Las dos detrás del puerto `Deposito`; un almacén de objetos (Azure Blob Storage) se agrega como otra implementación sin tocar a quien usa `AlmacenArchivos`, cuando el equipo abra esa cuenta.
+
+**Migración.** Una nueva (número al integrar) que crea `archivo` (`clave` llave primaria, `tipo_contenido`, `tamano_bytes`, `contenido`, `created_at`; `check` de que el tamaño coincide con el contenido).
+
+**URL firmadas.** HMAC-SHA256 con `ARCHIVOS_SECRETO` sobre `archivo:<clave>:<expira>`; vencen a los 15 minutos. `GET /api/v1/archivos/{carpeta}/{id}` es público (sin token) y responde 404 si no existe, la firma no es válida o venció, con `Cache-Control: no-store`. En `prod`, si falta `ARCHIVOS_SECRETO`, se firma con `MANUALES_SECRETO`; el prefijo evita que una firma de manual sirva para un archivo.
+
+**Eventos.** Ninguno.
+
+**Pruebas.** `FirmaArchivosTest`, `ArchivosServiceTest` (Mockito), `DepositoLocalTest` y `ArchivosIntegrationTest` (guarda en la base, descarga sin token, firma alterada o sin firma 404, borrado 404).
