@@ -42,6 +42,36 @@ Detalle: [`carecar-mobile/plan/modulos/M02-vehiculos-y-postventa.md`](https://gi
 | V2-M02.11 | Como cliente quiero un comprobante con QR de mi cita para recepción rápida | QR con id firmado en el PDF que ya entrega `GET /citas/{id}/ticket` · agregable a Wallet (M25) | Juan Pablo |
 | V2-M02.13 | Como cliente quiero reprogramar una cita sin cancelarla | Elige nueva franja; la anterior se libera en la misma operación | Juan Pablo |
 
+#### Diseño técnico — V2-M02.04, M02.08, M02.11 y M02.13 (parte B de Juan Pablo)
+
+Estado: en curso en la rama `feat/v2-juan-pablo-citas-b`. Los nombres de campos y rutas son los que usa la app en `carecar-mobile`; si la app pide otros, se alinean aquí y en el contrato antes de integrar.
+
+**V2-M02.08 · Motivo y cita duplicada**
+
+- Migración `V24__agregar_motivo_a_la_cita.sql`: `cita.motivo varchar(15)` nulo, con `check` en `MANTENIMIENTO, REPARACION, REVISION, GARANTIA, OTRO`. No renombra nada de la ficha; las citas anteriores quedan con `motivo` nulo.
+- `POST /api/v1/app/citas` acepta `motivo` opcional. En el JSON viaja en minúsculas (`mantenimiento`, `reparacion`, `revision`, `garantia`, `otro`; se acepta sin importar mayúsculas) y se guarda en mayúsculas. Un valor fuera de la lista responde 400 `DATOS_INVALIDOS`.
+- `GET /api/v1/app/citas` y las respuestas de agendar, cancelar y reprogramar devuelven `motivo` (nulo si no se dio).
+- 409 con `codigo` `CITA_DUPLICADA` (formato `Problema`) cuando el mismo vehículo ya tiene una cita confirmada ese **día** (cubre también la misma franja, que hoy responde 409 sin código). `FRANJA_SIN_CUPO` no cambia. Se revisa primero la duplicada y después el cupo.
+
+**V2-M02.13 · Reprogramar sin cancelar**
+
+- `POST /api/v1/app/citas/{citaId}/reprogramar` con `{ "franjaId": 5, "fecha": "2026-12-03" }`. `franjaId` es obligatorio; `fecha` es opcional y, si falta, se queda el día de la cita (la franja es el número dentro del día, así que cambiar de día pide la fecha; a alinear con la app).
+- Responde 200 con la `Cita` actualizada. Sin migración: se actualizan `fecha`, `franja_id`, `hora_inicio` y `hora_fin` de la misma fila, así que liberar la franja anterior y ocupar la nueva es una sola transacción (el cupo se cuenta por citas confirmadas).
+- Reglas: la cita debe ser del cliente (404 si no), estar `CONFIRMADA` y no haber empezado; si no, 409 `CITA_NO_REPROGRAMABLE`. La nueva franja pasa las mismas validaciones que agendar (400 si el taller no abre, la franja no existe, ya empezó o pasa del límite de anticipación; 400 si es la misma franja y fecha). 409 `FRANJA_SIN_CUPO` si no hay lugar y 409 `CITA_DUPLICADA` si el vehículo ya tiene otra cita ese día. Bloquea la franja nueva con el mismo candado que agendar.
+
+**V2-M02.11 · QR firmado en el comprobante**
+
+- `GET /api/v1/app/citas/{citaId}/ticket` sigue igual y agrega al PDF un QR con el texto `CARECAR-CITA:<id>.<firma>`; `firma` es HMAC-SHA256 en base64url de `cita:<id>` con la llave `app.citas.qr-secreto`.
+- La llave sale de la variable de entorno `CITAS_QR_SECRETO` (al menos 32 caracteres; en el repo solo hay un valor de solo-desarrollo, igual que `MANUALES_SECRETO`, y el arranque falla si es más corta). Hay que sobrescribirla en cualquier ambiente real.
+- Clase `FirmaCitas` (`firmar` y `esValida`, con comparación en tiempo constante) para que recepción y el pase de Wallet (V2-M25.03) verifiquen el mismo QR. El QR se dibuja con `com.google.zxing:core` (OpenPDF no trae generador de QR).
+
+**V2-M02.04 · Ficha técnica del vehículo**
+
+- Migración `V25__crear_ficha_tecnica_modelo.sql`: tabla `ficha_tecnica_modelo` (`id`, `marca`, `modelo`, `anio`, `seccion`, `nombre`, `valor`, `orden`, auditoría), una fila por especificación, índice por `lower(marca), lower(modelo), anio`. Es tabla nueva: no toca la ficha técnica del equipo.
+- `GET /api/v1/app/vehiculos/{vehiculoId}/ficha-tecnica` responde `{ vehiculoId, marca, modelo, anio, version, secciones: [{ nombre, especificaciones: [{ nombre, valor }] }] }`, secciones y especificaciones en su `orden`. Se busca por marca (si el vehículo la tiene), modelo y año; sin datos para ese modelo responde 200 con `secciones: []` (la app usa su respaldo local). 404 si el vehículo no existe o no es del cliente.
+- La carga de datos de la ficha (captura por el equipo de producto) queda fuera de esta historia: se agrega después como historia de ERP o script.
+- Eventos: ninguno publicado ni escuchado en estas cuatro historias.
+
 ### M03 · Catálogo y calculadora de toma a cuenta — H2 — módulo `carecarapp`
 
 Detalle: [`carecar-mobile/plan/modulos/M03-catalogo-y-calculadora.md`](https://github.com/lattice-systems/carecar-mobile/blob/main/plan/modulos/M03-catalogo-y-calculadora.md)
