@@ -577,6 +577,57 @@ paths:
         '404':
           $ref: '#/components/responses/NoEncontrado'
 
+  /citas/{citaId}/comprobante:
+    get:
+      tags: [Agenda]
+      summary: Código QR firmado de una cita
+      description: |
+        V2-M02.11 · `codigo` es el mismo texto del QR del PDF (`CARECAR-CITA:<id>.<firma>`).
+        Solo citas confirmadas del cliente.
+      parameters:
+        - name: citaId
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+      responses:
+        '200':
+          description: Datos del comprobante
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [citaId, codigo, fecha, horaInicio, horaFin]
+                properties:
+                  citaId:
+                    type: integer
+                    format: int64
+                  codigo:
+                    type: string
+                  fecha:
+                    type: string
+                    format: date
+                  horaInicio:
+                    type: string
+                  horaFin:
+                    type: string
+                  vehiculoNombre:
+                    type: string
+                    nullable: true
+        '401':
+          $ref: '#/components/responses/NoAutenticado'
+        '403':
+          $ref: '#/components/responses/CuentaDesactivada'
+        '404':
+          $ref: '#/components/responses/NoEncontrado'
+        '409':
+          description: La cita está cancelada (`codigo` CITA_CANCELADA)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Problema'
+
   /catalogo:
     get:
       tags: [Catálogo]
