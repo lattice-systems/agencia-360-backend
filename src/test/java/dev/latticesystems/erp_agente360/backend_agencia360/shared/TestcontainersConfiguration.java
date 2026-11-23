@@ -4,6 +4,7 @@ import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
 import org.springframework.context.annotation.Bean;
 import org.testcontainers.containers.PostgreSQLContainer;
+import org.testcontainers.utility.DockerImageName;
 
 /**
  * Contenedores de Testcontainers administrados como beans de Spring. Así Spring
@@ -17,6 +18,8 @@ public class TestcontainersConfiguration {
 	@Bean
 	@ServiceConnection
 	PostgreSQLContainer<?> postgresContainer() {
-		return new PostgreSQLContainer<>("postgres:16-alpine");
+		// pgvector: el asistente (V2-M24.02) guarda vectores, igual que en Neon.
+		return new PostgreSQLContainer<>(
+				DockerImageName.parse("pgvector/pgvector:pg16").asCompatibleSubstituteFor("postgres"));
 	}
 }
