@@ -224,6 +224,28 @@ class AgendaAppIntegrationTest extends AbstractIntegrationTest {
 	}
 
 	@Test
+	void elPaseDeWalletValidaLaPlataformaYResponde404409Y503SinCredenciales() throws Exception {
+		long citaId = JsonPath.<Number>read(agendar(tokenDeAna, vehiculosDeAna.getFirst(), 1, diaHabil).andReturn()
+				.getResponse().getContentAsString(), "$.id").longValue();
+		mockMvc.perform(get("/api/v1/app/citas/{id}/pase", citaId).param("plataforma", "samsung")
+				.header(HttpHeaders.AUTHORIZATION, "Bearer " + tokenDeAna)).andExpect(status().isBadRequest())
+				.andExpect(jsonPath("$.codigo").value("DATOS_INVALIDOS"));
+		mockMvc.perform(get("/api/v1/app/citas/{id}/pase", citaId).param("plataforma", "apple")
+				.header(HttpHeaders.AUTHORIZATION, "Bearer " + tokenDeBruno)).andExpect(status().isNotFound());
+		for (String plataforma : List.of("apple", "google")) {
+			mockMvc.perform(get("/api/v1/app/citas/{id}/pase", citaId).param("plataforma", plataforma)
+					.header(HttpHeaders.AUTHORIZATION, "Bearer " + tokenDeAna))
+					.andExpect(status().isServiceUnavailable())
+					.andExpect(jsonPath("$.codigo").value("WALLET_NO_CONFIGURADO"));
+		}
+		mockMvc.perform(post("/api/v1/app/citas/{id}/cancelar", citaId).header(HttpHeaders.AUTHORIZATION,
+				"Bearer " + tokenDeAna)).andExpect(status().isOk());
+		mockMvc.perform(get("/api/v1/app/citas/{id}/pase", citaId).param("plataforma", "google")
+				.header(HttpHeaders.AUTHORIZATION, "Bearer " + tokenDeAna)).andExpect(status().isConflict())
+				.andExpect(jsonPath("$.codigo").value("CITA_CANCELADA"));
+	}
+
+	@Test
 	void elTicketLlevaElQrFirmadoYSoloLoVeSuDueno() throws Exception {
 		long citaId = JsonPath.<Number>read(agendar(tokenDeAna, vehiculosDeAna.getFirst(), 1, diaHabil).andReturn()
 				.getResponse().getContentAsString(), "$.id").longValue();

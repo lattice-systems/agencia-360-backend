@@ -5,6 +5,9 @@ import dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.applicatio
 import dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.application.ComprobanteCitaApp;
 import dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.application.DisponibilidadApp;
 import dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.application.Pagina;
+import dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.application.PaseWalletApp;
+import dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.application.PaseWalletService;
+import dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.application.PlataformaWallet;
 import dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.domain.EstadoCita;
 import dev.latticesystems.erp_agente360.backend_agencia360.shared.security.UsuarioAutenticado;
 import io.swagger.v3.oas.annotations.Operation;
@@ -34,9 +37,11 @@ import org.springframework.web.bind.annotation.RestController;
 public class AgendaAppController {
 
 	private final AgendaAppService agendaAppService;
+	private final PaseWalletService paseWalletService;
 
-	public AgendaAppController(AgendaAppService agendaAppService) {
+	public AgendaAppController(AgendaAppService agendaAppService, PaseWalletService paseWalletService) {
 		this.agendaAppService = agendaAppService;
+		this.paseWalletService = paseWalletService;
 	}
 
 	@GetMapping("/agenda/disponibilidad")
@@ -111,5 +116,25 @@ public class AgendaAppController {
 						org.springframework.http.ContentDisposition.attachment()
 								.filename("ticket-cita-" + citaId + ".pdf").build().toString())
 				.body(pdf);
+	}
+
+	@GetMapping("/citas/{citaId}/pase")
+	@PreAuthorize("hasRole('CLIENTE_CARECAR')")
+	@Operation(summary = "Pase de Wallet de una cita", description = "plataforma=apple responde un .pkpass "
+			+ "(application/vnd.apple.pkpass); plataforma=google responde {url} con el enlace de Google Wallet. "
+			+ "El QR es el del comprobante. Responde 404 si la cita no existe o es de otro cliente, 409 "
+			+ "CITA_CANCELADA si esta cancelada y 503 WALLET_NO_CONFIGURADO si faltan las credenciales.")
+	public org.springframework.http.ResponseEntity<?> pase(@PathVariable Long citaId, @RequestParam String plataforma,
+			@AuthenticationPrincipal UsuarioAutenticado cliente) {
+		PaseWalletApp pase = paseWalletService.pase(cliente.id(), citaId, PlataformaWallet.de(plataforma));
+		if (pase.pkpass() != null) {
+			return org.springframework.http.ResponseEntity.ok()
+					.contentType(org.springframework.http.MediaType.parseMediaType("application/vnd.apple.pkpass"))
+					.header(org.springframework.http.HttpHeaders.CONTENT_DISPOSITION,
+							org.springframework.http.ContentDisposition.attachment()
+									.filename("cita-" + citaId + ".pkpass").build().toString())
+					.body(pase.pkpass());
+		}
+		return org.springframework.http.ResponseEntity.ok(java.util.Map.of("url", pase.url()));
 	}
 }
