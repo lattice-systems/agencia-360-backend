@@ -3,11 +3,13 @@ package dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.applicati
 import dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.domain.CuentaApp;
 import dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.infrastructure.CuentaAppRepository;
 import dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.infrastructure.SesionAppRepository;
+import dev.latticesystems.erp_agente360.backend_agencia360.clientes.CorreoDeClienteCambiado;
 import dev.latticesystems.erp_agente360.backend_agencia360.clientes.DirectorioClientes;
 import dev.latticesystems.erp_agente360.backend_agencia360.clientes.DirectorioClientes.ClienteRegistrado;
 import dev.latticesystems.erp_agente360.backend_agencia360.shared.exception.ConflictoException;
 import dev.latticesystems.erp_agente360.backend_agencia360.shared.exception.RecursoNoEncontradoException;
 import java.time.Instant;
+import org.springframework.context.event.EventListener;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -71,7 +73,7 @@ public class CuentasAppService {
 			throw new ConflictoException("El cliente ya tiene cuenta en la app");
 		}
 		AccesoAppService.validarNueva(contrasenaTemporal);
-		cuentaRepository.save(CuentaApp.abrir(clienteId, passwordEncoder.encode(contrasenaTemporal)));
+		cuentaRepository.save(CuentaApp.abrir(clienteId, cliente.correo(), passwordEncoder.encode(contrasenaTemporal)));
 		return cliente;
 	}
 
@@ -106,6 +108,12 @@ public class CuentasAppService {
 	public EstadoCuentaApp activar(Long clienteId) {
 		cuentaDe(clienteId).activar();
 		return estado(clienteId);
+	}
+
+	@EventListener
+	public void alCambiarCorreo(CorreoDeClienteCambiado cambio) {
+		cuentaRepository.findByClienteId(cambio.clienteId())
+				.ifPresent(cuenta -> cuenta.cambiarUsuario(cambio.correo()));
 	}
 
 	private CuentaApp cuentaDe(Long clienteId) {

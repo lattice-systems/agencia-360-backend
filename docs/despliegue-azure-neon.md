@@ -37,6 +37,7 @@ Perfil `prod`. Los valores sensibles son **secretos de la Container App** (nunca
 | `WALLET_APPLE_CERT_P12_BASE64`, `WALLET_APPLE_CERT_PASSWORD`, `WALLET_APPLE_WWDR_PEM_BASE64` | secretos `wallet-apple-cert-p12`, `wallet-apple-cert-password`, `wallet-apple-wwdr-pem` (base64 de los archivos) |
 | `WALLET_GOOGLE_ISSUER_ID` | ID de emisor de Google Wallet (opcional) |
 | `WALLET_GOOGLE_SERVICE_ACCOUNT_JSON_BASE64` | secreto `wallet-google-service-account` (base64 del JSON de la cuenta de servicio) |
+| `RECUPERACION_ENLACE` | sin definir (por omisión `carecar://restablecer-contrasena`): el enlace del correo de recuperación de contraseña, al que se agrega `?token=...`. Cambiarlo solo si la app abre otro esquema o un enlace universal (V2-M01.04) |
 | `MANUALES_ALMACEN` | sin definir (por omisión `base`: los PDF de los manuales van a la tabla `archivo_manual` de Neon). `MANUALES_DIRECTORIO` solo se usa con `MANUALES_ALMACEN=local` |
 | `GEMINI_API_KEY` | secreto `gemini-api-key`: llave del proyecto de Google AI Studio del equipo en plan **Free, sin facturación** (costo cero; ver ADR [0007](https://github.com/lattice-systems/carecar-mobile/blob/main/docs/decisiones/0007-asistente-ia.md)). La usará el asistente (M24); nunca vincular facturación a ese proyecto |
 | `ASISTENTE_PROVEEDOR` | sin definir (`auto`: Gemini si hay `GEMINI_API_KEY`; `falso` para apagar la IA sin tocar código) |

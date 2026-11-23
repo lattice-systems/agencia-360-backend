@@ -104,6 +104,14 @@ public class Cliente extends Auditable {
 		return normalizado;
 	}
 
+	public void cambiarCorreo(String correo) {
+		String normalizado = normalizarCorreo(correo);
+		if (normalizado == null) {
+			throw new IllegalArgumentException("El correo es obligatorio");
+		}
+		this.correo = normalizado;
+	}
+
 	/**
 	 * Le asigna un vehículo. Si ya tiene uno con ese VIN no hace nada, para que un
 	 * evento repetido no lo duplique.

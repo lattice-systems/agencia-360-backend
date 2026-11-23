@@ -18,6 +18,19 @@ public interface DirectorioClientes {
 
 	Optional<ClienteRegistrado> buscarPorId(Long id);
 
+	/**
+	 * Cambia el correo del cliente y avisa con {@link CorreoDeClienteCambiado} para
+	 * que su cuenta de la app cambie de usuario (V2-T05.03).
+	 *
+	 * @throws dev.latticesystems.erp_agente360.backend_agencia360.shared.exception.RecursoNoEncontradoException
+	 *             si el cliente no existe (404)
+	 * @throws IllegalArgumentException
+	 *             si el correo falta o no tiene formato de correo (400)
+	 * @throws dev.latticesystems.erp_agente360.backend_agencia360.shared.exception.ConflictoException
+	 *             si el correo ya es de otro cliente (409)
+	 */
+	ClienteRegistrado cambiarCorreo(Long clienteId, String correo);
+
 	/** Datos básicos de un cliente. El correo puede faltar si rechazó la app. */
 	record ClienteRegistrado(Long id, String nombre, String correo) {
 	}

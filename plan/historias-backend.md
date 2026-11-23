@@ -12,9 +12,9 @@ Antes que cualquier módulo nuevo: `V2-T05.03`–`V2-T05.07` dejan las tablas co
 
 | Ficha | Hoy | Historia |
 | --- | --- | --- |
-| `cuenta_app.usuario` | No existe (se usa `cliente.correo`) | V2-T05.03 |
-| `token_recuperacion` | `codigo_recuperacion` (código de 6 dígitos) | V2-T05.04 |
-| `manual.archivo_pdf` | `manual.archivo` | V2-T05.05 |
+| `cuenta_app.usuario` | Columna `cuenta_app.usuario`; el login la usa | V2-T05.03 |
+| `token_recuperacion` | Tabla `token_recuperacion` (enlace y código); `codigo_recuperacion` retirada | V2-T05.04 |
+| `manual.archivo_pdf` | Columna `manual.archivo_pdf` | V2-T05.05 |
 | `orden_servicio`, `orden_refaccion` | Tablas `orden_servicio`, `orden_refaccion` y `orden_mano_de_obra` | V2-T05.06 |
 | `franja_horario` | Tabla `franja_horario`; `cita.franja_id` con FK | V2-T05.07 |
 
@@ -516,6 +516,50 @@ Detalle: [`carecar-mobile/plan/modulos/T05-contrato-api-v2.md`](https://github.c
 **Copia en la app.** `carecar-mobile/api/agencia360-api-app-v2.yaml` se agrega en un PR del repo de la app. La prueba de contrato de la app sigue leyendo el v1 hasta que V2-T03.06 la cambie al v2.
 
 **Sin código.** No hay migración, entidades, endpoints ni eventos nuevos.
+
+#### Diseño de V2-T05.03: `cuenta_app.usuario`
+
+**Tabla.** `cuenta_app.usuario varchar(120) not null`, único (`uq_cuenta_app_usuario`): el correo del cliente en minúsculas y sin espacios.
+
+**Migración.** Una nueva (número al integrar) que agrega la columna, la llena con `cliente.correo` y, si el cliente no tiene correo, con `cliente-<id>` (esa cuenta no puede entrar hasta que el cliente tenga correo), y después la deja `not null` y única.
+
+**Código.** `CuentaApp` guarda `usuario` al abrirse y lo cambia con `cambiarUsuario`. El login y la recuperación buscan la cuenta por `usuario` y después al cliente por su id. Para cambiar el correo, el módulo de clientes expone `DirectorioClientes.cambiarCorreo(clienteId, correo)`: normaliza, responde 409 si el correo ya es de otro cliente y publica `CorreoDeClienteCambiado(clienteId, correo)`; `CuentasAppService` lo escucha con `@EventListener` en la misma transacción y cambia el usuario. V2-M01.07 usa ese método al confirmar el correo nuevo.
+
+**Endpoints.** Sin cambios de forma: `POST /auth/login` sigue recibiendo `correo`. Contrato v2 en 2.3.0 con la descripción.
+
+**Eventos.** `clientes.CorreoDeClienteCambiado` (publica clientes, escucha carecarapp).
+
+**Errores.** Los mismos del login. `cambiarCorreo`: 404 si el cliente no existe, 400 si el correo no es válido, 409 si ya es de otro cliente.
+
+**Pruebas.** `CuentaAppTest` (usuario normalizado y obligatorio) y `AccesoAppIntegrationTest` (la cuenta guarda el correo como usuario, al cambiar el correo entra con el nuevo y no con el anterior, no cambia a un correo de otro cliente).
+
+#### Diseño de V2-T05.04: `token_recuperacion`
+
+**Tabla.** `token_recuperacion` con los campos de la historia (`id`, `cuenta_app_id`, `token_hash`, `expira`, `usado`) y tres agregados: `codigo_hash` (el código de 6 dígitos para la app v1, en BCrypt), `usado_en` e `intentos`, más auditoría. `token_hash` es el SHA-256 del token (único); `check` de `usado = (usado_en is not null)`.
+
+**Migración.** Una nueva (número al integrar) que crea la tabla, pasa los códigos de `codigo_recuperacion` (con un `token_hash` aleatorio, así el código pendiente sigue sirviendo y el enlace no existe) y borra `codigo_recuperacion`.
+
+**Flujo.** `POST /auth/recuperar-contrasena` cierra los tokens abiertos de la cuenta y emite uno: un token aleatorio de 32 bytes y un código de 6 dígitos en la misma fila. El correo trae el enlace `RECUPERACION_ENLACE?token=<token>` (por omisión `carecar://restablecer-contrasena`) y el código. `POST /auth/restablecer-contrasena` acepta `token` (app v2) o `correo` y `codigo` (app v1, sin cambios); usar cualquiera de los dos marca la fila como usada, así que el otro deja de servir. Ambos vencen a los 15 minutos; el código admite 5 intentos.
+
+**Endpoints.** `RestablecerContrasenaRequest` gana `token` y `correo`/`codigo` pasan a opcionales (compatible con la app v1). Contrato v2 en 2.3.0.
+
+**Errores.** 400 `CODIGO_INVALIDO` si el enlace o el código no es válido, ya se usó o venció; 400 `DATOS_INVALIDOS` si no llega `token` ni `correo` con `codigo`, o la contraseña no cumple las reglas. `recuperar-contrasena` responde 202 exista o no el correo.
+
+**Configuración.** `RECUPERACION_ENLACE` (opcional) en `docs/despliegue-azure-neon.md`.
+
+**Eventos.** Ninguno.
+
+**Pruebas.** `TokenRecuperacionTest` (vence, sirve una vez, cinco intentos) y `AccesoAppIntegrationTest` (enlace de un solo uso, código de la app v1, usar el código cierra el enlace, pedir otro cierra el anterior, sin token ni código responde 400).
+
+#### Diseño de V2-T05.05: `manual.archivo_pdf`
+
+**Migración.** Una nueva (número al integrar) que renombra `manual.archivo` a `archivo_pdf` y su restricción a `uq_manual_archivo_pdf`. Sigue siendo la clave del PDF en `archivo_manual` o en la carpeta local.
+
+**Código.** `Manual.archivoPdf` con `getArchivoPdf()`; `ManualesService` e `IndexadorManuales` lo usan. El campo `archivo` del multipart de `POST /manuales` no cambia: es el nombre del archivo que se sube, no la columna.
+
+**Endpoints, eventos y errores.** Sin cambios.
+
+**Pruebas.** `VehiculosAppIntegrationTest` revisa que `manual.archivo_pdf` guarde la clave del PDF y que el PDF exista en `archivo_manual`.
 
 #### Diseño de V2-T05.06: `orden_servicio` y `orden_refaccion`
 

@@ -13,7 +13,7 @@ import java.util.Objects;
  * Manual de propietario de una marca, un tipo y un modelo (APP-3.1), por
  * ejemplo Nissan March 2026; la versión no cambia el manual. Como en el
  * inventario, {@code modelo} es el Tipo (March) y {@code anio} el Modelo
- * (2026). El PDF vive en el almacenamiento con la clave {@code archivo}.
+ * (2026). El PDF vive en el almacenamiento con la clave {@code archivo_pdf}.
  */
 @Entity
 @Table(name = "manual")
@@ -38,8 +38,8 @@ public class Manual extends Auditable {
 	@Column(nullable = false)
 	private int anio;
 
-	@Column(nullable = false, unique = true, length = 200)
-	private String archivo;
+	@Column(name = "archivo_pdf", nullable = false, unique = true, length = 200)
+	private String archivoPdf;
 
 	@Column(name = "tamano_bytes", nullable = false)
 	private long tamanoBytes;
@@ -82,7 +82,7 @@ public class Manual extends Auditable {
 		if (tamanoBytes <= 0 || tamanoBytes > TAMANO_MAXIMO) {
 			throw new IllegalArgumentException("El manual debe ser un PDF de hasta 20 MB");
 		}
-		this.archivo = archivo;
+		this.archivoPdf = archivo;
 		this.tamanoBytes = tamanoBytes;
 		this.subidoPor = subidoPor;
 	}
@@ -116,8 +116,8 @@ public class Manual extends Auditable {
 		return anio;
 	}
 
-	public String getArchivo() {
-		return archivo;
+	public String getArchivoPdf() {
+		return archivoPdf;
 	}
 
 	public long getTamanoBytes() {

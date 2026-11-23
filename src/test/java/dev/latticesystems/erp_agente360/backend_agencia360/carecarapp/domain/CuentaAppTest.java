@@ -1,6 +1,7 @@
 package dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.domain;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.time.Instant;
 import org.junit.jupiter.api.Test;
@@ -11,7 +12,7 @@ class CuentaAppTest {
 
 	@Test
 	void abreLaCuentaActivaYConContrasenaTemporal() {
-		CuentaApp cuenta = CuentaApp.abrir(1L, "hash");
+		CuentaApp cuenta = CuentaApp.abrir(1L, "ana@correo.com", "hash");
 
 		assertThat(cuenta.isActiva()).isTrue();
 		assertThat(cuenta.isDebeCambiarContrasena()).isTrue();
@@ -20,7 +21,7 @@ class CuentaAppTest {
 
 	@Test
 	void seBloqueaQuinceMinutosAlQuintoIntentoFallido() {
-		CuentaApp cuenta = CuentaApp.abrir(1L, "hash");
+		CuentaApp cuenta = CuentaApp.abrir(1L, "ana@correo.com", "hash");
 
 		for (int i = 0; i < 4; i++) {
 			cuenta.registrarIntentoFallido(AHORA);
@@ -36,7 +37,7 @@ class CuentaAppTest {
 
 	@Test
 	void unIngresoCorrectoReiniciaLosIntentos() {
-		CuentaApp cuenta = CuentaApp.abrir(1L, "hash");
+		CuentaApp cuenta = CuentaApp.abrir(1L, "ana@correo.com", "hash");
 		for (int i = 0; i < 4; i++) {
 			cuenta.registrarIntentoFallido(AHORA);
 		}
@@ -49,7 +50,7 @@ class CuentaAppTest {
 
 	@Test
 	void cambiarLaContrasenaYaNoLaDejaTemporal() {
-		CuentaApp cuenta = CuentaApp.abrir(1L, "hash");
+		CuentaApp cuenta = CuentaApp.abrir(1L, "ana@correo.com", "hash");
 
 		cuenta.cambiarContrasena("otro-hash");
 
@@ -58,19 +59,21 @@ class CuentaAppTest {
 	}
 
 	@Test
-	void unCodigoDeRecuperacionVenceSeUsaUnaVezYAdmiteCincoIntentos() {
-		CodigoRecuperacion codigo = CodigoRecuperacion.emitir(1L, "hash", AHORA);
+	void elUsuarioEsElCorreoSinEspaciosYEnMinusculas() {
+		CuentaApp cuenta = CuentaApp.abrir(1L, "  Ana.Lopez@Correo.com ", "hash");
 
-		assertThat(codigo.estaVigente(AHORA.plusSeconds(14 * 60))).isTrue();
-		assertThat(codigo.estaVigente(AHORA.plusSeconds(15 * 60))).isFalse();
+		assertThat(cuenta.getUsuario()).isEqualTo("ana.lopez@correo.com");
 
-		for (int i = 0; i < 5; i++) {
-			codigo.registrarIntentoFallido();
-		}
-		assertThat(codigo.estaVigente(AHORA)).isFalse();
+		cuenta.cambiarUsuario("ANA@NUEVO.COM");
+		assertThat(cuenta.getUsuario()).isEqualTo("ana@nuevo.com");
+	}
 
-		CodigoRecuperacion otro = CodigoRecuperacion.emitir(1L, "hash", AHORA);
-		otro.cerrar(AHORA);
-		assertThat(otro.estaVigente(AHORA)).isFalse();
+	@Test
+	void laCuentaSiempreTieneUsuario() {
+		assertThatThrownBy(() -> CuentaApp.abrir(1L, " ", "hash")).isInstanceOf(IllegalArgumentException.class)
+				.hasMessage("El usuario de la cuenta es obligatorio");
+		CuentaApp cuenta = CuentaApp.abrir(1L, "ana@correo.com", "hash");
+		assertThatThrownBy(() -> cuenta.cambiarUsuario(null)).isInstanceOf(IllegalArgumentException.class);
+		assertThat(cuenta.getUsuario()).isEqualTo("ana@correo.com");
 	}
 }

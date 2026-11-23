@@ -1,8 +1,11 @@
 package dev.latticesystems.erp_agente360.backend_agencia360.carecarapp;
 
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -17,10 +20,14 @@ import dev.latticesystems.erp_agente360.backend_agencia360.acceso.infrastructure
 import dev.latticesystems.erp_agente360.backend_agencia360.acceso.infrastructure.UsuarioRepository;
 import dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.application.CuentasAppService;
 import dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.application.EnvioCorreos;
+import dev.latticesystems.erp_agente360.backend_agencia360.clientes.DirectorioClientes;
 import dev.latticesystems.erp_agente360.backend_agencia360.clientes.application.NuevoCliente;
 import dev.latticesystems.erp_agente360.backend_agencia360.clientes.application.RegistroClientesService;
 import dev.latticesystems.erp_agente360.backend_agencia360.shared.AbstractIntegrationTest;
+import dev.latticesystems.erp_agente360.backend_agencia360.shared.exception.ConflictoException;
 import dev.latticesystems.erp_agente360.backend_agencia360.shared.security.JwtService;
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.PersistenceContext;
 import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -29,6 +36,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
@@ -64,6 +72,15 @@ class AccesoAppIntegrationTest extends AbstractIntegrationTest {
 
 	@Autowired
 	private JwtService jwtService;
+
+	@Autowired
+	private DirectorioClientes directorioClientes;
+
+	@Autowired
+	private JdbcTemplate jdbcTemplate;
+
+	@PersistenceContext
+	private EntityManager entityManager;
 
 	@MockitoBean
 	private EnvioCorreos envioCorreos;
@@ -175,10 +192,60 @@ class AccesoAppIntegrationTest extends AbstractIntegrationTest {
 	}
 
 	@Test
+	void laCuentaGuardaElCorreoComoUsuario() {
+		assertThat(usuarioDeLaCuenta()).isEqualTo(CORREO);
+	}
+
+	@Test
+	void alCambiarElCorreoLaCuentaEntraConElNuevo() throws Exception {
+		directorioClientes.cambiarCorreo(clienteId, " Ana.Nueva@Correo.com ");
+
+		assertThat(usuarioDeLaCuenta()).isEqualTo("ana.nueva@correo.com");
+		login("ana.nueva@correo.com", TEMPORAL).andExpect(status().isOk());
+		login(CORREO, TEMPORAL).andExpect(status().isUnauthorized())
+				.andExpect(jsonPath("$.codigo").value("CREDENCIALES_INVALIDAS"));
+	}
+
+	@Test
+	void noCambiaElCorreoAUnoDeOtroCliente() {
+		registroClientesService.registrar(new NuevoCliente("Bruno Díaz", "bruno@correo.com", null, null));
+
+		assertThatThrownBy(() -> directorioClientes.cambiarCorreo(clienteId, "BRUNO@correo.com"))
+				.isInstanceOf(ConflictoException.class);
+		assertThat(usuarioDeLaCuenta()).isEqualTo(CORREO);
+	}
+
+	@Test
+	void recuperaLaContrasenaConElEnlaceDeUnSoloUso() throws Exception {
+		recuperar(CORREO).andExpect(status().isAccepted());
+		ArgumentCaptor<String> enlace = ArgumentCaptor.forClass(String.class);
+		verify(envioCorreos).enviarRecuperacion(eq(CORREO), eq("Ana López"), enlace.capture(), anyString());
+		assertThat(enlace.getValue()).startsWith("carecar://restablecer-contrasena?token=");
+		String token = enlace.getValue().substring(enlace.getValue().indexOf("token=") + "token=".length());
+
+		restablecerConEnlace("no-es-el-token", "NuevaClave9").andExpect(status().isBadRequest())
+				.andExpect(jsonPath("$.codigo").value("CODIGO_INVALIDO"));
+		restablecerConEnlace(token, "corta").andExpect(status().isBadRequest())
+				.andExpect(jsonPath("$.codigo").value("DATOS_INVALIDOS"));
+		restablecerConEnlace(token, "NuevaClave9").andExpect(status().isNoContent());
+
+		login(CORREO, "NuevaClave9").andExpect(status().isOk());
+		restablecerConEnlace(token, "OtraClave9").andExpect(status().isBadRequest())
+				.andExpect(jsonPath("$.codigo").value("CODIGO_INVALIDO"));
+		entityManager.flush();
+		assertThat(
+				jdbcTemplate.queryForObject(
+						"select count(*) from token_recuperacion t join cuenta_app c on c.id = t.cuenta_app_id "
+								+ "where c.cliente_id = ? and t.usado and t.usado_en is not null",
+						Integer.class, clienteId))
+				.isEqualTo(1);
+	}
+
+	@Test
 	void recuperaLaContrasenaConElCodigoQueLlegaPorCorreo() throws Exception {
 		recuperar(CORREO).andExpect(status().isAccepted());
 		ArgumentCaptor<String> codigo = ArgumentCaptor.forClass(String.class);
-		verify(envioCorreos).enviarCodigoRecuperacion(eq(CORREO), eq("Ana López"), codigo.capture());
+		verify(envioCorreos).enviarRecuperacion(eq(CORREO), eq("Ana López"), anyString(), codigo.capture());
 
 		String incorrecto = codigo.getValue().equals("000000") ? "111111" : "000000";
 		restablecer(incorrecto, "NuevaClave9").andExpect(status().isBadRequest())
@@ -193,10 +260,46 @@ class AccesoAppIntegrationTest extends AbstractIntegrationTest {
 	}
 
 	@Test
+	void usarElCodigoCierraElEnlaceDelMismoCorreo() throws Exception {
+		recuperar(CORREO).andExpect(status().isAccepted());
+		ArgumentCaptor<String> enlace = ArgumentCaptor.forClass(String.class);
+		ArgumentCaptor<String> codigo = ArgumentCaptor.forClass(String.class);
+		verify(envioCorreos).enviarRecuperacion(eq(CORREO), eq("Ana López"), enlace.capture(), codigo.capture());
+		String token = enlace.getValue().substring(enlace.getValue().indexOf("token=") + "token=".length());
+
+		restablecer(codigo.getValue(), "NuevaClave9").andExpect(status().isNoContent());
+
+		restablecerConEnlace(token, "OtraClave9").andExpect(status().isBadRequest())
+				.andExpect(jsonPath("$.codigo").value("CODIGO_INVALIDO"));
+	}
+
+	@Test
+	void pedirOtroEnlaceCierraElAnterior() throws Exception {
+		recuperar(CORREO).andExpect(status().isAccepted());
+		recuperar(CORREO).andExpect(status().isAccepted());
+		ArgumentCaptor<String> enlaces = ArgumentCaptor.forClass(String.class);
+		verify(envioCorreos, times(2)).enviarRecuperacion(eq(CORREO), eq("Ana López"), enlaces.capture(), anyString());
+		String primero = enlaces.getAllValues().get(0);
+		String segundo = enlaces.getAllValues().get(1);
+
+		restablecerConEnlace(primero.substring(primero.indexOf("token=") + 6), "NuevaClave9")
+				.andExpect(status().isBadRequest()).andExpect(jsonPath("$.codigo").value("CODIGO_INVALIDO"));
+		restablecerConEnlace(segundo.substring(segundo.indexOf("token=") + 6), "NuevaClave9")
+				.andExpect(status().isNoContent());
+	}
+
+	@Test
+	void restablecerSinTokenNiCodigoRespondeDatosInvalidos() throws Exception {
+		mockMvc.perform(post(AUTH + "/restablecer-contrasena").contentType(MediaType.APPLICATION_JSON)
+				.content("{\"contrasenaNueva\":\"NuevaClave9\"}")).andExpect(status().isBadRequest())
+				.andExpect(jsonPath("$.codigo").value("DATOS_INVALIDOS"));
+	}
+
+	@Test
 	void pedirUnCodigoParaUnCorreoInexistenteRespondeIgualSinEnviarCorreo() throws Exception {
 		recuperar("nadie@correo.com").andExpect(status().isAccepted());
 
-		verify(envioCorreos, never()).enviarCodigoRecuperacion(anyString(), anyString(), anyString());
+		verify(envioCorreos, never()).enviarRecuperacion(anyString(), anyString(), anyString(), anyString());
 	}
 
 	private ResultActions login(String correo, String contrasena) throws Exception {
@@ -223,6 +326,17 @@ class AccesoAppIntegrationTest extends AbstractIntegrationTest {
 	private ResultActions restablecer(String codigo, String nueva) throws Exception {
 		return mockMvc.perform(post(AUTH + "/restablecer-contrasena").contentType(MediaType.APPLICATION_JSON).content(
 				"{\"correo\":\"%s\",\"codigo\":\"%s\",\"contrasenaNueva\":\"%s\"}".formatted(CORREO, codigo, nueva)));
+	}
+
+	private ResultActions restablecerConEnlace(String token, String nueva) throws Exception {
+		return mockMvc.perform(post(AUTH + "/restablecer-contrasena").contentType(MediaType.APPLICATION_JSON)
+				.content("{\"token\":\"%s\",\"contrasenaNueva\":\"%s\"}".formatted(token, nueva)));
+	}
+
+	private String usuarioDeLaCuenta() {
+		entityManager.flush();
+		return jdbcTemplate.queryForObject("select usuario from cuenta_app where cliente_id = ?", String.class,
+				clienteId);
 	}
 
 	private String tokenDePersonal() {

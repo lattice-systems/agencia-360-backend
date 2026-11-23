@@ -65,10 +65,10 @@ public class IndexadorManuales {
 	@Transactional(propagation = Propagation.REQUIRES_NEW)
 	public int indexarTexto(long manualId) {
 		Manual manual = manualRepository.findById(manualId).orElse(null);
-		if (manual == null || manual.getArchivo() == null) {
+		if (manual == null || manual.getArchivoPdf() == null) {
 			return 0;
 		}
-		byte[] pdf = almacen.leer(manual.getArchivo()).orElse(null);
+		byte[] pdf = almacen.leer(manual.getArchivoPdf()).orElse(null);
 		if (pdf == null) {
 			LOG.warn("El manual {} no tiene su PDF en el almacén; no se indexa", manualId);
 			return 0;

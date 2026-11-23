@@ -29,14 +29,18 @@ public class CorreoSmtp implements EnvioCorreos {
 	}
 
 	@Override
-	public void enviarCodigoRecuperacion(String correo, String nombre, String codigo) {
-		enviar(correo, "Tu código para restablecer la contraseña de CareCar", """
+	public void enviarRecuperacion(String correo, String nombre, String enlace, String codigo) {
+		enviar(correo, "Tu enlace para restablecer la contraseña de CareCar", """
 				Hola, %s:
 
-				Tu código para restablecer la contraseña de la app CareCar es: %s
+				Abre este enlace en tu teléfono para crear una contraseña nueva en la app CareCar:
+
+				%s
+
+				Si tu app te pide un código, es: %s
 
 				Vence en 15 minutos y sirve una sola vez. Si no lo pediste, ignora este correo.
-				""".formatted(nombre, codigo));
+				""".formatted(nombre, enlace, codigo));
 	}
 
 	@Override

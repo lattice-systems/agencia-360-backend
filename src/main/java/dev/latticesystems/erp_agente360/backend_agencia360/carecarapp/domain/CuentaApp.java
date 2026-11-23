@@ -9,6 +9,7 @@ import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.Locale;
 import java.util.Objects;
 
 /**
@@ -30,6 +31,9 @@ public class CuentaApp extends Auditable {
 	@Column(name = "cliente_id", nullable = false, unique = true)
 	private Long clienteId;
 
+	@Column(nullable = false, unique = true, length = 120)
+	private String usuario;
+
 	@Column(name = "contrasena_hash", nullable = false, length = 100)
 	private String contrasenaHash;
 
@@ -49,8 +53,9 @@ public class CuentaApp extends Auditable {
 		// Requerido por JPA
 	}
 
-	private CuentaApp(Long clienteId, String contrasenaHash) {
+	private CuentaApp(Long clienteId, String usuario, String contrasenaHash) {
 		this.clienteId = clienteId;
+		this.usuario = usuario;
 		this.contrasenaHash = contrasenaHash;
 		this.debeCambiarContrasena = true;
 		this.activa = true;
@@ -58,12 +63,24 @@ public class CuentaApp extends Auditable {
 
 	/**
 	 * Abre la cuenta con una contraseña temporal: el cliente debe cambiarla en su
-	 * primer ingreso (APP-2.3).
+	 * primer ingreso (APP-2.3). El usuario es el correo del cliente (V2-T05.03).
 	 */
-	public static CuentaApp abrir(Long clienteId, String hashContrasenaTemporal) {
+	public static CuentaApp abrir(Long clienteId, String usuario, String hashContrasenaTemporal) {
 		Objects.requireNonNull(clienteId, "clienteId");
 		Objects.requireNonNull(hashContrasenaTemporal, "hashContrasenaTemporal");
-		return new CuentaApp(clienteId, hashContrasenaTemporal);
+		return new CuentaApp(clienteId, normalizarUsuario(usuario), hashContrasenaTemporal);
+	}
+
+	public static String normalizarUsuario(String usuario) {
+		String limpio = usuario == null ? "" : usuario.strip().toLowerCase(Locale.ROOT);
+		if (limpio.isEmpty()) {
+			throw new IllegalArgumentException("El usuario de la cuenta es obligatorio");
+		}
+		return limpio;
+	}
+
+	public void cambiarUsuario(String usuario) {
+		this.usuario = normalizarUsuario(usuario);
 	}
 
 	public boolean estaBloqueada(Instant ahora) {
@@ -114,6 +131,10 @@ public class CuentaApp extends Auditable {
 
 	public Long getClienteId() {
 		return clienteId;
+	}
+
+	public String getUsuario() {
+		return usuario;
 	}
 
 	public String getContrasenaHash() {
