@@ -1,5 +1,6 @@
 package dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.web;
 
+import dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.application.FichaTecnicaApp;
 import dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.application.ManualApp;
 import dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.application.ManualesService;
 import dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.application.VehiculoApp;
@@ -48,6 +49,16 @@ public class VehiculosAppController {
 	@Operation(summary = "Listar los vehículos del cliente", description = "En el orden en que se le asignaron.")
 	public List<VehiculoApp> vehiculos(@AuthenticationPrincipal UsuarioAutenticado cliente) {
 		return vehiculosAppService.listar(cliente.id());
+	}
+
+	@GetMapping("/vehiculos/{vehiculoId}/ficha-tecnica")
+	@PreAuthorize("hasRole('CLIENTE_CARECAR')")
+	@Operation(summary = "Ficha técnica del modelo del vehículo", description = "Especificaciones por marca, "
+			+ "modelo y año en secciones; vacías si la agencia aún no las carga. Responde 404 si el vehículo no "
+			+ "existe o no es del cliente.")
+	public FichaTecnicaApp fichaTecnica(@PathVariable Long vehiculoId,
+			@AuthenticationPrincipal UsuarioAutenticado cliente) {
+		return vehiculosAppService.fichaTecnica(cliente.id(), vehiculoId);
 	}
 
 	@GetMapping("/vehiculos/{vehiculoId}/manuales")
