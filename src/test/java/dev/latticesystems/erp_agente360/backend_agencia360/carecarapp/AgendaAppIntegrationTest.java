@@ -164,8 +164,9 @@ class AgendaAppIntegrationTest extends AbstractIntegrationTest {
 		for (int i = 0; i < CUPO; i++) {
 			agendar(tokenDeAna, vehiculosDeAna.get(i), 2, diaHabil).andExpect(status().isCreated());
 		}
-		long citaId = JsonPath.<Number>read(agendar(tokenDeBruno, vehiculoDeBruno, 4, diaHabil).andReturn()
-				.getResponse().getContentAsString(), "$.id").longValue();
+		long citaId = JsonPath.<Number>read(
+				agendar(tokenDeBruno, vehiculoDeBruno, 4, diaHabil).andReturn().getResponse().getContentAsString(),
+				"$.id").longValue();
 
 		reprogramar(tokenDeBruno, citaId, "{\"franjaId\": 2}").andExpect(status().isConflict())
 				.andExpect(jsonPath("$.codigo").value("FRANJA_SIN_CUPO"));
@@ -207,8 +208,9 @@ class AgendaAppIntegrationTest extends AbstractIntegrationTest {
 	void elTicketLlevaElQrFirmadoYSoloLoVeSuDueno() throws Exception {
 		long citaId = JsonPath.<Number>read(agendar(tokenDeAna, vehiculosDeAna.getFirst(), 1, diaHabil).andReturn()
 				.getResponse().getContentAsString(), "$.id").longValue();
-		mockMvc.perform(get("/api/v1/app/citas/{id}/ticket", citaId).header(HttpHeaders.AUTHORIZATION,
-				"Bearer " + tokenDeAna)).andExpect(status().isOk());
+		mockMvc.perform(
+				get("/api/v1/app/citas/{id}/ticket", citaId).header(HttpHeaders.AUTHORIZATION, "Bearer " + tokenDeAna))
+				.andExpect(status().isOk());
 		mockMvc.perform(get("/api/v1/app/citas/{id}/ticket", citaId).header(HttpHeaders.AUTHORIZATION,
 				"Bearer " + tokenDeBruno)).andExpect(status().isNotFound());
 	}
@@ -269,9 +271,9 @@ class AgendaAppIntegrationTest extends AbstractIntegrationTest {
 	}
 
 	private ResultActions reprogramar(String token, long citaId, String cuerpo) throws Exception {
-		return mockMvc.perform(post("/api/v1/app/citas/{id}/reprogramar", citaId)
-				.header(HttpHeaders.AUTHORIZATION, "Bearer " + token).contentType(MediaType.APPLICATION_JSON)
-				.content(cuerpo));
+		return mockMvc.perform(
+				post("/api/v1/app/citas/{id}/reprogramar", citaId).header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+						.contentType(MediaType.APPLICATION_JSON).content(cuerpo));
 	}
 
 	private ResultActions agendar(String token, Long vehiculoId, long franjaId, LocalDate fecha) throws Exception {
