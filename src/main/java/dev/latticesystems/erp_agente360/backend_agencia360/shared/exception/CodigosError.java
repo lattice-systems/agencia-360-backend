@@ -22,6 +22,9 @@ public final class CodigosError {
 	public static final String ASISTENTE_LIMITE = "ASISTENTE_LIMITE";
 	public static final String ASISTENTE_NO_DISPONIBLE = "ASISTENTE_NO_DISPONIBLE";
 	public static final String SIN_PARAMETROS_DE_VALUACION = "SIN_PARAMETROS_DE_VALUACION";
+	public static final String SOLICITUD_ABIERTA = "SOLICITUD_ABIERTA";
+	public static final String FUERA_DE_COBERTURA = "FUERA_DE_COBERTURA";
+	public static final String DIRECCION_EN_USO = "DIRECCION_EN_USO";
 
 	private CodigosError() {
 	}
