@@ -291,6 +291,21 @@ Detalle: [`carecar-mobile/plan/modulos/M11-asistencia-en-camino.md`](https://git
 | V2-M11.01 | Como cliente varado quiero pedir ayuda compartiendo mi ubicación para que la agencia me atienda rápido | `POST /asistencia` crea `solicitud_asistencia` (cliente, vehículo propio, tipo, lat/lng opcionales, comentario) → 201 con estado `recibida` · 404 si el vehículo no es del cliente · `GET /asistencia?activa=true` devuelve la abierta | Juan Pablo |
 | V2-M11.04 | Como cliente quiero ver el estado de mi solicitud para saber cuándo llega la ayuda | `GET /asistencia/{id}` solo del dueño · estados `recibida` → `en_camino` → `atendida`/`cancelada` · endpoint interno para el personal mientras el ERP siga congelado · cada cambio publica un evento para el push (M06) | Juan Pablo |
 
+#### Diseño técnico — V2-M11.01 (parte B de Juan Pablo)
+
+Vive en `carecarapp` (la tabla es de la ficha; el módulo `asistencia` nuevo queda para V2-M11.04 cuando haya estados y eventos).
+
+**Tabla `solicitud_asistencia`** (migración V26, nombres de la ficha): `id`, `cliente_id` (FK `cliente`), `vehiculo_cliente_id` (FK `vehiculo_cliente`), `tipo` (`LLANTA`, `BATERIA`, `CHOQUE`, `SIN_GASOLINA`, `OTRO`), `lat` y `lng` (`numeric(9,6)`, nulos juntos), `comentario` (≤ 500), `estado` (`RECIBIDA`, `EN_CAMINO`, `ATENDIDA`, `CANCELADA`), `creada_en`. Índice único parcial por `cliente_id` donde `estado in ('RECIBIDA','EN_CAMINO')`: una sola abierta por cliente, también bajo concurrencia.
+
+**Endpoints** (rol `CLIENTE_CARECAR`; en JSON `tipo` y `estado` viajan en minúsculas):
+
+| Método y ruta | Cuerpo | Respuestas |
+| --- | --- | --- |
+| `POST /asistencia` | `{vehiculoId, tipo, lat?, lng?, comentario?}` | 201 `{id, vehiculoId, tipo, lat, lng, comentario, estado: "recibida", creadaEn}` · 400 `DATOS_INVALIDOS` (tipo desconocido, lat fuera de -90..90, lng fuera de -180..180, solo una de las dos) · 404 si el vehículo no es del cliente · 409 `SOLICITUD_ABIERTA` si ya tiene una `recibida` o `en_camino` |
+| `GET /asistencia?activa=true` | - | 200 con la solicitud abierta · 204 si no hay · 400 si `activa` no es `true` |
+
+La ubicación se conserva mientras la solicitud está abierta; limpiarla al cerrarse es de V2-M11.04.
+
 ### M12 · Lealtad y recompensas — H4 — módulo `lealtad (nuevo)`
 
 Detalle: [`carecar-mobile/plan/modulos/M12-lealtad.md`](https://github.com/lattice-systems/carecar-mobile/blob/main/plan/modulos/M12-lealtad.md)
