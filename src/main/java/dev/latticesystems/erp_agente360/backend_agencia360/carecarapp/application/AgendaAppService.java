@@ -1,6 +1,7 @@
 package dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.application;
 
 import dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.domain.Cita;
+import dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.domain.DireccionCliente;
 import dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.domain.EstadoCita;
 import dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.domain.FranjaHorario;
 import dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.domain.MotivoCita;
@@ -10,6 +11,7 @@ import dev.latticesystems.erp_agente360.backend_agencia360.clientes.VehiculosDeC
 import dev.latticesystems.erp_agente360.backend_agencia360.clientes.VehiculosDeClientes.VehiculoDeCliente;
 import dev.latticesystems.erp_agente360.backend_agencia360.shared.exception.CodigosError;
 import dev.latticesystems.erp_agente360.backend_agencia360.shared.exception.ConflictoException;
+import dev.latticesystems.erp_agente360.backend_agencia360.shared.exception.NoProcesableException;
 import dev.latticesystems.erp_agente360.backend_agencia360.shared.exception.RecursoNoEncontradoException;
 import java.time.Clock;
 import java.time.DayOfWeek;
@@ -54,15 +56,17 @@ public class AgendaAppService {
 	private final Clock reloj;
 	private final TicketCitaPdf ticketCitaPdf = new TicketCitaPdf();
 	private final FirmaCitas firmaCitas;
+	private final RecoleccionService recoleccion;
 
 	@Autowired
 	public AgendaAppService(HorarioTaller horario, CitaRepository citaRepository, VehiculosDeClientes vehiculos,
-			FirmaCitas firmaCitas) {
-		this(horario, citaRepository, vehiculos, firmaCitas, Clock.system(ZONA_AGENCIA));
+			FirmaCitas firmaCitas, RecoleccionService recoleccion) {
+		this(horario, citaRepository, vehiculos, firmaCitas, recoleccion, Clock.system(ZONA_AGENCIA));
 	}
 
 	AgendaAppService(HorarioTaller horario, CitaRepository citaRepository, VehiculosDeClientes vehiculos,
-			FirmaCitas firmaCitas, Clock reloj) {
+			FirmaCitas firmaCitas, RecoleccionService recoleccion, Clock reloj) {
+		this.recoleccion = recoleccion;
 		this.firmaCitas = firmaCitas;
 		this.horario = horario;
 		this.citaRepository = citaRepository;
@@ -140,8 +144,28 @@ public class AgendaAppService {
 	 *             con {@code FRANJA_SIN_CUPO} si la franja ya no tiene cupo, o con
 	 *             {@code CITA_DUPLICADA} si el vehículo ya tiene cita ese día (409)
 	 */
-	@Transactional
 	public CitaApp agendar(Long clienteId, Long vehiculoId, Long franjaId, LocalDate fecha, MotivoCita motivo) {
+		return agendar(clienteId, vehiculoId, franjaId, fecha, motivo, null);
+	}
+
+	/**
+	 * Agenda una cita confirmada y, si viene {@code direccionId}, los traslados de
+	 * recoger y entregar en la misma transacción: si algo falla no queda ni cita ni
+	 * traslados (V2-M17.02).
+	 *
+	 * @param direccionId
+	 *            dirección guardada del cliente para la recolección; nula si no la
+	 *            pide
+	 * @throws RecursoNoEncontradoException
+	 *             si el vehículo o la dirección no existen o no son del cliente
+	 *             (404)
+	 * @throws NoProcesableException
+	 *             con {@code FUERA_DE_COBERTURA} si la dirección ya no está en la
+	 *             zona (422)
+	 */
+	@Transactional
+	public CitaApp agendar(Long clienteId, Long vehiculoId, Long franjaId, LocalDate fecha, MotivoCita motivo,
+			Long direccionId) {
 		if (vehiculoId == null || franjaId == null || fecha == null) {
 			throw new IllegalArgumentException("El vehículo, la franja y la fecha son obligatorios");
 		}
@@ -149,11 +173,14 @@ public class AgendaAppService {
 				.filter(propio -> propio.propietario().id().equals(clienteId))
 				.orElseThrow(() -> new RecursoNoEncontradoException("No existe el vehículo " + vehiculoId));
 		FranjaHorario franja = validarFranja(fecha, franjaId);
+		DireccionCliente direccion = direccionId == null ? null : recoleccion.cubierta(clienteId, direccionId);
 		citaRepository.bloquearFranja(claveDeBloqueo(fecha, franjaId));
 		verificarDisponible(vehiculoId, fecha, franja, SIN_CITA);
 		Cita nueva = Cita.confirmar(clienteId, vehiculoId, fecha, franjaId, franja.getHoraInicio(), franja.getHoraFin(),
 				motivo);
-		return CitaApp.de(citaRepository.save(nueva), CitaApp.describir(vehiculo));
+		Cita guardada = citaRepository.save(nueva);
+		CitaApp creada = CitaApp.de(guardada, CitaApp.describir(vehiculo));
+		return direccion == null ? creada : creada.conRecoleccion(recoleccion.programar(direccion, guardada));
 	}
 
 	/**
