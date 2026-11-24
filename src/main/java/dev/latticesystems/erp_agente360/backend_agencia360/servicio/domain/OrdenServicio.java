@@ -1,6 +1,7 @@
 package dev.latticesystems.erp_agente360.backend_agencia360.servicio.domain;
 
 import dev.latticesystems.erp_agente360.backend_agencia360.servicio.EstatusOrden;
+import dev.latticesystems.erp_agente360.backend_agencia360.servicio.EtapaTaller;
 import dev.latticesystems.erp_agente360.backend_agencia360.shared.domain.Auditable;
 import jakarta.persistence.CascadeType;
 import jakarta.persistence.Column;
@@ -68,6 +69,15 @@ public class OrdenServicio extends Auditable {
 	@Column(name = "fecha_cierre")
 	private Instant fechaCierre;
 
+	@Column(name = "cita_id")
+	private Long citaId;
+
+	@Column(name = "asesor_id")
+	private Long asesorId;
+
+	@Column(name = "entrega_estimada")
+	private Instant entregaEstimada;
+
 	@OneToMany(mappedBy = "ordenServicio", cascade = CascadeType.PERSIST)
 	@OrderBy("id asc")
 	private List<OrdenManoDeObra> renglonesManoDeObra = new ArrayList<>();
@@ -121,6 +131,65 @@ public class OrdenServicio extends Auditable {
 		orden.estatus = EstatusOrden.TERMINADO;
 		orden.fechaCierre = ahora.toInstant();
 		return orden;
+	}
+
+	/**
+	 * Abre la orden cuando el vehículo entra al taller (V2-M04.01): queda
+	 * {@code RECIBIDO}, sin renglones y con montos en cero, a nombre del asesor que
+	 * la recibe. La primera etapa la registra quien la abre.
+	 */
+	public static OrdenServicio abrir(Long vehiculoClienteId, int kilometraje, Long asesorId, Long citaId,
+			Instant entregaEstimada, ZonedDateTime ahora) {
+		Objects.requireNonNull(vehiculoClienteId, "vehiculoClienteId");
+		Objects.requireNonNull(asesorId, "asesorId");
+		Objects.requireNonNull(ahora, "ahora");
+		if (kilometraje < 0 || kilometraje > KILOMETRAJE_MAXIMO) {
+			throw new IllegalArgumentException("El kilometraje debe estar entre 0 y " + KILOMETRAJE_MAXIMO);
+		}
+		OrdenServicio orden = new OrdenServicio(vehiculoClienteId, ahora.toLocalDate(), kilometraje, asesorId);
+		orden.asesorId = asesorId;
+		orden.citaId = citaId;
+		orden.estimarEntrega(entregaEstimada, ahora.toInstant());
+		orden.manoDeObra = BigDecimal.ZERO.setScale(2);
+		orden.refacciones = BigDecimal.ZERO.setScale(2);
+		Montos montos = Montos.desglosar(BigDecimal.ZERO.setScale(2));
+		orden.subtotal = montos.subtotal();
+		orden.iva = montos.iva();
+		orden.total = montos.total();
+		orden.estatus = EstatusOrden.RECIBIDO;
+		return orden;
+	}
+
+	/**
+	 * Lleva la orden al estatus de la etapa. Al quedar lista para entrega o
+	 * entregada se cierra en ese momento; si ya estaba cerrada conserva su cierre.
+	 *
+	 * @throws IllegalStateException
+	 *             si la orden ya se entregó
+	 */
+	public void pasarA(EtapaTaller etapa, Instant ahora) {
+		Objects.requireNonNull(etapa, "etapa");
+		Objects.requireNonNull(ahora, "ahora");
+		if (estatus == EstatusOrden.ENTREGADO) {
+			throw new IllegalStateException("La orden ya se entregó");
+		}
+		estatus = etapa.estatus();
+		if (estatus.cerrada() && fechaCierre == null) {
+			fechaCierre = ahora;
+		}
+	}
+
+	/**
+	 * Cambia la hora estimada de entrega; {@code null} la deja sin estimar.
+	 *
+	 * @throws IllegalArgumentException
+	 *             si ya pasó
+	 */
+	public void estimarEntrega(Instant entregaEstimada, Instant ahora) {
+		if (entregaEstimada != null && entregaEstimada.isBefore(ahora)) {
+			throw new IllegalArgumentException("La entrega estimada no puede ser anterior a ahora");
+		}
+		this.entregaEstimada = entregaEstimada;
 	}
 
 	private void agregar(RenglonOrden renglon) {
@@ -181,6 +250,18 @@ public class OrdenServicio extends Auditable {
 
 	public Instant getFechaCierre() {
 		return fechaCierre;
+	}
+
+	public Long getCitaId() {
+		return citaId;
+	}
+
+	public Long getAsesorId() {
+		return asesorId;
+	}
+
+	public Instant getEntregaEstimada() {
+		return entregaEstimada;
 	}
 
 	public List<OrdenManoDeObra> getRenglonesManoDeObra() {

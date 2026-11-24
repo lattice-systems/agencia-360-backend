@@ -12,7 +12,8 @@ public class ArchivosService implements AlmacenArchivos {
 
 	public static final long TAMANO_MAXIMO = 20L * 1024 * 1024;
 	public static final String RUTA = "/api/v1/archivos/";
-	static final Set<String> TIPOS_PERMITIDOS = Set.of("image/jpeg", "image/png", "image/webp", "application/pdf");
+	static final Set<String> TIPOS_PERMITIDOS = Set.of("image/jpeg", "image/png", "image/webp", "application/pdf",
+			"video/mp4");
 	private static final Pattern CARPETA = Pattern.compile("[a-z0-9-]{1,40}");
 	private static final Pattern CLAVE = Pattern.compile("[a-z0-9-]{1,40}/[0-9a-f-]{36}");
 
@@ -30,7 +31,7 @@ public class ArchivosService implements AlmacenArchivos {
 			throw new IllegalArgumentException("La carpeta admite minúsculas, números y guiones, hasta 40");
 		}
 		if (tipoContenido == null || !TIPOS_PERMITIDOS.contains(tipoContenido)) {
-			throw new IllegalArgumentException("Solo se guardan imágenes JPEG, PNG o WebP y PDF");
+			throw new IllegalArgumentException("Solo se guardan imágenes JPEG, PNG o WebP, PDF y video MP4");
 		}
 		if (contenido == null || contenido.length == 0) {
 			throw new IllegalArgumentException("El archivo está vacío");
