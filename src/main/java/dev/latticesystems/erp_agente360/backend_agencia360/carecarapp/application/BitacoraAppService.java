@@ -1,7 +1,6 @@
 package dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.application;
 
 import dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.domain.GastoVehiculo;
-import dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.domain.LecturaKm;
 import dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.domain.TipoGasto;
 import dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.infrastructure.GastoVehiculoRepository;
 import dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.infrastructure.LecturaKmRepository;
