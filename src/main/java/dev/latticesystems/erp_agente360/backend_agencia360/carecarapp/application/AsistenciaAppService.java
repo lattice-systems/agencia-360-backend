@@ -11,33 +11,42 @@ import dev.latticesystems.erp_agente360.backend_agencia360.shared.exception.Recu
 import java.math.BigDecimal;
 import java.time.Clock;
 import java.util.EnumSet;
+import java.util.Map;
 import java.util.Optional;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * Solicitudes de asistencia (SOS) del cliente (V2-M11.01). Cada cliente tiene a
- * lo más una solicitud abierta a la vez.
+ * Solicitudes de asistencia (SOS) del cliente (V2-M11.01) y su seguimiento
+ * (V2-M11.04). Cada cliente tiene a lo más una solicitud abierta a la vez.
  */
 @Service
 public class AsistenciaAppService {
+
+	/** Nombre del aviso en vivo que recibe el cliente. */
+	public static final String EVENTO_ESTADO = "asistencia.estado";
 
 	private static final EnumSet<EstadoAsistencia> ABIERTAS = EnumSet.of(EstadoAsistencia.RECIBIDA,
 			EstadoAsistencia.EN_CAMINO);
 
 	private final SolicitudAsistenciaRepository repositorio;
 	private final VehiculosDeClientes vehiculos;
+	private final ApplicationEventPublisher eventos;
 	private final Clock reloj;
 
 	@Autowired
-	public AsistenciaAppService(SolicitudAsistenciaRepository repositorio, VehiculosDeClientes vehiculos) {
-		this(repositorio, vehiculos, Clock.systemUTC());
+	public AsistenciaAppService(SolicitudAsistenciaRepository repositorio, VehiculosDeClientes vehiculos,
+			ApplicationEventPublisher eventos) {
+		this(repositorio, vehiculos, eventos, Clock.systemUTC());
 	}
 
-	AsistenciaAppService(SolicitudAsistenciaRepository repositorio, VehiculosDeClientes vehiculos, Clock reloj) {
+	AsistenciaAppService(SolicitudAsistenciaRepository repositorio, VehiculosDeClientes vehiculos,
+			ApplicationEventPublisher eventos, Clock reloj) {
 		this.repositorio = repositorio;
 		this.vehiculos = vehiculos;
+		this.eventos = eventos;
 		this.reloj = reloj;
 	}
 
@@ -75,5 +84,44 @@ public class AsistenciaAppService {
 	public Optional<SolicitudAsistenciaApp> activa(Long clienteId) {
 		return repositorio.findFirstByClienteIdAndEstadoInOrderByIdDesc(clienteId, ABIERTAS)
 				.map(SolicitudAsistenciaApp::de);
+	}
+
+	/**
+	 * Una solicitud del cliente, abierta o cerrada.
+	 *
+	 * @throws RecursoNoEncontradoException
+	 *             si no existe o es de otro cliente (404)
+	 */
+	@Transactional(readOnly = true)
+	public SolicitudAsistenciaApp obtener(Long clienteId, Long solicitudId) {
+		return repositorio.findByIdAndClienteId(solicitudId, clienteId).map(SolicitudAsistenciaApp::de)
+				.orElseThrow(() -> new RecursoNoEncontradoException("No existe la solicitud " + solicitudId));
+	}
+
+	/**
+	 * El personal mueve la solicitud y el cliente dueño recibe el aviso en vivo.
+	 *
+	 * @param estado
+	 *            {@code en_camino}, {@code atendida} o {@code cancelada}
+	 * @throws IllegalArgumentException
+	 *             si el estado falta o no existe (400)
+	 * @throws RecursoNoEncontradoException
+	 *             si la solicitud no existe (404)
+	 * @throws ConflictoException
+	 *             con {@code TRANSICION_INVALIDA} si el paso no está permitido (409)
+	 */
+	@Transactional
+	public SolicitudAsistenciaApp cambiarEstado(Long solicitudId, String estado) {
+		if (estado == null) {
+			throw new IllegalArgumentException("El estado es obligatorio");
+		}
+		EstadoAsistencia nuevo = EstadoAsistencia.desde(estado);
+		SolicitudAsistencia solicitud = repositorio.findById(solicitudId)
+				.orElseThrow(() -> new RecursoNoEncontradoException("No existe la solicitud " + solicitudId));
+		solicitud.cambiarEstado(nuevo, reloj.instant());
+		SolicitudAsistencia guardada = repositorio.saveAndFlush(solicitud);
+		eventos.publishEvent(new AvisoAlCliente(guardada.getClienteId(), EVENTO_ESTADO,
+				Map.of("solicitudId", guardada.getId(), "estado", nuevo.valor())));
+		return SolicitudAsistenciaApp.de(guardada);
 	}
 }
