@@ -221,7 +221,7 @@ class AsistenteIntegrationTest extends AbstractIntegrationTest {
 		String pregunta = "{\"vehiculoId\":" + vehiculoId + ",\"pregunta\":\"¿Cada cuánto cambio el aceite?\"}";
 		org.springframework.test.web.servlet.MvcResult resultado = mockMvc
 				.perform(post("/api/v1/app/asistente/preguntas/flujo").contentType(MediaType.APPLICATION_JSON)
-						.accept(MediaType.TEXT_EVENT_STREAM).content(pregunta)
+						.accept(MediaType.TEXT_EVENT_STREAM, MediaType.APPLICATION_JSON).content(pregunta)
 						.header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
 				.andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.request().asyncStarted())
 				.andReturn();
@@ -235,11 +235,11 @@ class AsistenteIntegrationTest extends AbstractIntegrationTest {
 	@Test
 	void enFlujoLosErroresDeAntesDeEmpezarSonNormales() throws Exception {
 		mockMvc.perform(post("/api/v1/app/asistente/preguntas/flujo").contentType(MediaType.APPLICATION_JSON)
-				.accept(MediaType.TEXT_EVENT_STREAM)
+				.accept(MediaType.TEXT_EVENT_STREAM, MediaType.APPLICATION_JSON)
 				.content("{\"vehiculoId\":" + vehiculoId + ",\"pregunta\":\"¿Aceite?\"}")
 				.header(HttpHeaders.AUTHORIZATION, "Bearer " + token)).andExpect(status().isConflict());
 		mockMvc.perform(post("/api/v1/app/asistente/preguntas/flujo").contentType(MediaType.APPLICATION_JSON)
-				.accept(MediaType.TEXT_EVENT_STREAM)
+				.accept(MediaType.TEXT_EVENT_STREAM, MediaType.APPLICATION_JSON)
 				.content("{\"vehiculoId\":" + Long.MAX_VALUE + ",\"pregunta\":\"¿Aceite?\"}")
 				.header(HttpHeaders.AUTHORIZATION, "Bearer " + token)).andExpect(status().isNotFound());
 	}
