@@ -267,6 +267,9 @@ Vive en `carecarapp` (la historia lo ubica en `servicio`, pero solo consume su A
 - Errores: 401, 403, 404 (vehículo ajeno), 400, 422 `KM_INVALIDO`. Los precios son una estimación no vinculante.
 - Fuera de esta entrega: M05.05 (recordatorio push) espera a M06.
 
+
+**Foto de la lectura (V2-M05.03, parte B):** `POST /vehiculos/{id}/lecturas-km` sigue aceptando el JSON `{km}` y suma `multipart/form-data` con `km` y `foto` (imagen JPEG/PNG/WebP opcional) en la misma ruta. El km se valida primero (400/422) y solo después se guarda la foto con `AlmacenArchivos` (carpeta `lecturas-km`); `lectura_km.foto_url` guarda la clave. `LecturaKm` devuelve `fotoUrl` firmada de 15 min cuando hay foto (se omite si no). Foto no imagen o vacía: 400.
+
 ### M06 · Notificaciones y bandeja — H3 — módulo `notificaciones (nuevo)`
 
 Detalle: [`carecar-mobile/plan/modulos/M06-notificaciones.md`](https://github.com/lattice-systems/carecar-mobile/blob/main/plan/modulos/M06-notificaciones.md)
@@ -348,6 +351,21 @@ Vive en `carecarapp` (la tabla es de la ficha; el módulo `asistencia` nuevo que
 | `GET /asistencia?activa=true` | - | 200 con la solicitud abierta · 204 si no hay · 400 si `activa` no es `true` |
 
 La ubicación se conserva mientras la solicitud está abierta; limpiarla al cerrarse es de V2-M11.04.
+
+#### Diseño técnico — V2-M11.04 (parte B de Juan Pablo)
+
+Sigue en `carecarapp`. Sin tablas nuevas: `solicitud_asistencia` gana `cerrada_en` (migración V40, que comparte con M17.03 y M17.04).
+
+**Transiciones** (`EstadoAsistencia`): `recibida` → `en_camino` o `cancelada`; `en_camino` → `atendida` o `cancelada`; `atendida` y `cancelada` son finales. Al cerrarse (`atendida`/`cancelada`) se guarda `cerrada_en` y se **borran `lat` y `lng`** de la fila (privacidad: la ubicación solo vive mientras hay ayuda por llegar).
+
+| Método y ruta | Quién | Cuerpo | Respuestas |
+| --- | --- | --- | --- |
+| `GET /app/asistencia/{id}` | `CLIENTE_CARECAR`, solo el dueño | - | 200 `SolicitudAsistencia` (sin `lat`/`lng` si ya se cerró) · 404 si no existe o es ajena |
+| `PATCH /asistencia/{id}/estado` (fuera de `/app`) | personal `GERENTE_MARKETING` (rol interno que el repo ya usa para endpoints de personal mientras el ERP siga congelado) | `{estado}` en minúsculas: `en_camino`, `atendida`, `cancelada` | 200 `SolicitudAsistencia` (con ubicación si sigue abierta) · 400 `DATOS_INVALIDOS` (estado desconocido) · 404 · 409 `TRANSICION_INVALIDA` · 401/403 |
+
+**Evento** (cada cambio, al cliente dueño, por el SSE de `GET /app/eventos`): nombre `asistencia.estado`, `data` `{"solicitudId":12,"estado":"en_camino"}`. Se publica un `AvisoAlCliente(clienteId, evento, datos)` de Spring (módulo `carecarapp`); `EventosEnVivoApp` lo escucha con `@TransactionalEventListener(fallbackExecution = true)` y lo manda solo a las conexiones de ese cliente. El push (M06) escuchará el mismo evento cuando exista.
+
+Pendiente (historia nueva, `Borrador`): bandeja del personal para listar solicitudes abiertas con su ubicación.
 
 ### M12 · Lealtad y recompensas — H4 — módulo `lealtad (nuevo)`
 
@@ -450,6 +468,36 @@ Detalle: [`carecar-mobile/plan/modulos/M17-recoleccion-y-entrega.md`](https://gi
 | `POST /citas` | suma `recoleccion: {direccionId}` | 201 la cita con `recoleccion: {direccionId, costoTotal, traslados: [{id, tipo, estado, costo, fecha, ventanaInicio, ventanaFin}]}` (nulo si no se pidió) · 404 dirección ajena · 422 `FUERA_DE_COBERTURA` · los traslados nacen en la misma transacción: si algo falla no queda ni cita ni traslados |
 
 Pendiente (historia nueva, `Borrador`): cancelar los traslados al cancelar o reprogramar la cita.
+
+#### Diseño técnico — V2-M17.03 y V2-M17.04 (parte B de Juan Pablo)
+
+**Migración V40** (compartida con M11.04 y M05.03; número provisional, se renombra al integrar):
+
+- `traslado` gana `chofer_lat`, `chofer_lng` (`numeric(9,6)`, nulos juntos) y `ubicacion_en`. Solo tienen valor mientras el estado es `en_camino` o `de_regreso`; al salir de ellos se borran.
+- `checklist_traslado` (nombres de la ficha): `id`, `traslado_id` (FK, único: un checklist por traslado), `km`, `gasolina` (`VACIO`, `UN_CUARTO`, `MEDIO`, `TRES_CUARTOS`, `LLENO`), `notas` (≤ 500), `fotos` (`jsonb`, arreglo de claves de `AlmacenArchivos`), `firma_url` (clave del archivo de la firma), más `created_at`/`updated_at`.
+- `solicitud_asistencia.cerrada_en` (M11.04).
+
+**Estados por tipo** (`EstadoTraslado`, el chofer los mueve en orden; lo demás es 409 `TRANSICION_INVALIDA`):
+
+- `recoger`: `programado` → `en_camino` → `recogido` → `en_taller` (final).
+- `entregar`: `programado` → `de_regreso` → `entregado` (final).
+- `cancelado` (final) solo desde `programado`, y solo lo pone el sistema cuando se cancela la cita.
+
+La primera vez que el chofer mueve el traslado se guarda su id en `chofer_id` (el usuario del personal que llama; sigue sin FK).
+
+| Método y ruta | Quién | Cuerpo | Respuestas |
+| --- | --- | --- | --- |
+| `GET /app/traslados/{id}` | `CLIENTE_CARECAR`, dueño de la cita | - | 200 `{id, citaId, tipo, estado, costo, fecha, ventanaInicio, ventanaFin, ubicacionChofer?: {lat, lng, actualizadaEn}}`; `ubicacionChofer` solo en `en_camino`/`de_regreso` y con al menos un reporte · 404 si es ajeno |
+| `PATCH /traslados/{id}/estado` | personal `GERENTE_MARKETING` | `{estado}` | 200 el mismo objeto · 400 · 404 · 409 `TRANSICION_INVALIDA` |
+| `PUT /traslados/{id}/ubicacion` | personal `GERENTE_MARKETING` | `{lat, lng}` | 204 · 400 (fuera de rango) · 404 · 409 `TRANSICION_INVALIDA` si el estado no es `en_camino`/`de_regreso` |
+| `GET /app/traslados/{id}/checklist` | `CLIENTE_CARECAR`, dueño | - | 200 `{trasladoId, km, gasolina, notas, fotos: [url], firmaUrl, registradoEn}` con URL firmadas de 15 min (`AlmacenArchivos.urlTemporal`) · 404 si es ajeno o no hay checklist |
+| `PUT /traslados/{id}/checklist` | personal `GERENTE_MARKETING` | `multipart/form-data`: `km` (1..2 000 000), `gasolina`, `notas?`, `fotos` (0 a 10 imágenes), `firma?` (imagen) | 200 el checklist · 400 · 404 · 409 `TRANSICION_INVALIDA` si el traslado sigue `programado` o está `cancelado`. Reemplaza el anterior y borra sus archivos |
+
+El módulo `archivos` no tiene endpoint de carga, solo `AlmacenArchivos.guardar`; por eso el personal sube por multipart al endpoint del módulo dueño y este guarda con las carpetas `checklist-fotos` y `checklist-firmas`.
+
+**Eventos SSE** (al cliente dueño de la cita): `traslado.estado` con `{"trasladoId":5,"citaId":9,"tipo":"recoger","estado":"en_camino"}` en cada cambio de estado, y `traslado.ubicacion` con `{"trasladoId":5,"lat":21.13,"lng":-101.69,"actualizadaEn":"2026-01-01T10:00:00Z"}` en cada reporte.
+
+**Cita ↔ traslados (deuda de M17.02):** al cancelar una cita, sus traslados `programado` pasan a `cancelado`; al reprogramarla, sus traslados `programado` toman la nueva `fecha` (la ventana horaria no cambia). Los que ya salieron no se tocan.
 
 ### M18 · Bitácora del conductor — H6 — módulo `carecarapp`
 
