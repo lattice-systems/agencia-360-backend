@@ -19,14 +19,22 @@ import java.util.stream.Stream;
  *            si el vehículo ya no es del cliente
  * @param motivo
  *            por qué agendó (V2-M02.08); nulo si no lo dijo
+ * @param recoleccion
+ *            traslados de recoger y entregar (V2-M17.02); solo viene al agendar
+ *            con recolección, si no es nulo
  */
 public record CitaApp(Long id, Long vehiculoId, String vehiculo, Long franjaId, LocalDate fecha,
 		@JsonFormat(pattern = "HH:mm") LocalTime horaInicio, @JsonFormat(pattern = "HH:mm") LocalTime horaFin,
-		EstadoCita estado, MotivoCita motivo) {
+		EstadoCita estado, MotivoCita motivo, RecoleccionApp recoleccion) {
 
 	static CitaApp de(Cita cita, String vehiculo) {
 		return new CitaApp(cita.getId(), cita.getVehiculoClienteId(), vehiculo, cita.getFranjaId(), cita.getFecha(),
-				cita.getHoraInicio(), cita.getHoraFin(), cita.getEstado(), cita.getMotivo());
+				cita.getHoraInicio(), cita.getHoraFin(), cita.getEstado(), cita.getMotivo(), null);
+	}
+
+	/** La misma cita con la recolección que se pidió al agendarla. */
+	CitaApp conRecoleccion(RecoleccionApp recoleccion) {
+		return new CitaApp(id, vehiculoId, vehiculo, franjaId, fecha, horaInicio, horaFin, estado, motivo, recoleccion);
 	}
 
 	/** «Nissan March 2026 Advance»; omite lo que falte. */

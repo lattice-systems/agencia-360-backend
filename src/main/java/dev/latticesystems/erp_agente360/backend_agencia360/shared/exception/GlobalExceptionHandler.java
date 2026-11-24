@@ -95,6 +95,13 @@ public class GlobalExceptionHandler {
 				ex.getMessage(), request.getRequestURI(), ex.getCodigo()));
 	}
 
+	@ExceptionHandler(NoProcesableException.class)
+	public ResponseEntity<ApiError> handleNoProcesable(NoProcesableException ex, HttpServletRequest request) {
+		return ResponseEntity.status(HttpStatus.UNPROCESSABLE_ENTITY)
+				.body(ApiError.of(HttpStatus.UNPROCESSABLE_ENTITY.value(), "Unprocessable Entity", ex.getMessage(),
+						request.getRequestURI(), ex.getCodigo()));
+	}
+
 	@ExceptionHandler(ServicioNoDisponibleException.class)
 	public ResponseEntity<ApiError> handleServicioNoDisponible(ServicioNoDisponibleException ex,
 			HttpServletRequest request) {

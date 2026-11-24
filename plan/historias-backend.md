@@ -291,6 +291,21 @@ Detalle: [`carecar-mobile/plan/modulos/M11-asistencia-en-camino.md`](https://git
 | V2-M11.01 | Como cliente varado quiero pedir ayuda compartiendo mi ubicación para que la agencia me atienda rápido | `POST /asistencia` crea `solicitud_asistencia` (cliente, vehículo propio, tipo, lat/lng opcionales, comentario) → 201 con estado `recibida` · 404 si el vehículo no es del cliente · `GET /asistencia?activa=true` devuelve la abierta | Juan Pablo |
 | V2-M11.04 | Como cliente quiero ver el estado de mi solicitud para saber cuándo llega la ayuda | `GET /asistencia/{id}` solo del dueño · estados `recibida` → `en_camino` → `atendida`/`cancelada` · endpoint interno para el personal mientras el ERP siga congelado · cada cambio publica un evento para el push (M06) | Juan Pablo |
 
+#### Diseño técnico — V2-M11.01 (parte B de Juan Pablo)
+
+Vive en `carecarapp` (la tabla es de la ficha; el módulo `asistencia` nuevo queda para V2-M11.04 cuando haya estados y eventos).
+
+**Tabla `solicitud_asistencia`** (migración V35, nombres de la ficha): `id`, `cliente_id` (FK `cliente`), `vehiculo_cliente_id` (FK `vehiculo_cliente`), `tipo` (`LLANTA`, `BATERIA`, `CHOQUE`, `SIN_GASOLINA`, `OTRO`), `lat` y `lng` (`numeric(9,6)`, nulos juntos), `comentario` (≤ 500), `estado` (`RECIBIDA`, `EN_CAMINO`, `ATENDIDA`, `CANCELADA`), `creada_en`. Índice único parcial por `cliente_id` donde `estado in ('RECIBIDA','EN_CAMINO')`: una sola abierta por cliente, también bajo concurrencia.
+
+**Endpoints** (rol `CLIENTE_CARECAR`; en JSON `tipo` y `estado` viajan en minúsculas):
+
+| Método y ruta | Cuerpo | Respuestas |
+| --- | --- | --- |
+| `POST /asistencia` | `{vehiculoId, tipo, lat?, lng?, comentario?}` | 201 `{id, vehiculoId, tipo, lat, lng, comentario, estado: "recibida", creadaEn}` · 400 `DATOS_INVALIDOS` (tipo desconocido, lat fuera de -90..90, lng fuera de -180..180, solo una de las dos) · 404 si el vehículo no es del cliente · 409 `SOLICITUD_ABIERTA` si ya tiene una `recibida` o `en_camino` |
+| `GET /asistencia?activa=true` | - | 200 con la solicitud abierta · 204 si no hay · 400 si `activa` no es `true` |
+
+La ubicación se conserva mientras la solicitud está abierta; limpiarla al cerrarse es de V2-M11.04.
+
 ### M12 · Lealtad y recompensas — H4 — módulo `lealtad (nuevo)`
 
 Detalle: [`carecar-mobile/plan/modulos/M12-lealtad.md`](https://github.com/lattice-systems/carecar-mobile/blob/main/plan/modulos/M12-lealtad.md)
@@ -358,6 +373,28 @@ Detalle: [`carecar-mobile/plan/modulos/M17-recoleccion-y-entrega.md`](https://gi
 | V2-M17.02 | Como cliente quiero pedir que recojan mi auto al agendar para no tener que llevarlo | Tabla `traslado` · `GET /recoleccion/cotizacion?direccionId=&fecha=` da costo y franja · `POST /citas` acepta `recoleccion.direccionId` y crea los traslados de recoger y entregar en la misma transacción | Juan Pablo |
 | V2-M17.03 | Como cliente quiero seguir al chofer para saber cuándo llega | `GET /traslados/{id}` con estado y ubicación del chofer solo en `en_camino`/`de_regreso` · endpoint interno para el chofer mientras el ERP siga congelado · evento por cambio de estado para el push | Juan Pablo |
 | V2-M17.04 | Como cliente quiero ver el checklist con fotos del estado de mi auto para comprobar cómo lo recogieron y entregaron | Tabla `checklist_traslado` · `GET /traslados/{id}/checklist` con km, gasolina, fotos y firma con URL firmadas de vida corta (V2-T05.09) · carga por endpoint interno | Juan Pablo |
+
+#### Diseño técnico — V2-M17.01 y V2-M17.02 (parte B de Juan Pablo)
+
+**Tablas** (migraciones V36 y V37, nombres de la ficha):
+
+- `direccion_cliente`: `id`, `cliente_id` (FK), `alias` (≤ 40), `calle`, `colonia`, `cp` (5 dígitos), `ciudad`, `lat`, `lng` (obligatorias: el pin en el mapa es lo que valida la cobertura), más `created_at`/`updated_at`.
+- `traslado`: `id`, `cita_id` (FK `cita`), `direccion_cliente_id` (FK), `tipo` (`RECOGER`, `ENTREGAR`), `chofer_id` (nulo hasta que se asigne; sin FK mientras el ERP siga congelado), `estado` (`PROGRAMADO` al nacer; el resto lo agrega V2-M17.03), `costo`, más `fecha`, `ventana_inicio`, `ventana_fin` y `created_at`/`updated_at`. Un traslado de cada tipo por cita (único `cita_id, tipo`).
+
+**Cobertura y tarifa** (propiedades, README): `app.recoleccion.cobertura.centro-lat|centro-lng|radio-km` (por omisión León, Gto., 15 km; distancia haversine), `app.recoleccion.tarifa.base` (80) y `tarifa.por-km` (8), `app.recoleccion.ventana-recoleccion` (`07:00-09:00`, antes de abrir el taller) y `ventana-entrega` (`17:00-19:00`, después de cerrar). Costo de un traslado = base + por-km × distancia redondeada a 2 decimales; el total es el doble (ida y vuelta).
+
+**Endpoints** (rol `CLIENTE_CARECAR`, solo del dueño; un id ajeno responde 404):
+
+| Método y ruta | Cuerpo | Respuestas |
+| --- | --- | --- |
+| `GET /direcciones` | - | 200 lista `[{id, alias, calle, colonia, cp, ciudad, lat, lng}]` |
+| `POST /direcciones` | `{alias, calle, colonia, cp, ciudad, lat, lng}` | 201 la dirección · 400 `DATOS_INVALIDOS` · 422 `FUERA_DE_COBERTURA` |
+| `PUT /direcciones/{id}` | igual | 200 · 400 · 404 · 422 `FUERA_DE_COBERTURA` |
+| `DELETE /direcciones/{id}` | - | 204 · 404 · 409 `DIRECCION_EN_USO` si tiene traslados |
+| `GET /recoleccion/cotizacion?direccionId=&fecha=` | - | 200 `{direccionId, fecha, costoPorTraslado, costoTotal, recoleccion: {inicio, fin}, entrega: {inicio, fin}}` · 400 (fecha sin servicio o fuera de anticipación) · 404 · 422 `FUERA_DE_COBERTURA` |
+| `POST /citas` | suma `recoleccion: {direccionId}` | 201 la cita con `recoleccion: {direccionId, costoTotal, traslados: [{id, tipo, estado, costo, fecha, ventanaInicio, ventanaFin}]}` (nulo si no se pidió) · 404 dirección ajena · 422 `FUERA_DE_COBERTURA` · los traslados nacen en la misma transacción: si algo falla no queda ni cita ni traslados |
+
+Pendiente (historia nueva, `Borrador`): cancelar los traslados al cancelar o reprogramar la cita.
 
 ### M18 · Bitácora del conductor — H6 — módulo `carecarapp`
 

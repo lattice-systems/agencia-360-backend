@@ -68,11 +68,13 @@ public class AgendaAppController {
 	@PreAuthorize("hasRole('CLIENTE_CARECAR')")
 	@Operation(summary = "Agendar una cita de servicio", description = "Descuenta cupo de la franja. Responde 409 "
 			+ "con codigo FRANJA_SIN_CUPO si ya no hay lugar o CITA_DUPLICADA si el vehiculo ya tiene cita ese dia. "
-			+ "El motivo es opcional.")
+			+ "El motivo es opcional. Con recoleccion.direccionId crea los traslados de recoger y entregar en la "
+			+ "misma transaccion: 404 si la direccion no es del cliente y 422 FUERA_DE_COBERTURA si ya no esta "
+			+ "en la zona.")
 	public CitaApp agendar(@Valid @RequestBody NuevaCitaRequest request,
 			@AuthenticationPrincipal UsuarioAutenticado cliente) {
 		return agendaAppService.agendar(cliente.id(), request.vehiculoId(), request.franjaId(), request.fecha(),
-				request.motivo());
+				request.motivo(), request.recoleccion() == null ? null : request.recoleccion().direccionId());
 	}
 
 	@PostMapping("/citas/{citaId}/cancelar")
