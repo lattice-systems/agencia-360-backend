@@ -17,6 +17,9 @@ public interface UsuarioRepository extends JpaRepository<Usuario, Long> {
 	@Query("select u from Usuario u join fetch u.rol where u.id = :id")
 	Optional<Usuario> buscarPorIdConRol(@Param("id") Long id);
 
+	@Query("select u from Usuario u join fetch u.rol r where u.activo = true and r.nombre = :rol order by u.id")
+	List<Usuario> buscarActivosConRol(@Param("rol") String rol);
+
 	@Query("select u from Usuario u join fetch u.rol r where r.accesoErp = true order by u.nombre")
 	List<Usuario> buscarConAccesoAlErp();
 

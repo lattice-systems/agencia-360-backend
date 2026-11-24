@@ -23,4 +23,7 @@ public interface ProspectoRepository extends JpaRepository<Prospecto, Long> {
 	List<Prospecto> findByVendedorIdAndEtapaOrderByCreatedAtDescIdDesc(Long vendedorId, Etapa etapa);
 
 	Optional<Prospecto> findByIdAndVendedorId(Long id, Long vendedorId);
+
+	/** Prospectos de un vendedor que aún no terminan (V2-M16.01). */
+	long countByVendedorIdAndEtapaNotIn(Long vendedorId, java.util.Collection<Etapa> etapas);
 }
