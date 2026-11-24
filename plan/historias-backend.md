@@ -498,6 +498,13 @@ Pasos:
 - Los modelos se fijan con `ASISTENTE_MODELO_TEXTO` y `ASISTENTE_MODELO_EMBEDDING`.
 - Una cuota agotada, un error o una espera vencida dan `503 ASISTENTE_NO_DISPONIBLE`.
 
+#### Diseño de V2-M24.07: calidad de respuestas — implementado
+
+- **Calificar:** `POST /api/v1/app/asistente/consultas/{consultaId}/calificacion` con `{"util": true|false}`, solo `CLIENTE_CARECAR`. Responde `204`; calificar otra vez reemplaza. `404` si la consulta no existe o es de otro cliente (no se revela cuál). `400` sin `util`. Guarda en `consulta_asistente.util` (columna de V27, sin migración nueva). Contrato 2.7.0.
+- **Conjunto de evaluación:** [`docs/asistente/evaluacion/preguntas.json`](../docs/asistente/evaluacion/preguntas.json), 20 preguntas con su página esperada. Vale para todos los manuales de `scripts/generar-manuales.py`, que comparten páginas.
+- **Script:** `scripts/evaluar-asistente.py` (solo biblioteca estándar) pregunta con una cuenta de cliente y reporta el % de respuestas con alguna cita en la página esperada contra el umbral del ADR 0007 (80 %). Sale con 0 si pasa, 1 si no y 2 si faltan preguntas. Como el cliente tiene 10 preguntas al día, guarda en un `.jsonl` y la siguiente corrida sigue donde se quedó. Credenciales solo por variables de entorno.
+- **Pendiente:** correr el conjunto contra Azure (lo corre Daniel con su cuenta) y anotar el resultado en el ADR antes de cerrar H6.
+
 ### M25 · Widgets, Wallet y accesos rápidos — H6 — módulo `carecarapp`
 
 Detalle: [`carecar-mobile/plan/modulos/M25-widgets-y-wallet.md`](https://github.com/lattice-systems/carecar-mobile/blob/main/plan/modulos/M25-widgets-y-wallet.md)
