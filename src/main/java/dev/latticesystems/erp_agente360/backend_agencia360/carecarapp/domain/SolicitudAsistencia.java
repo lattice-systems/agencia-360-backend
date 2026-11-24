@@ -120,14 +120,14 @@ public class SolicitudAsistencia {
 	 * llegar.
 	 *
 	 * @throws ConflictoException
-	 *             con {@code TRANSICION_INVALIDA} si el paso no está permitido (409)
+	 *             con {@code TRANSICION_INVALIDA} si el paso no está permitido
+	 *             (409)
 	 */
 	public void cambiarEstado(EstadoAsistencia nuevo, Instant en) {
 		Objects.requireNonNull(nuevo, "nuevo");
 		Objects.requireNonNull(en, "en");
 		if (!estado.puedePasarA(nuevo)) {
-			throw new ConflictoException(
-					"Una solicitud " + estado.valor() + " no puede pasar a " + nuevo.valor(),
+			throw new ConflictoException("Una solicitud " + estado.valor() + " no puede pasar a " + nuevo.valor(),
 					CodigosError.TRANSICION_INVALIDA);
 		}
 		this.estado = nuevo;
