@@ -40,6 +40,18 @@ public class ProveedorIAFalso implements ProveedorIA {
 		return new RespuestaIA("Según tu manual (página " + pagina + "): " + extracto, true, List.of(pagina));
 	}
 
+	/** Igual que {@link #responder}, pero palabra por palabra. */
+	@Override
+	public void responderEnFlujo(String instrucciones, String contenido, java.util.function.Consumer<String> alTrozo) {
+		RespuestaIA r = responder(instrucciones, contenido);
+		for (String palabra : r.respuesta().split("(?<= )")) {
+			alTrozo.accept(palabra);
+		}
+		alTrozo.accept("\nPAGINAS: " + (r.encontrado()
+				? r.paginas().stream().map(String::valueOf).collect(java.util.stream.Collectors.joining(", "))
+				: "ninguna"));
+	}
+
 	/**
 	 * Decide por el color dominante: rojo es presión de aceite (roja), ámbar es
 	 * check engine (amarilla) y lo demás no se reconoce.

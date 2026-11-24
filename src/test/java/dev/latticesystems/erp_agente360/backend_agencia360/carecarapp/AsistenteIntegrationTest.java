@@ -211,6 +211,67 @@ class AsistenteIntegrationTest extends AbstractIntegrationTest {
 		fotografiar(Long.MAX_VALUE, imagen(java.awt.Color.RED)).andExpect(status().isNotFound());
 	}
 
+	@Autowired
+	private dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.application.AsistenteService asistenteService;
+
+	@Test
+	void enFlujoLlegaElTextoPorPartesYAlFinalLasFuentes() throws Exception {
+		subirManual(modelo).andExpect(status().isOk());
+
+		String pregunta = "{\"vehiculoId\":" + vehiculoId + ",\"pregunta\":\"¿Cada cuánto cambio el aceite?\"}";
+		org.springframework.test.web.servlet.MvcResult resultado = mockMvc
+				.perform(post("/api/v1/app/asistente/preguntas/flujo").contentType(MediaType.APPLICATION_JSON)
+						.accept(MediaType.TEXT_EVENT_STREAM).content(pregunta)
+						.header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
+				.andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.request().asyncStarted())
+				.andReturn();
+		String cuerpo = esperarFin(resultado);
+
+		assertThat(cuerpo).contains("event:texto").contains("event:fin").contains("\"consultaId\"")
+				.contains("\"pagina\":2").doesNotContain("PAGINAS");
+		assertThat(cuerpo.indexOf("event:texto")).isLessThan(cuerpo.indexOf("event:fin"));
+	}
+
+	@Test
+	void enFlujoLosErroresDeAntesDeEmpezarSonNormales() throws Exception {
+		mockMvc.perform(post("/api/v1/app/asistente/preguntas/flujo").contentType(MediaType.APPLICATION_JSON)
+				.accept(MediaType.TEXT_EVENT_STREAM)
+				.content("{\"vehiculoId\":" + vehiculoId + ",\"pregunta\":\"¿Aceite?\"}")
+				.header(HttpHeaders.AUTHORIZATION, "Bearer " + token)).andExpect(status().isConflict());
+		mockMvc.perform(post("/api/v1/app/asistente/preguntas/flujo").contentType(MediaType.APPLICATION_JSON)
+				.accept(MediaType.TEXT_EVENT_STREAM)
+				.content("{\"vehiculoId\":" + Long.MAX_VALUE + ",\"pregunta\":\"¿Aceite?\"}")
+				.header(HttpHeaders.AUTHORIZATION, "Bearer " + token)).andExpect(status().isNotFound());
+	}
+
+	@Test
+	void siLaAppSeDesconectaQuedaRegistroDeLaRespuestaParcial() throws Exception {
+		subirManual(modelo).andExpect(status().isOk());
+		Long cliente = jdbc.queryForObject("select cliente_id from vehiculo_cliente where id = ?", Long.class,
+				vehiculoId);
+		var lista = asistenteService.prepararPregunta(cliente, vehiculoId, "¿Cada cuánto cambio el aceite?");
+
+		org.assertj.core.api.Assertions.assertThatThrownBy(() -> asistenteService.responderEnFlujo(lista, trozo -> {
+			throw new IllegalStateException("la app se fue");
+		})).isInstanceOf(IllegalStateException.class);
+
+		String proveedor = jdbc.queryForObject(
+				"select proveedor from consulta_asistente where vehiculo_cliente_id = ? order by id desc limit 1",
+				String.class, vehiculoId);
+		assertThat(proveedor).endsWith("-parcial");
+	}
+
+	private static String esperarFin(org.springframework.test.web.servlet.MvcResult resultado) throws Exception {
+		for (int intento = 0; intento < 100; intento++) {
+			String cuerpo = resultado.getResponse().getContentAsString(java.nio.charset.StandardCharsets.UTF_8);
+			if (cuerpo.contains("event:fin")) {
+				return cuerpo;
+			}
+			Thread.sleep(100);
+		}
+		return resultado.getResponse().getContentAsString(java.nio.charset.StandardCharsets.UTF_8);
+	}
+
 	private ResultActions fotografiar(Long vehiculo, byte[] bytes) throws Exception {
 		return mockMvc.perform(multipart("/api/v1/app/asistente/testigos")
 				.file(new MockMultipartFile("imagen", "testigo.png", "image/png", bytes))

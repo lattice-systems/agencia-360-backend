@@ -20,6 +20,7 @@ import java.time.ZonedDateTime;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
+import java.util.function.Consumer;
 import java.util.stream.Collectors;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
@@ -59,9 +60,27 @@ public class AsistenteService {
 			  detenerse en un lugar seguro.
 			- No pidas ni repitas datos personales.
 			""";
+	static final String INSTRUCCIONES_FLUJO = """
+			Eres el asistente de CareCar, la app de servicio de una agencia Nissan en México.
+			Respondes preguntas sobre el auto del cliente usando SOLO los fragmentos de su manual de propietario
+			que vienen en el mensaje, cada uno marcado con su número de página.
+			Reglas:
+			- Español de México, claro y amable, en máximo 120 palabras, en texto simple sin formato.
+			- No inventes nada que no esté en los fragmentos. Si no alcanzan, di que no lo encontraste en su manual
+			  y que puede consultar a su asesor de la agencia.
+			- Si hay un riesgo de seguridad (testigo rojo, frenos, sobrecalentamiento, humo), recomienda detenerse
+			  en un lugar seguro y llamar a la agencia.
+			- No pidas ni repitas datos personales.
+			- Al final, en una línea aparte, escribe exactamente "PAGINAS: " y los números de página que usaste
+			  separados por coma, o "PAGINAS: ninguna" si no lo encontraste.
+			""";
 	private static final int PAGINAS_DE_CONTEXTO = 5;
 	private static final int LARGO_MAXIMO_FRAGMENTO = 1800;
 	private static final String PROVEEDOR_NINGUNO = "ninguno";
+	/**
+	 * Sufijo de {@code consulta_asistente.proveedor} para una respuesta cortada.
+	 */
+	static final String PROVEEDOR_PARCIAL = "-parcial";
 
 	private final VehiculosDeClientes vehiculos;
 	private final ManualRepository manualRepository;
@@ -123,6 +142,41 @@ public class AsistenteService {
 	 *             proveedor de IA falla (503)
 	 */
 	public RespuestaAsistenteApp preguntar(Long clienteId, Long vehiculoId, String pregunta) {
+		PreguntaPreparada lista = prepararPregunta(clienteId, vehiculoId, pregunta);
+		if (lista.paginas().isEmpty()) {
+			return guardarNoEncontrado(lista);
+		}
+		ProveedorIA.RespuestaIA respuesta;
+		try {
+			respuesta = proveedor.responder(INSTRUCCIONES,
+					contenido(lista.vehiculo(), lista.pregunta(), lista.paginas()));
+		} catch (ProveedorIANoDisponibleException ex) {
+			throw noDisponible();
+		}
+		return guardarRespuesta(lista, respuesta.respuesta(), respuesta.encontrado(), respuesta.paginas());
+	}
+
+	/**
+	 * Lo que se sabe de una pregunta antes de llamar al modelo (V2-M24.09): así los
+	 * errores de vehículo, manual y límite salen antes de abrir el flujo.
+	 */
+	public record PreguntaPreparada(Long clienteId, VehiculoDeCliente vehiculo, long manualId, String pregunta,
+			List<FragmentosManual.Fragmento> paginas) {
+	}
+
+	/**
+	 * Valida y busca las páginas; no llama al modelo.
+	 *
+	 * @throws RecursoNoEncontradoException
+	 *             si el vehículo no existe o no es del cliente (404)
+	 * @throws ConflictoException
+	 *             ASISTENTE_SIN_MANUAL (409)
+	 * @throws DemasiadosIntentosException
+	 *             ASISTENTE_LIMITE (429)
+	 * @throws ServicioNoDisponibleException
+	 *             ASISTENTE_NO_DISPONIBLE (503)
+	 */
+	public PreguntaPreparada prepararPregunta(Long clienteId, Long vehiculoId, String pregunta) {
 		VehiculoDeCliente vehiculo = vehiculos.buscarPorId(vehiculoId)
 				.filter(encontrado -> encontrado.propietario().id().equals(clienteId))
 				.orElseThrow(() -> new RecursoNoEncontradoException("No existe el vehículo " + vehiculoId));
@@ -132,32 +186,69 @@ public class AsistenteService {
 		if (!fragmentos.tieneFragmentos(manual.getId()) && indexador.indexarTexto(manual.getId()) == 0) {
 			throw sinManual();
 		}
-
 		String preguntaLimpia = LimpiadorDatosPersonales.limpiar(pregunta.strip());
-		List<FragmentosManual.Fragmento> paginas = buscarPaginas(manual.getId(), preguntaLimpia);
-		String auto = vehiculo.modelo() + " " + vehiculo.anio();
-		if (paginas.isEmpty()) {
-			return guardar(clienteId, vehiculo, preguntaLimpia,
-					"No encontré eso en el manual de tu " + auto + ". Puedes preguntarle a tu asesor en la agencia.",
-					List.of(), false, PROVEEDOR_NINGUNO);
-		}
+		return new PreguntaPreparada(clienteId, vehiculo, manual.getId(), preguntaLimpia,
+				buscarPaginas(manual.getId(), preguntaLimpia));
+	}
 
-		ProveedorIA.RespuestaIA respuesta;
+	/**
+	 * Responde una pregunta ya preparada en trozos (V2-M24.09). Cada trozo de texto
+	 * visible va a {@code alTrozo}; al final guarda y devuelve la respuesta con sus
+	 * fuentes. Si {@code alTrozo} falla (la app se desconectó) o el modelo se
+	 * corta, guarda lo que alcanzó a escribirse como respuesta parcial y vuelve a
+	 * lanzar.
+	 *
+	 * @throws ServicioNoDisponibleException
+	 *             ASISTENTE_NO_DISPONIBLE si el modelo falla
+	 */
+	public RespuestaAsistenteApp responderEnFlujo(PreguntaPreparada lista, Consumer<String> alTrozo) {
+		if (lista.paginas().isEmpty()) {
+			RespuestaAsistenteApp noEncontrado = guardarNoEncontrado(lista);
+			alTrozo.accept(noEncontrado.respuesta());
+			return noEncontrado;
+		}
+		FiltroMarcaPaginas filtro = new FiltroMarcaPaginas(alTrozo);
 		try {
-			respuesta = proveedor.responder(INSTRUCCIONES, contenido(vehiculo, preguntaLimpia, paginas));
+			proveedor.responderEnFlujo(INSTRUCCIONES_FLUJO,
+					contenido(lista.vehiculo(), lista.pregunta(), lista.paginas()), filtro::agregar);
 		} catch (ProveedorIANoDisponibleException ex) {
+			guardarParcial(lista, filtro.mostrado());
 			throw noDisponible();
+		} catch (RuntimeException ex) {
+			guardarParcial(lista, filtro.mostrado());
+			throw ex;
 		}
-		Set<Integer> dadas = paginas.stream().map(FragmentosManual.Fragmento::pagina).collect(Collectors.toSet());
-		List<Integer> citadas = respuesta.paginas().stream().filter(dadas::contains).distinct().toList();
-		if (respuesta.encontrado() && citadas.isEmpty()) {
-			citadas = List.of(paginas.getFirst().pagina());
+		FiltroMarcaPaginas.Resultado fin = filtro.terminar();
+		return guardarRespuesta(lista, fin.texto(), fin.encontrado(), fin.paginas());
+	}
+
+	private RespuestaAsistenteApp guardarNoEncontrado(PreguntaPreparada lista) {
+		String auto = lista.vehiculo().modelo() + " " + lista.vehiculo().anio();
+		return guardar(lista.clienteId(), lista.vehiculo(), lista.pregunta(),
+				"No encontré eso en el manual de tu " + auto + ". Puedes preguntarle a tu asesor en la agencia.",
+				List.of(), false, PROVEEDOR_NINGUNO);
+	}
+
+	private RespuestaAsistenteApp guardarRespuesta(PreguntaPreparada lista, String texto, boolean encontrado,
+			List<Integer> paginasCitadas) {
+		Set<Integer> dadas = lista.paginas().stream().map(FragmentosManual.Fragmento::pagina)
+				.collect(Collectors.toSet());
+		List<Integer> citadas = paginasCitadas.stream().filter(dadas::contains).distinct().toList();
+		if (encontrado && citadas.isEmpty()) {
+			citadas = List.of(lista.paginas().getFirst().pagina());
 		}
-		List<ConsultasAsistente.Fuente> fuentes = respuesta.encontrado()
-				? citadas.stream().map(pagina -> new ConsultasAsistente.Fuente(manual.getId(), pagina)).toList()
+		List<ConsultasAsistente.Fuente> fuentes = encontrado
+				? citadas.stream().map(pagina -> new ConsultasAsistente.Fuente(lista.manualId(), pagina)).toList()
 				: List.of();
-		return guardar(clienteId, vehiculo, preguntaLimpia, respuesta.respuesta(), fuentes, respuesta.encontrado(),
+		return guardar(lista.clienteId(), lista.vehiculo(), lista.pregunta(), texto, fuentes, encontrado,
 				proveedor.nombre());
+	}
+
+	/** Deja registro de una respuesta que no terminó (V2-M24.09). */
+	private void guardarParcial(PreguntaPreparada lista, String mostrado) {
+		guardar(lista.clienteId(), lista.vehiculo(), lista.pregunta(),
+				mostrado.isBlank() ? "(sin respuesta)" : mostrado, List.of(), false,
+				proveedor.nombre() + PROVEEDOR_PARCIAL);
 	}
 
 	/**
