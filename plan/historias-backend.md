@@ -354,7 +354,7 @@ La ubicación se conserva mientras la solicitud está abierta; V2-M11.04 la borr
 
 #### Diseño técnico — V2-M11.04 (parte B de Juan Pablo)
 
-Sigue en `carecarapp`. Sin tablas nuevas: `solicitud_asistencia` gana `cerrada_en` (migración V40, que comparte con M17.03 y M17.04).
+Sigue en `carecarapp`. Sin tablas nuevas: `solicitud_asistencia` gana `cerrada_en` (migración V42, que comparte con M17.03 y M17.04).
 
 **Transiciones** (`EstadoAsistencia`): `recibida` → `en_camino` o `cancelada`; `en_camino` → `atendida` o `cancelada`; `atendida` y `cancelada` son finales. Al cerrarse (`atendida`/`cancelada`) se guarda `cerrada_en` y se **borran `lat` y `lng`** de la fila (privacidad: la ubicación solo vive mientras hay ayuda por llegar).
 
@@ -471,7 +471,7 @@ Cancelar o reprogramar la cita cancela o mueve sus traslados: lo resuelve V2-M17
 
 #### Diseño técnico — V2-M17.03 y V2-M17.04 (parte B de Juan Pablo)
 
-**Migración V40** (compartida con M11.04 y M05.03; número provisional, se renombra al integrar):
+**Migración V42** (compartida con M11.04 y M05.03):
 
 - `traslado` gana `chofer_lat`, `chofer_lng` (`numeric(9,6)`, nulos juntos) y `ubicacion_en`. Solo tienen valor mientras el estado es `en_camino` o `de_regreso`; al salir de ellos se borran.
 - `checklist_traslado` (nombres de la ficha): `id`, `traslado_id` (FK, único: un checklist por traslado), `km`, `gasolina` (`VACIO`, `UN_CUARTO`, `MEDIO`, `TRES_CUARTOS`, `LLENO`), `notas` (≤ 500), `fotos` (`jsonb`, arreglo de claves de `AlmacenArchivos`), `firma_url` (clave del archivo de la firma), más `created_at`/`updated_at`.
