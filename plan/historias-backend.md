@@ -526,6 +526,14 @@ Pasos:
 - Los modelos se fijan con `ASISTENTE_MODELO_TEXTO` y `ASISTENTE_MODELO_EMBEDDING`.
 - Una cuota agotada, un error o una espera vencida dan `503 ASISTENTE_NO_DISPONIBLE`.
 
+#### Diseño de V2-M24.09: respuesta mientras se escribe — implementado
+
+- **Endpoint:** `POST /api/v1/app/asistente/preguntas/flujo` (`text/event-stream`). Eventos `texto` `{texto}`, `fin` (`RespuestaAsistente`) y `error` `{codigo}`. `POST /asistente/preguntas` no cambia. Contrato 2.9.0.
+- **Antes de abrir el flujo** `AsistenteService.prepararPregunta` valida vehículo, manual y límites y busca las páginas: esos errores salen como JSON normal.
+- **Modelo:** `ProveedorIA.responderEnFlujo` (Gemini `streamGenerateContent?alt=sse`, texto simple). El prompt pide terminar con la línea `PAGINAS: 2, 7` o `PAGINAS: ninguna`; `FiltroMarcaPaginas` solo deja pasar líneas completas, así la marca nunca llega a la app, y de ella salen las fuentes del evento `fin`.
+- **Corte:** si la app se desconecta o el modelo falla a la mitad, se guarda lo mostrado en `consulta_asistente` con proveedor `<nombre>-parcial` y `encontrado=false`.
+- **Hilos:** el flujo corre en un hilo virtual; el `SseEmitter` espera hasta 90 s.
+
 #### Diseño de V2-M24.05: testigos del tablero por foto — implementado
 
 - **Endpoint:** `POST /api/v1/app/asistente/testigos` (multipart `vehiculoId`, `imagen`), solo `CLIENTE_CARECAR`. JPEG o PNG hasta 5 MB; otra cosa → `400 DATOS_INVALIDOS`. Vehículo ajeno → `404`. Contrato 2.8.0.

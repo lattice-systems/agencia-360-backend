@@ -4,12 +4,14 @@ import dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.applicatio
 import dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.application.RespuestaAsistenteApp;
 import dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.application.RespuestaTestigoApp;
 import dev.latticesystems.erp_agente360.backend_agencia360.shared.exception.CodigosError;
+import dev.latticesystems.erp_agente360.backend_agencia360.shared.exception.ServicioNoDisponibleException;
 import dev.latticesystems.erp_agente360.backend_agencia360.shared.exception.SolicitudInvalidaException;
 import dev.latticesystems.erp_agente360.backend_agencia360.shared.security.UsuarioAutenticado;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import java.io.IOException;
+import java.util.Map;
 import java.util.Set;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -23,6 +25,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 /** Asistente CareCar (V2-M24.03): preguntas sobre el manual del vehículo. */
 @RestController
@@ -74,5 +77,57 @@ public class AsistenteController {
 					CodigosError.DATOS_INVALIDOS);
 		}
 		return asistenteService.identificarTestigo(cliente.id(), vehiculoId, imagen.getBytes());
+	}
+
+	private static final long ESPERA_FLUJO = 90_000L;
+	private static final java.util.concurrent.ExecutorService HILOS = java.util.concurrent.Executors
+			.newVirtualThreadPerTaskExecutor();
+
+	@PostMapping(path = "/preguntas/flujo", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+	@PreAuthorize("hasRole('CLIENTE_CARECAR')")
+	@Operation(summary = "Preguntar al asistente y recibir la respuesta mientras se escribe (SSE)", description = "V2-M24.09 "
+			+ "· Eventos \"texto\" con {texto} conforme el modelo escribe y al final \"fin\" con la misma respuesta que "
+			+ "POST /preguntas (consultaId, respuesta, encontrado, fuentes). Si el modelo falla a la mitad llega "
+			+ "\"error\" con {codigo}. 404, 409, 429 y 503 antes de empezar responden como POST /preguntas. Si la "
+			+ "app se desconecta queda registro de la respuesta parcial.")
+	public SseEmitter preguntarEnFlujo(@Valid @RequestBody PreguntaAsistenteRequest request,
+			@AuthenticationPrincipal UsuarioAutenticado cliente) {
+		AsistenteService.PreguntaPreparada lista = asistenteService.prepararPregunta(cliente.id(), request.vehiculoId(),
+				request.pregunta());
+		SseEmitter emisor = new SseEmitter(ESPERA_FLUJO);
+		HILOS.execute(() -> {
+			try {
+				RespuestaAsistenteApp fin = asistenteService.responderEnFlujo(lista, trozo -> enviar(emisor,
+						SseEmitter.event().name("texto").data(Map.of("texto", trozo), MediaType.APPLICATION_JSON)));
+				enviar(emisor, SseEmitter.event().name("fin").data(fin, MediaType.APPLICATION_JSON));
+				emisor.complete();
+			} catch (ServicioNoDisponibleException ex) {
+				try {
+					Map<String, String> aviso = Map.of("codigo", CodigosError.ASISTENTE_NO_DISPONIBLE);
+					enviar(emisor, SseEmitter.event().name("error").data(aviso, MediaType.APPLICATION_JSON));
+					emisor.complete();
+				} catch (AppDesconectada desconectada) {
+					// Ya no hay a quién avisar.
+				}
+			} catch (AppDesconectada ex) {
+				// La respuesta parcial ya quedó guardada.
+			}
+		});
+		return emisor;
+	}
+
+	/** La app cerró la conexión a media respuesta. */
+	private static final class AppDesconectada extends RuntimeException {
+		AppDesconectada(Throwable causa) {
+			super(causa);
+		}
+	}
+
+	private static void enviar(SseEmitter emisor, SseEmitter.SseEventBuilder evento) {
+		try {
+			emisor.send(evento);
+		} catch (IOException | IllegalStateException ex) {
+			throw new AppDesconectada(ex);
+		}
 	}
 }

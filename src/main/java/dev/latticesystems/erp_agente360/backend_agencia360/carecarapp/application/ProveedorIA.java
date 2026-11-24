@@ -34,6 +34,24 @@ public interface ProveedorIA {
 	RespuestaIA responder(String instrucciones, String contenido);
 
 	/**
+	 * Responde en trozos (V2-M24.09): manda cada trozo de texto a {@code alTrozo}
+	 * conforme el modelo lo escribe. El texto termina con una línea
+	 * {@code PAGINAS: 2, 7} o {@code PAGINAS: ninguna} que separa
+	 * {@link FiltroMarcaPaginas}. Por omisión responde completo y lo manda en un
+	 * solo trozo.
+	 *
+	 * @throws ProveedorIANoDisponibleException
+	 *             si el proveedor falla, tarda o no tiene cuota
+	 */
+	default void responderEnFlujo(String instrucciones, String contenido, java.util.function.Consumer<String> alTrozo) {
+		RespuestaIA r = responder(instrucciones, contenido);
+		String paginas = r.encontrado() && !r.paginas().isEmpty()
+				? r.paginas().stream().map(String::valueOf).collect(java.util.stream.Collectors.joining(", "))
+				: "ninguna";
+		alTrozo.accept(r.respuesta() + "\nPAGINAS: " + paginas);
+	}
+
+	/**
 	 * Identifica el testigo del tablero en una foto JPEG ya limpia (V2-M24.05).
 	 *
 	 * @throws ProveedorIANoDisponibleException

@@ -123,6 +123,51 @@ public class GeminiProveedorIA implements ProveedorIA {
 		}
 	}
 
+	@Override
+	public void responderEnFlujo(String instrucciones, String contenido, java.util.function.Consumer<String> alTrozo) {
+		Map<String, Object> cuerpo = Map.of("systemInstruction",
+				Map.of("parts", List.of(Map.of("text", instrucciones))), "contents",
+				List.of(Map.of("role", "user", "parts", List.of(Map.of("text", contenido)))), "generationConfig",
+				Map.of("temperature", 0.2));
+		try {
+			cliente.post().uri("/models/" + modeloTexto + ":streamGenerateContent?alt=sse")
+					.contentType(MediaType.APPLICATION_JSON).body(cuerpo).exchange((peticion, respuesta) -> {
+						if (respuesta.getStatusCode().isError()) {
+							int estado = respuesta.getStatusCode().value();
+							LOG.warn("Gemini respondió {} en el flujo", estado);
+							throw new ProveedorIANoDisponibleException(estado == 429
+									? "Se agotó la cuota gratis de Gemini"
+									: "Gemini respondió " + estado);
+						}
+						leerFlujo(respuesta.getBody(), alTrozo);
+						return null;
+					});
+		} catch (ResourceAccessException ex) {
+			LOG.warn("Gemini no respondió a tiempo en el flujo");
+			throw new ProveedorIANoDisponibleException("Gemini no respondió a tiempo", ex);
+		}
+	}
+
+	/** Lee el SSE de Gemini y manda el texto de cada evento. */
+	private void leerFlujo(java.io.InputStream flujo, java.util.function.Consumer<String> alTrozo)
+			throws java.io.IOException {
+		try (java.io.BufferedReader lector = new java.io.BufferedReader(
+				new java.io.InputStreamReader(flujo, java.nio.charset.StandardCharsets.UTF_8))) {
+			String linea;
+			while ((linea = lector.readLine()) != null) {
+				if (!linea.startsWith("data:")) {
+					continue;
+				}
+				JsonNode partes = json.readTree(linea.substring(5).strip()).path("candidates").path(0).path("content")
+						.path("parts");
+				String trozo = partes.path(0).path("text").asText("");
+				if (!trozo.isEmpty()) {
+					alTrozo.accept(trozo);
+				}
+			}
+		}
+	}
+
 	private JsonNode llamar(String ruta, Map<String, Object> cuerpo) {
 		for (int intento = 1;; intento++) {
 			try {
