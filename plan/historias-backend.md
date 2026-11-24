@@ -350,7 +350,7 @@ Vive en `carecarapp` (la tabla es de la ficha; el módulo `asistencia` nuevo que
 | `POST /asistencia` | `{vehiculoId, tipo, lat?, lng?, comentario?}` | 201 `{id, vehiculoId, tipo, lat, lng, comentario, estado: "recibida", creadaEn}` · 400 `DATOS_INVALIDOS` (tipo desconocido, lat fuera de -90..90, lng fuera de -180..180, solo una de las dos) · 404 si el vehículo no es del cliente · 409 `SOLICITUD_ABIERTA` si ya tiene una `recibida` o `en_camino` |
 | `GET /asistencia?activa=true` | - | 200 con la solicitud abierta · 204 si no hay · 400 si `activa` no es `true` |
 
-La ubicación se conserva mientras la solicitud está abierta; limpiarla al cerrarse es de V2-M11.04.
+La ubicación se conserva mientras la solicitud está abierta; V2-M11.04 la borra al cerrarse.
 
 #### Diseño técnico — V2-M11.04 (parte B de Juan Pablo)
 
@@ -467,7 +467,7 @@ Detalle: [`carecar-mobile/plan/modulos/M17-recoleccion-y-entrega.md`](https://gi
 | `GET /recoleccion/cotizacion?direccionId=&fecha=` | - | 200 `{direccionId, fecha, costoPorTraslado, costoTotal, recoleccion: {inicio, fin}, entrega: {inicio, fin}}` · 400 (fecha sin servicio o fuera de anticipación) · 404 · 422 `FUERA_DE_COBERTURA` |
 | `POST /citas` | suma `recoleccion: {direccionId}` | 201 la cita con `recoleccion: {direccionId, costoTotal, traslados: [{id, tipo, estado, costo, fecha, ventanaInicio, ventanaFin}]}` (nulo si no se pidió) · 404 dirección ajena · 422 `FUERA_DE_COBERTURA` · los traslados nacen en la misma transacción: si algo falla no queda ni cita ni traslados |
 
-Pendiente (historia nueva, `Borrador`): cancelar los traslados al cancelar o reprogramar la cita.
+Cancelar o reprogramar la cita cancela o mueve sus traslados: lo resuelve V2-M17.05 (ver el diseño de M17.03 y M17.04 más abajo).
 
 #### Diseño técnico — V2-M17.03 y V2-M17.04 (parte B de Juan Pablo)
 
@@ -497,7 +497,9 @@ El módulo `archivos` no tiene endpoint de carga, solo `AlmacenArchivos.guardar`
 
 **Eventos SSE** (al cliente dueño de la cita): `traslado.estado` con `{"trasladoId":5,"citaId":9,"tipo":"recoger","estado":"en_camino"}` en cada cambio de estado, y `traslado.ubicacion` con `{"trasladoId":5,"lat":21.13,"lng":-101.69,"actualizadaEn":"2026-01-01T10:00:00Z"}` en cada reporte.
 
-**Cita ↔ traslados (deuda de M17.02):** al cancelar una cita, sus traslados `programado` pasan a `cancelado`; al reprogramarla, sus traslados `programado` toman la nueva `fecha` (la ventana horaria no cambia). Los que ya salieron no se tocan.
+**Cita ↔ traslados (V2-M17.05, antes deuda de M17.02):** al cancelar una cita, sus traslados `programado` pasan a `cancelado`; al reprogramarla, sus traslados `programado` toman la nueva `fecha` (la ventana horaria no cambia). Los que ya salieron no se tocan. Todo ocurre en la transacción de la cita (`RecoleccionService.cancelarDeCita` y `reprogramarDeCita`, llamados desde `AgendaAppService`).
+
+**Implementación (decisiones al programar):** `gasolina` viaja en minúsculas en el JSON (`vacio`, `un_cuarto`, `medio`, `tres_cuartos`, `lleno`) y en mayúsculas en la base, como el resto de los enumerados. `registradoEn` del checklist es `updated_at`. Las carpetas de `AlmacenArchivos` son `checklist-fotos` y `checklist-firmas`; si la carga falla se borran los archivos recién guardados y, al reemplazar, los del checklist anterior. Fotos y firma deben ser JPEG, PNG o WebP (el almacén también admite PDF, aquí no). `GET /app/traslados/{id}` responde con `SeguimientoTrasladoApp` (agrega `citaId` y `ubicacionChofer`) y no cambia el `Traslado` que ya devuelve la cita.
 
 ### M18 · Bitácora del conductor — H6 — módulo `carecarapp`
 
