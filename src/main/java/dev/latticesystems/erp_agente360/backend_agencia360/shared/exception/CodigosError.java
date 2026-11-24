@@ -32,6 +32,7 @@ public final class CodigosError {
 	public static final String ORDEN_ABIERTA = "ORDEN_ABIERTA";
 	public static final String ORDEN_CERRADA = "ORDEN_CERRADA";
 	public static final String ADICIONAL_YA_RESPONDIDO = "ADICIONAL_YA_RESPONDIDO";
+	public static final String KM_INVALIDO = "KM_INVALIDO";
 
 	private CodigosError() {
 	}
