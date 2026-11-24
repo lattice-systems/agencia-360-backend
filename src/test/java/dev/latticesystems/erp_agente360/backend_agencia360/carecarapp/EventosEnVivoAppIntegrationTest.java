@@ -2,6 +2,7 @@ package dev.latticesystems.erp_agente360.backend_agencia360.carecarapp;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.application.AvisoAlCliente;
 import dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.application.CuentasAppService;
 import dev.latticesystems.erp_agente360.backend_agencia360.clientes.application.NuevoCliente;
 import dev.latticesystems.erp_agente360.backend_agencia360.clientes.application.RegistroClientesService;
@@ -22,6 +23,7 @@ import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
@@ -101,6 +103,40 @@ class EventosEnVivoAppIntegrationTest extends AbstractIntegrationTest {
 	}
 
 	@Test
+	void elClienteRecibeLosAvisosDeAsistenciaYTraslado() throws Exception {
+		Long ana = clienteConCuenta("Ana En Vivo", "ana.envivo@correo.com");
+		BlockingQueue<String> avisos = suscribir(token(ana, "ana.envivo@correo.com"));
+
+		publicar(new AvisoAlCliente(ana, "asistencia.estado", Map.of("solicitudId", 12, "estado", "en_camino")));
+		assertThat(avisos.poll(ESPERA.toSeconds(), TimeUnit.SECONDS)).isEqualTo("asistencia.estado");
+		assertThat(avisos.poll(ESPERA.toSeconds(), TimeUnit.SECONDS)).contains("\"solicitudId\":12")
+				.contains("\"estado\":\"en_camino\"");
+
+		publicar(new AvisoAlCliente(ana, "traslado.estado",
+				Map.of("trasladoId", 5, "citaId", 9, "tipo", "recoger", "estado", "en_camino")));
+		assertThat(avisos.poll(ESPERA.toSeconds(), TimeUnit.SECONDS)).isEqualTo("traslado.estado");
+		assertThat(avisos.poll(ESPERA.toSeconds(), TimeUnit.SECONDS)).contains("\"trasladoId\":5")
+				.contains("\"citaId\":9").contains("\"tipo\":\"recoger\"");
+
+		publicar(new AvisoAlCliente(ana, "traslado.ubicacion",
+				Map.of("trasladoId", 5, "lat", 21.13, "lng", -101.69, "actualizadaEn", "2026-01-01T10:00:00Z")));
+		assertThat(avisos.poll(ESPERA.toSeconds(), TimeUnit.SECONDS)).isEqualTo("traslado.ubicacion");
+		assertThat(avisos.poll(ESPERA.toSeconds(), TimeUnit.SECONDS)).contains("\"lat\":21.13")
+				.contains("\"actualizadaEn\":\"2026-01-01T10:00:00Z\"");
+	}
+
+	@Test
+	void unClienteNoRecibeLosAvisosDeOtro() throws Exception {
+		Long ana = clienteConCuenta("Ana En Vivo", "ana.envivo@correo.com");
+		Long bruno = clienteConCuenta("Bruno En Vivo", "bruno.envivo@correo.com");
+		BlockingQueue<String> avisos = suscribir(token(ana, "ana.envivo@correo.com"));
+
+		publicar(new AvisoAlCliente(bruno, "asistencia.estado", Map.of("solicitudId", 13, "estado", "atendida")));
+
+		assertThat(avisos.poll(1, TimeUnit.SECONDS)).isNull();
+	}
+
+	@Test
 	void sinSesionNoSeSuscribe() throws Exception {
 		HttpRequest peticion = HttpRequest.newBuilder(url()).timeout(ESPERA).GET().build();
 
@@ -114,7 +150,7 @@ class EventosEnVivoAppIntegrationTest extends AbstractIntegrationTest {
 		assertThat(abrir(token).statusCode()).isEqualTo(403);
 	}
 
-	private void publicar(OrdenServicioCambiada cambio) {
+	private void publicar(Object cambio) {
 		transacciones.executeWithoutResult(estado -> eventos.publishEvent(cambio));
 	}
 
