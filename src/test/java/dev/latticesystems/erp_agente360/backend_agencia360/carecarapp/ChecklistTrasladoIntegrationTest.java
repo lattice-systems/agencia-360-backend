@@ -184,8 +184,8 @@ class ChecklistTrasladoIntegrationTest extends AbstractIntegrationTest {
 		cargar(tokenDelPersonal, "100", "lleno", null, 11, false).andExpect(status().isBadRequest());
 		MockMultipartHttpServletRequestBuilder conPdf = multipart(HttpMethod.PUT,
 				"/api/v1/traslados/" + trasladoId + "/checklist")
-				.file(new MockMultipartFile("fotos", "a.pdf", "application/pdf", new byte[]{1, 2})).param("km", "100")
-				.param("gasolina", "lleno");
+				.file(new MockMultipartFile("fotos", "a.pdf", "application/pdf", new byte[]{1, 2}));
+		conPdf.param("km", "100").param("gasolina", "lleno");
 		mockMvc.perform(conPdf.header(HttpHeaders.AUTHORIZATION, "Bearer " + tokenDelPersonal))
 				.andExpect(status().isBadRequest());
 		consultar(tokenDeAna).andExpect(status().isNotFound());
@@ -209,7 +209,8 @@ class ChecklistTrasladoIntegrationTest extends AbstractIntegrationTest {
 	private ResultActions cargar(String token, String km, String gasolina, String notas, int fotos, boolean firma,
 			long id) throws Exception {
 		MockMultipartHttpServletRequestBuilder peticion = multipart(HttpMethod.PUT,
-				"/api/v1/traslados/" + id + "/checklist").param("km", km).param("gasolina", gasolina);
+				"/api/v1/traslados/" + id + "/checklist");
+		peticion.param("km", km).param("gasolina", gasolina);
 		if (notas != null) {
 			peticion.param("notas", notas);
 		}
