@@ -1,5 +1,7 @@
 package dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.domain;
 
+import dev.latticesystems.erp_agente360.backend_agencia360.shared.exception.CodigosError;
+import dev.latticesystems.erp_agente360.backend_agencia360.shared.exception.ConflictoException;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -58,6 +60,9 @@ public class SolicitudAsistencia {
 	@Column(name = "creada_en", nullable = false, updatable = false)
 	private Instant creadaEn;
 
+	@Column(name = "cerrada_en")
+	private Instant cerradaEn;
+
 	protected SolicitudAsistencia() {
 		// Requerido por JPA
 	}
@@ -109,6 +114,30 @@ public class SolicitudAsistencia {
 		return new SolicitudAsistencia(clienteId, vehiculoClienteId, tipo, lat, lng, limpio, creadaEn);
 	}
 
+	/**
+	 * Mueve la solicitud al siguiente estado. Al cerrarse (atendida o cancelada)
+	 * guarda cuándo y borra la ubicación: solo se conserva mientras hay ayuda por
+	 * llegar.
+	 *
+	 * @throws ConflictoException
+	 *             con {@code TRANSICION_INVALIDA} si el paso no está permitido (409)
+	 */
+	public void cambiarEstado(EstadoAsistencia nuevo, Instant en) {
+		Objects.requireNonNull(nuevo, "nuevo");
+		Objects.requireNonNull(en, "en");
+		if (!estado.puedePasarA(nuevo)) {
+			throw new ConflictoException(
+					"Una solicitud " + estado.valor() + " no puede pasar a " + nuevo.valor(),
+					CodigosError.TRANSICION_INVALIDA);
+		}
+		this.estado = nuevo;
+		if (!nuevo.abierta()) {
+			this.cerradaEn = en;
+			this.lat = null;
+			this.lng = null;
+		}
+	}
+
 	public Long getId() {
 		return id;
 	}
@@ -143,5 +172,9 @@ public class SolicitudAsistencia {
 
 	public Instant getCreadaEn() {
 		return creadaEn;
+	}
+
+	public Instant getCerradaEn() {
+		return cerradaEn;
 	}
 }
