@@ -86,6 +86,18 @@ public class AsistenteService {
 	}
 
 	/**
+	 * Guarda si la respuesta fue útil (V2-M24.07); calificar otra vez la reemplaza.
+	 *
+	 * @throws RecursoNoEncontradoException
+	 *             si la consulta no existe o no es del cliente (404)
+	 */
+	public void calificar(Long clienteId, Long consultaId, boolean util) {
+		if (!consultas.calificar(consultaId, clienteId, util)) {
+			throw new RecursoNoEncontradoException("No existe la consulta " + consultaId);
+		}
+	}
+
+	/**
 	 * @throws RecursoNoEncontradoException
 	 *             si el vehículo no existe o no es del cliente (404)
 	 * @throws ConflictoException
