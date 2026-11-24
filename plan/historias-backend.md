@@ -212,6 +212,34 @@ Detalle: [`carecar-mobile/plan/modulos/M04-taller-en-vivo.md`](https://github.co
 | V2-M04.06 | Como cliente quiero saber cuándo mi auto está listo | Push + tarjeta "Listo" con total y horario de entrega | Ricardo |
 | V2-M04.07 | Como cliente quiero que la orden cerrada pase a mi historial con su ticket | Al cerrar, aparece en historial (M02) con ticket | Ricardo |
 
+#### Diseño técnico — V2-M04.01, V2-M04.02, V2-M04.04 y V2-M04.05 (Ricardo)
+
+**Tablas.** Una migración nueva (número al integrar):
+
+- `orden_servicio` suma `cita_id` (FK a `cita`, opcional), `asesor_id` (FK a `usuario`, quien recibe el auto) y `entrega_estimada`.
+- `etapa_orden` (`id`, `orden_servicio_id`, `etapa`, `inicio`, `fin`, `nota`): una fila por etapa que ya empezó; `fin` vacío mientras siga en curso. Etapas en orden: `RECIBIDO`, `DIAGNOSTICO`, `ESPERANDO_APROBACION`, `EN_REPARACION`, `CONTROL_DE_CALIDAD`, `LAVADO`, `LISTO_PARA_ENTREGA`, `ENTREGADO`. Una sola fila por etapa y orden.
+- `punto_inspeccion` (`id`, `orden_servicio_id`, `punto`, `resultado`, `comentario`): `resultado` es `VERDE`, `AMARILLO` o `ROJO`.
+- `evidencia_orden` (`id`, `orden_servicio_id`, `punto_inspeccion_id` opcional, `tipo`, `url`): `tipo` es `FOTO` o `VIDEO`; `url` guarda la clave del archivo en `archivos` (V2-T05.09) y la app recibe una URL temporal firmada.
+- `trabajo_adicional` (`id`, `orden_servicio_id`, `concepto`, `mano_de_obra`, `refacciones`, `total`, `estado`, `respondido_en`, `firma_url`) y, para la auditoría, `respondido_por` (FK a `cliente`). `total = mano_de_obra + refacciones`, con IVA incluido; `estado` es `PENDIENTE`, `APROBADO` o `RECHAZADO`; una respuesta siempre guarda quién, cuándo y la firma, y ya no cambia (`check` en la tabla).
+
+**Reglas.** La etapa fija el estatus de la orden: `RECIBIDO` → `RECIBIDO`; de `DIAGNOSTICO` a `LAVADO` → `EN_PROCESO`; `LISTO_PARA_ENTREGA` → `TERMINADO` con `fecha_cierre`; `ENTREGADO` → `ENTREGADO`. Se pueden saltar etapas (sin lavado), nunca volver. Una orden «en curso» es la que tiene línea de tiempo y no se ha entregado; las registradas en el expediente (ya hechas, sin etapas) no aparecen en Inicio. Un vehículo tiene a lo más una orden en curso. El avance va de 0 a 100 según la etapa. `archivos` acepta además `video/mp4` para las evidencias.
+
+**Endpoints de la app** (`/api/v1/app`, rol `CLIENTE_CARECAR`):
+
+- `GET /ordenes/activas` → `[OrdenEnCurso]`: `id`, `vehiculoId`, `vehiculo` («Nissan March 2026»), `etapa`, `estatus`, `entregaEstimada`, `asesor`, `avance`, `adicionalesPendientes`.
+- `GET /ordenes/{id}` → `OrdenEnVivo`: lo anterior más `etapas` (cada una con `inicio`, `fin` y `nota`), `inspeccion` (puntos con sus `evidencias`), `evidencias` de la orden, `adicionales` y `totalOrden`, `totalAdicionalesAprobados`, `totalAdicionalesPendientes` y `totalEstimado` (orden más aprobados). 404 si no existe o es de un vehículo ajeno.
+- `POST /ordenes/{id}/adicionales/{aid}/respuesta` `{aprobado, firma}` (firma en PNG en Base64, hasta 1 MB) → `OrdenEnVivo` con los totales recalculados. 400 `DATOS_INVALIDOS` si la firma no es un PNG; 404 si la orden o el trabajo no existen o son ajenos; 409 `ADICIONAL_YA_RESPONDIDO` o `ORDEN_CERRADA` (ya `TERMINADO` o `ENTREGADO`).
+
+Horas en hora de la agencia, sin zona (`yyyy-MM-ddTHH:mm:ss`), como el resto de la app.
+
+**Endpoints del taller** (`/api/v1/taller/ordenes`, rol `SERVICIO`; el ERP está congelado y no tiene pantalla): `POST` abre la orden (409 `ORDEN_ABIERTA`), `POST /{id}/etapas` la pasa de etapa con nota y nueva entrega estimada opcionales (400 si la etapa no va después; 409 `ORDEN_CERRADA` si ya se entregó), `POST /{id}/inspeccion`, `POST /{id}/evidencias` (multipart `archivo` y `puntoInspeccionId` opcional; 413 si pasa de 20 MB) y `POST /{id}/adicionales` (409 `ORDEN_CERRADA`). `GET /{id}` también para Administrador.
+
+**Código.** Módulo `servicio`: entidades `EtapaOrden`, `PuntoInspeccion`, `EvidenciaOrden` y `TrabajoAdicional`; `OrdenServicio.abrir`, `pasarA` y `estimarEntrega`; `TallerService` (con candado de fila sobre la orden al pasar de etapa, proponer y responder) y la interfaz pública `servicio.TallerEnVivo`. Módulo `carecarapp`: `TallerAppService` revisa que el vehículo sea del cliente y `TallerAppController`.
+
+**Eventos.** `servicio.OrdenServicioCambiada` al abrir la orden y en cada cambio de etapa; `carecarapp` ya lo manda por `GET /eventos` (la app lo aprovecha en V2-M04.03).
+
+**Pruebas.** `TallerDominioTest`, `TallerServiceTest` (Mockito) y `TallerAppIntegrationTest`: la orden aparece en Inicio y desaparece al entregarse; etapas con hora y entrega estimada; no se regresa de etapa; inspección con semáforo, foto y video descargables por URL firmada; aprobar con firma recalcula el total y deja la auditoría en la tabla; responder dos veces, orden ajena, firma inválida u orden terminada; roles.
+
 ### M05 · Mantenimiento inteligente — H3 — módulo `servicio`
 
 Detalle: [`carecar-mobile/plan/modulos/M05-mantenimiento-inteligente.md`](https://github.com/lattice-systems/carecar-mobile/blob/main/plan/modulos/M05-mantenimiento-inteligente.md)
@@ -694,7 +722,7 @@ Los precios siguen con IVA incluido: `mano_de_obra` y `refacciones` suman los im
 
 #### Diseño de V2-T05.09: almacenamiento de archivos
 
-**API.** `archivos.AlmacenArchivos`: `guardar(carpeta, tipoContenido, contenido)` → `ArchivoGuardado(clave, tipoContenido, tamanoBytes)`; `leer(clave)`; `borrar(clave)`; `urlTemporal(clave)` → `/api/v1/archivos/{carpeta}/{id}?expira=&firma=`. La clave es `carpeta/uuid`. Solo JPEG, PNG, WebP y PDF, hasta 20 MB.
+**API.** `archivos.AlmacenArchivos`: `guardar(carpeta, tipoContenido, contenido)` → `ArchivoGuardado(clave, tipoContenido, tamanoBytes)`; `leer(clave)`; `borrar(clave)`; `urlTemporal(clave)` → `/api/v1/archivos/{carpeta}/{id}?expira=&firma=`. La clave es `carpeta/uuid`. Solo JPEG, PNG, WebP, PDF y video MP4 (este último desde V2-M04.04, para las evidencias), hasta 20 MB.
 
 **Implementaciones.** `ARCHIVOS_ALMACEN=base` (por omisión): tabla `archivo` en PostgreSQL, que en producción es Neon, en la nube. `ARCHIVOS_ALMACEN=local`: carpeta `ARCHIVOS_DIRECTORIO`, para desarrollo. Las dos detrás del puerto `Deposito`; un almacén de objetos (Azure Blob Storage) se agrega como otra implementación sin tocar a quien usa `AlmacenArchivos`, cuando el equipo abra esa cuenta.
 
