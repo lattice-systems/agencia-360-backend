@@ -526,6 +526,14 @@ Pasos:
 - Los modelos se fijan con `ASISTENTE_MODELO_TEXTO` y `ASISTENTE_MODELO_EMBEDDING`.
 - Una cuota agotada, un error o una espera vencida dan `503 ASISTENTE_NO_DISPONIBLE`.
 
+#### Diseño de V2-M24.05: testigos del tablero por foto — implementado
+
+- **Endpoint:** `POST /api/v1/app/asistente/testigos` (multipart `vehiculoId`, `imagen`), solo `CLIENTE_CARECAR`. JPEG o PNG hasta 5 MB; otra cosa → `400 DATOS_INVALIDOS`. Vehículo ajeno → `404`. Contrato 2.8.0.
+- **Privacidad:** la imagen se decodifica y se vuelve a codificar como JPEG de máximo 1024 px de lado (se pierde EXIF, ubicación y miniaturas) y vive solo en memoria; no se guarda en disco ni en la base.
+- **Modelo:** `ProveedorIA.identificarTestigo` manda la imagen a Gemini (`inline_data`) con salida JSON: `reconocido`, `testigo`, `gravedad` (`roja`, `amarilla`, `informativa`), `queHacer`. El proveedor falso reconoce rojo (presión de aceite) y ámbar (check engine) por el color dominante, para pruebas y local.
+- **Página del manual:** si el vehículo tiene manual con texto, busca el nombre del testigo con `porPalabras` y cita la primera página; sin manual no falla.
+- **Registro y límites:** guarda en `consulta_asistente` (pregunta `[foto] <testigo>`) y cuenta para el límite diario por cliente y el global, igual que las preguntas.
+
 #### Diseño de V2-M24.07: calidad de respuestas — implementado
 
 - **Calificar:** `POST /api/v1/app/asistente/consultas/{consultaId}/calificacion` con `{"util": true|false}`, solo `CLIENTE_CARECAR`. Responde `204`; calificar otra vez reemplaza. `404` si la consulta no existe o es de otro cliente (no se revela cuál). `400` sin `util`. Guarda en `consulta_asistente.util` (columna de V27, sin migración nueva). Contrato 2.7.0.

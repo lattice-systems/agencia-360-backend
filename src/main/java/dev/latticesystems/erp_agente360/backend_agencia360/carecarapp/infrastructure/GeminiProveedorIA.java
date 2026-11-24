@@ -89,6 +89,40 @@ public class GeminiProveedorIA implements ProveedorIA {
 		}
 	}
 
+	@Override
+	public RespuestaTestigo identificarTestigo(String instrucciones, byte[] jpeg) {
+		Map<String, Object> esquema = Map.of("type", "OBJECT", "properties",
+				Map.of("reconocido", Map.of("type", "BOOLEAN"), "testigo", Map.of("type", "STRING"), "gravedad",
+						Map.of("type", "STRING", "enum", List.of("roja", "amarilla", "informativa")), "queHacer",
+						Map.of("type", "STRING")),
+				"required", List.of("reconocido"));
+		Map<String, Object> imagen = Map.of("inline_data",
+				Map.of("mime_type", "image/jpeg", "data", java.util.Base64.getEncoder().encodeToString(jpeg)));
+		Map<String, Object> cuerpo = Map.of("systemInstruction",
+				Map.of("parts", List.of(Map.of("text", instrucciones))), "contents",
+				List.of(Map.of("role", "user", "parts",
+						List.of(imagen, Map.of("text", "¿Qué testigo del tablero muestra la foto?")))),
+				"generationConfig", Map.of("temperature", 0.1, "responseMimeType", MediaType.APPLICATION_JSON_VALUE,
+						"responseSchema", esquema));
+		JsonNode respuesta = llamar("/models/" + modeloTexto + ":generateContent", cuerpo);
+		String texto = respuesta.path("candidates").path(0).path("content").path("parts").path(0).path("text")
+				.asText("");
+		try {
+			JsonNode datos = json.readTree(texto);
+			if (!datos.path("reconocido").asBoolean(false)) {
+				return new RespuestaTestigo(false, null, null, null);
+			}
+			String gravedad = datos.path("gravedad").asText("informativa");
+			if (!List.of("roja", "amarilla", "informativa").contains(gravedad)) {
+				gravedad = "informativa";
+			}
+			return new RespuestaTestigo(true, datos.path("testigo").asText("").strip(), gravedad,
+					datos.path("queHacer").asText("").strip());
+		} catch (com.fasterxml.jackson.core.JsonProcessingException ex) {
+			throw new ProveedorIANoDisponibleException("Gemini no respondió en el formato pedido", ex);
+		}
+	}
+
 	private JsonNode llamar(String ruta, Map<String, Object> cuerpo) {
 		for (int intento = 1;; intento++) {
 			try {
