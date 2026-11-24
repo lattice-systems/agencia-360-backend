@@ -10,6 +10,7 @@ import dev.latticesystems.erp_agente360.backend_agencia360.shared.exception.Conf
 import dev.latticesystems.erp_agente360.backend_agencia360.shared.exception.DemasiadosIntentosException;
 import dev.latticesystems.erp_agente360.backend_agencia360.shared.exception.RecursoNoEncontradoException;
 import dev.latticesystems.erp_agente360.backend_agencia360.shared.exception.ServicioNoDisponibleException;
+import dev.latticesystems.erp_agente360.backend_agencia360.shared.exception.SolicitudInvalidaException;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
@@ -44,6 +45,18 @@ public class AsistenteService {
 			- En "paginas" pon solo los números de página de los fragmentos que usaste.
 			- Si hay un riesgo de seguridad (testigo rojo, frenos, sobrecalentamiento, humo), recomienda detenerse
 			  en un lugar seguro y llamar a la agencia.
+			- No pidas ni repitas datos personales.
+			""";
+	static final String INSTRUCCIONES_TESTIGO = """
+			Eres el asistente de CareCar, la app de servicio de una agencia Nissan en México.
+			Te llega la foto de un tablero de auto. Identifica el testigo (luz) encendido más importante.
+			Reglas:
+			- Si la foto no muestra con claridad un testigo, pon reconocido=false y nada más.
+			- testigo: su nombre común en español de México (por ejemplo "Presión de aceite", "Check engine").
+			- gravedad: "roja" si hay que detenerse (aceite, temperatura, frenos, carga), "amarilla" si conviene
+			  revisarlo pronto (check engine, presión de llantas, ABS) o "informativa" (luces, crucero).
+			- queHacer: qué hacer ahora, en máximo 60 palabras, claro y amable. Si es roja, empieza por
+			  detenerse en un lugar seguro.
 			- No pidas ni repitas datos personales.
 			""";
 	private static final int PAGINAS_DE_CONTEXTO = 5;
@@ -115,17 +128,7 @@ public class AsistenteService {
 				.orElseThrow(() -> new RecursoNoEncontradoException("No existe el vehículo " + vehiculoId));
 		Manual manual = manualDe(vehiculo).orElseThrow(this::sinManual);
 
-		ZonedDateTime ahora = ZonedDateTime.now(reloj).withZoneSameInstant(zona);
-		Instant inicioDelDia = ahora.toLocalDate().atStartOfDay(zona).toInstant();
-		if (consultas.contarDelCliente(clienteId, inicioDelDia) >= limitePorCliente) {
-			long segundos = Duration.between(ahora, LocalDate.from(ahora).plusDays(1).atStartOfDay(zona)).toSeconds();
-			throw new DemasiadosIntentosException(
-					"Ya hiciste tus " + limitePorCliente + " preguntas de hoy. Mañana puedes hacer más.", segundos,
-					CodigosError.ASISTENTE_LIMITE);
-		}
-		if (consultas.contarTodas(inicioDelDia) >= limiteGlobal) {
-			throw noDisponible();
-		}
+		verificarLimites(clienteId);
 		if (!fragmentos.tieneFragmentos(manual.getId()) && indexador.indexarTexto(manual.getId()) == 0) {
 			throw sinManual();
 		}
@@ -155,6 +158,80 @@ public class AsistenteService {
 				: List.of();
 		return guardar(clienteId, vehiculo, preguntaLimpia, respuesta.respuesta(), fuentes, respuesta.encontrado(),
 				proveedor.nombre());
+	}
+
+	/**
+	 * Identifica el testigo de una foto del tablero (V2-M24.05). La foto se limpia
+	 * (sin EXIF) y no se guarda.
+	 *
+	 * @throws RecursoNoEncontradoException
+	 *             si el vehículo no existe o no es del cliente (404)
+	 * @throws SolicitudInvalidaException
+	 *             DATOS_INVALIDOS si no es una imagen (400)
+	 * @throws DemasiadosIntentosException
+	 *             ASISTENTE_LIMITE (429)
+	 * @throws ServicioNoDisponibleException
+	 *             ASISTENTE_NO_DISPONIBLE (503)
+	 */
+	public RespuestaTestigoApp identificarTestigo(Long clienteId, Long vehiculoId, byte[] imagen) {
+		VehiculoDeCliente vehiculo = vehiculos.buscarPorId(vehiculoId)
+				.filter(encontrado -> encontrado.propietario().id().equals(clienteId))
+				.orElseThrow(() -> new RecursoNoEncontradoException("No existe el vehículo " + vehiculoId));
+		byte[] limpia;
+		try {
+			limpia = LimpiadorImagen.limpiar(imagen);
+		} catch (IllegalArgumentException ex) {
+			throw new SolicitudInvalidaException("La foto debe ser una imagen JPEG o PNG",
+					CodigosError.DATOS_INVALIDOS);
+		}
+		verificarLimites(clienteId);
+
+		ProveedorIA.RespuestaTestigo visto;
+		try {
+			visto = proveedor.identificarTestigo(INSTRUCCIONES_TESTIGO, limpia);
+		} catch (ProveedorIANoDisponibleException ex) {
+			throw noDisponible();
+		}
+		boolean reconocido = visto.reconocido() && visto.testigo() != null && !visto.testigo().isBlank();
+		List<ConsultasAsistente.Fuente> fuentes = reconocido ? paginaDelTestigo(vehiculo, visto.testigo()) : List.of();
+		String respuesta = reconocido
+				? visto.queHacer()
+				: "No reconocí un testigo en la foto. Puedes describirlo con palabras.";
+		long id = consultas.guardar(new ConsultasAsistente.NuevaConsulta(clienteId, vehiculo.id(),
+				"[foto] " + (reconocido ? visto.testigo() : "sin reconocer"), respuesta, fuentes, reconocido,
+				proveedor.nombre()));
+		return new RespuestaTestigoApp(id, reconocido, reconocido ? visto.testigo() : null,
+				reconocido ? visto.gravedad() : null, reconocido ? visto.queHacer() : null,
+				fuentes.stream().map(f -> new RespuestaAsistenteApp.FuenteAsistenteApp(f.manualId(), f.pagina(),
+						"Manual, pág. " + f.pagina())).toList());
+	}
+
+	/** Primera página del manual que nombra el testigo; vacía si no hay manual. */
+	private List<ConsultasAsistente.Fuente> paginaDelTestigo(VehiculoDeCliente vehiculo, String testigo) {
+		Optional<Manual> manual = manualDe(vehiculo);
+		if (manual.isEmpty()) {
+			return List.of();
+		}
+		long manualId = manual.get().getId();
+		if (!fragmentos.tieneFragmentos(manualId) && indexador.indexarTexto(manualId) == 0) {
+			return List.of();
+		}
+		return fragmentos.porPalabras(manualId, testigo, 1).stream()
+				.map(f -> new ConsultasAsistente.Fuente(manualId, f.pagina())).toList();
+	}
+
+	private void verificarLimites(Long clienteId) {
+		ZonedDateTime ahora = ZonedDateTime.now(reloj).withZoneSameInstant(zona);
+		Instant inicioDelDia = ahora.toLocalDate().atStartOfDay(zona).toInstant();
+		if (consultas.contarDelCliente(clienteId, inicioDelDia) >= limitePorCliente) {
+			long segundos = Duration.between(ahora, LocalDate.from(ahora).plusDays(1).atStartOfDay(zona)).toSeconds();
+			throw new DemasiadosIntentosException(
+					"Ya hiciste tus " + limitePorCliente + " preguntas de hoy. Mañana puedes hacer más.", segundos,
+					CodigosError.ASISTENTE_LIMITE);
+		}
+		if (consultas.contarTodas(inicioDelDia) >= limiteGlobal) {
+			throw noDisponible();
+		}
 	}
 
 	private List<FragmentosManual.Fragmento> buscarPaginas(long manualId, String pregunta) {

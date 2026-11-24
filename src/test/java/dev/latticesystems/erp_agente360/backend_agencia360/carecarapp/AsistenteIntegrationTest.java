@@ -183,6 +183,52 @@ class AsistenteIntegrationTest extends AbstractIntegrationTest {
 		assertThat(utilDe(consultaId)).isNull();
 	}
 
+	@Test
+	void unaFotoDeTestigoRojoDiceQueEsGraveYCitaElManual() throws Exception {
+		subirManual(modelo).andExpect(status().isOk());
+
+		String cuerpo = fotografiar(vehiculoId, imagen(new java.awt.Color(220, 30, 30))).andExpect(status().isOk())
+				.andExpect(jsonPath("$.reconocido").value(true))
+				.andExpect(jsonPath("$.testigo").value("Presión de aceite"))
+				.andExpect(jsonPath("$.gravedad").value("roja")).andExpect(jsonPath("$.queHacer").isNotEmpty())
+				.andExpect(jsonPath("$.fuentes[0].pagina").value(2)).andExpect(jsonPath("$.consultaId").isNumber())
+				.andReturn().getResponse().getContentAsString();
+		long consultaId = ((Number) com.jayway.jsonpath.JsonPath.read(cuerpo, "$.consultaId")).longValue();
+		String pregunta = jdbc.queryForObject("select pregunta from consulta_asistente where id = ?", String.class,
+				consultaId);
+		assertThat(pregunta).startsWith("[foto]");
+	}
+
+	@Test
+	void unaFotoSinTestigoLoDiceYSinManualNoFalla() throws Exception {
+		fotografiar(vehiculoId, imagen(new java.awt.Color(120, 120, 120))).andExpect(status().isOk())
+				.andExpect(jsonPath("$.reconocido").value(false)).andExpect(jsonPath("$.fuentes.length()").value(0));
+	}
+
+	@Test
+	void unArchivoQueNoEsImagenResponde400YUnVehiculoAjeno404() throws Exception {
+		fotografiar(vehiculoId, "no soy una imagen".getBytes()).andExpect(status().isBadRequest());
+		fotografiar(Long.MAX_VALUE, imagen(java.awt.Color.RED)).andExpect(status().isNotFound());
+	}
+
+	private ResultActions fotografiar(Long vehiculo, byte[] bytes) throws Exception {
+		return mockMvc.perform(multipart("/api/v1/app/asistente/testigos")
+				.file(new MockMultipartFile("imagen", "testigo.png", "image/png", bytes))
+				.param("vehiculoId", String.valueOf(vehiculo)).header(HttpHeaders.AUTHORIZATION, "Bearer " + token));
+	}
+
+	private static byte[] imagen(java.awt.Color color) throws Exception {
+		java.awt.image.BufferedImage foto = new java.awt.image.BufferedImage(40, 30,
+				java.awt.image.BufferedImage.TYPE_INT_RGB);
+		java.awt.Graphics2D lienzo = foto.createGraphics();
+		lienzo.setColor(color);
+		lienzo.fillRect(0, 0, 40, 30);
+		lienzo.dispose();
+		ByteArrayOutputStream salida = new ByteArrayOutputStream();
+		javax.imageio.ImageIO.write(foto, "png", salida);
+		return salida.toByteArray();
+	}
+
 	private ResultActions calificar(long consultaId, String conToken, String cuerpo) throws Exception {
 		return mockMvc.perform(post("/api/v1/app/asistente/consultas/" + consultaId + "/calificacion")
 				.contentType(MediaType.APPLICATION_JSON).content(cuerpo)

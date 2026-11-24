@@ -33,6 +33,23 @@ public interface ProveedorIA {
 	 */
 	RespuestaIA responder(String instrucciones, String contenido);
 
+	/**
+	 * Identifica el testigo del tablero en una foto JPEG ya limpia (V2-M24.05).
+	 *
+	 * @throws ProveedorIANoDisponibleException
+	 *             si el proveedor falla, tarda o no tiene cuota
+	 */
+	RespuestaTestigo identificarTestigo(String instrucciones, byte[] jpeg);
+
+	/**
+	 * Lo que el modelo ve en la foto. Sin reconocer, los demás campos son nulos.
+	 *
+	 * @param gravedad
+	 *            {@code roja}, {@code amarilla} o {@code informativa}
+	 */
+	record RespuestaTestigo(boolean reconocido, String testigo, String gravedad, String queHacer) {
+	}
+
 	/** Lo que devuelve el modelo: texto, si lo encontró y las páginas usadas. */
 	record RespuestaIA(String respuesta, boolean encontrado, List<Integer> paginas) {
 		public RespuestaIA {
