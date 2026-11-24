@@ -69,7 +69,8 @@ public class ProveedorIAFalso implements ProveedorIA {
 		azul /= pixeles;
 		if (rojo > 150 && verde < 90 && azul < 90) {
 			return new RespuestaTestigo(true, "Presión de aceite", "roja",
-					"Detente en un lugar seguro, apaga el motor y revisa el nivel de aceite. No sigas manejando si sigue encendida.");
+					"Detente en un lugar seguro, apaga el motor y revisa el nivel de aceite. "
+							+ "No sigas manejando si sigue encendida.");
 		}
 		if (rojo > 180 && verde > 110 && azul < 80) {
 			return new RespuestaTestigo(true, "Check engine", "amarilla",
