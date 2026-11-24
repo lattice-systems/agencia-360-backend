@@ -1,12 +1,16 @@
 package dev.latticesystems.erp_agente360.backend_agencia360.servicio.infrastructure;
 
+import dev.latticesystems.erp_agente360.backend_agencia360.servicio.EstatusOrden;
 import dev.latticesystems.erp_agente360.backend_agencia360.servicio.domain.OrdenServicio;
+import jakarta.persistence.LockModeType;
 import java.time.LocalDate;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -24,4 +28,14 @@ public interface OrdenServicioRepository extends JpaRepository<OrdenServicio, Lo
 	@Query("select distinct extract(year from o.fecha) as anio from OrdenServicio o "
 			+ "where o.vehiculoClienteId = :vehiculoClienteId order by anio desc")
 	List<Integer> aniosConServicios(@Param("vehiculoClienteId") Long vehiculoClienteId);
+
+	@Lock(LockModeType.PESSIMISTIC_WRITE)
+	@Query("select o from OrdenServicio o where o.id = :id")
+	Optional<OrdenServicio> bloquear(@Param("id") Long id);
+
+	@Query("select o from OrdenServicio o where o.vehiculoClienteId in :vehiculoIds and o.estatus <> :entregada "
+			+ "and exists (select e.id from EtapaOrden e where e.ordenServicioId = o.id) "
+			+ "order by o.fecha desc, o.id desc")
+	List<OrdenServicio> enCurso(@Param("vehiculoIds") Collection<Long> vehiculoIds,
+			@Param("entregada") EstatusOrden entregada);
 }

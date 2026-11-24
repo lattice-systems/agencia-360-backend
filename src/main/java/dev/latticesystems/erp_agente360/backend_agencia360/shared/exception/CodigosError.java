@@ -25,6 +25,9 @@ public final class CodigosError {
 	public static final String SOLICITUD_ABIERTA = "SOLICITUD_ABIERTA";
 	public static final String FUERA_DE_COBERTURA = "FUERA_DE_COBERTURA";
 	public static final String DIRECCION_EN_USO = "DIRECCION_EN_USO";
+	public static final String ORDEN_ABIERTA = "ORDEN_ABIERTA";
+	public static final String ORDEN_CERRADA = "ORDEN_CERRADA";
+	public static final String ADICIONAL_YA_RESPONDIDO = "ADICIONAL_YA_RESPONDIDO";
 
 	private CodigosError() {
 	}

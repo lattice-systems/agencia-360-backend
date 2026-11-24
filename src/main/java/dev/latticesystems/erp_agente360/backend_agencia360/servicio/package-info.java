@@ -12,9 +12,16 @@
  * V2-T05.06.
  *
  * <p>
- * Siguen pendientes las órdenes de servicio y tickets imprimibles (ERP HU 3.1),
- * la captura de servicios en pantalla y el historial en la app CareCar (CareCar
- * HU 3.2).
+ * Taller en vivo (V2-M04): la orden se abre al entrar el vehículo y pasa por
+ * sus etapas ({@code etapa_orden}); el técnico registra la inspección
+ * multipunto ({@code punto_inspeccion}) con fotos y videos
+ * ({@code evidencia_orden}, en el almacén de {@code archivos}) y propone
+ * trabajos adicionales ({@code trabajo_adicional}) que el cliente aprueba o
+ * rechaza con su firma desde la app ({@code servicio.TallerEnVivo}).
+ *
+ * <p>
+ * Siguen pendientes los tickets imprimibles del ERP (ERP HU 3.1) y la captura
+ * de servicios y etapas en pantalla, mientras el ERP siga congelado.
  */
 @org.springframework.modulith.ApplicationModule(displayName = "Taller y Servicio")
 package dev.latticesystems.erp_agente360.backend_agencia360.servicio;
