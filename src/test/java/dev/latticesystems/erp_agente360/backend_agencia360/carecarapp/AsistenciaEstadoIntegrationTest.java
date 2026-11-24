@@ -133,7 +133,8 @@ class AsistenciaEstadoIntegrationTest extends AbstractIntegrationTest {
 		cambiar(tokenDelPersonal, id, "atendida").andExpect(status().isOk()).andExpect(jsonPath("$.lat").doesNotExist())
 				.andExpect(jsonPath("$.lng").doesNotExist());
 
-		consultar(tokenDeAna, id).andExpect(jsonPath("$.lat").doesNotExist()).andExpect(jsonPath("$.lng").doesNotExist());
+		consultar(tokenDeAna, id).andExpect(jsonPath("$.lat").doesNotExist())
+				.andExpect(jsonPath("$.lng").doesNotExist());
 		assertThat(jdbcTemplate.queryForObject("select lat from solicitud_asistencia where id = ?", Object.class, id))
 				.isNull();
 		assertThat(jdbcTemplate.queryForObject("select lng from solicitud_asistencia where id = ?", Object.class, id))
@@ -144,7 +145,8 @@ class AsistenciaEstadoIntegrationTest extends AbstractIntegrationTest {
 	void cancelarTambienBorraLaUbicacion() throws Exception {
 		long id = solicitar();
 
-		cambiar(tokenDelPersonal, id, "cancelada").andExpect(status().isOk()).andExpect(jsonPath("$.lat").doesNotExist());
+		cambiar(tokenDelPersonal, id, "cancelada").andExpect(status().isOk())
+				.andExpect(jsonPath("$.lat").doesNotExist());
 		assertThat(jdbcTemplate.queryForObject("select lat from solicitud_asistencia where id = ?", Object.class, id))
 				.isNull();
 	}
@@ -182,7 +184,8 @@ class AsistenciaEstadoIntegrationTest extends AbstractIntegrationTest {
 	private long solicitar() throws Exception {
 		String json = mockMvc
 				.perform(post(RUTA).header(HttpHeaders.AUTHORIZATION, "Bearer " + tokenDeAna)
-						.contentType(MediaType.APPLICATION_JSON).content("{\"vehiculoId\": " + vehiculoDeAna
+						.contentType(MediaType.APPLICATION_JSON)
+						.content("{\"vehiculoId\": " + vehiculoDeAna
 								+ ", \"tipo\": \"llanta\", \"lat\": 20.5, \"lng\": -100.25}"))
 				.andExpect(status().isCreated()).andReturn().getResponse().getContentAsString();
 		return JsonPath.<Number>read(json, "$.id").longValue();
@@ -197,7 +200,8 @@ class AsistenciaEstadoIntegrationTest extends AbstractIntegrationTest {
 	}
 
 	private ResultActions cambiar(String token, long id, String estado) throws Exception {
-		return mockMvc.perform(patch("/api/v1/asistencia/{id}/estado", id).header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
-				.contentType(MediaType.APPLICATION_JSON).content("{\"estado\": \"" + estado + "\"}"));
+		return mockMvc.perform(
+				patch("/api/v1/asistencia/{id}/estado", id).header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+						.contentType(MediaType.APPLICATION_JSON).content("{\"estado\": \"" + estado + "\"}"));
 	}
 }
