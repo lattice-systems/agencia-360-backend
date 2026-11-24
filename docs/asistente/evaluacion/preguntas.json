@@ -1,0 +1,27 @@
+{
+  "descripcion": "Conjunto de evaluación del asistente (V2-M24.07). Sirve para todos los manuales que genera scripts/generar-manuales.py: comparten las mismas páginas (2 Bienvenida, 3 Ficha técnica, 4 Identificación, 5 Tablero, 6 Mantenimiento, 7 Fluidos y llantas, 8 Seguridad, 9 Checklist, 10 Conducción eficiente, 11 Solución de problemas, 12 Garantía, 13 Contacto). Una respuesta es correcta si alguna de sus citas está en 'paginas'.",
+  "modelos": ["Sentra 2024", "Versa 2022", "Kicks 2025", "March 2019", "X-Trail 2023", "Frontier 2024"],
+  "umbral": 0.8,
+  "preguntas": [
+    {"pregunta": "¿Cada cuánto le toca servicio?", "paginas": [6]},
+    {"pregunta": "¿Qué se le hace en el servicio de los 20,000 km?", "paginas": [6]},
+    {"pregunta": "¿Cuándo le cambian las bujías?", "paginas": [6]},
+    {"pregunta": "¿Qué aceite de motor lleva?", "paginas": [7]},
+    {"pregunta": "¿Qué presión llevan las llantas?", "paginas": [7, 3]},
+    {"pregunta": "¿Cada cuánto hay que rotar las llantas?", "paginas": [7]},
+    {"pregunta": "¿Con cuánto dibujo debo cambiar una llanta?", "paginas": [7]},
+    {"pregunta": "¿Puedo mezclar refrigerantes de distinto tipo?", "paginas": [7]},
+    {"pregunta": "¿Qué significa una luz roja en el tablero?", "paginas": [5]},
+    {"pregunta": "Se prendió la luz de presión de aceite, ¿qué hago?", "paginas": [5]},
+    {"pregunta": "¿Qué pasa si se enciende la luz del ABS?", "paginas": [5]},
+    {"pregunta": "¿Dónde encuentro el VIN de mi auto?", "paginas": [4]},
+    {"pregunta": "¿Cuántos caballos de fuerza tiene el motor?", "paginas": [3]},
+    {"pregunta": "¿Qué gasolina le pongo?", "paginas": [3]},
+    {"pregunta": "¿Dónde están los anclajes ISOFIX para la silla del bebé?", "paginas": [8]},
+    {"pregunta": "¿Qué reviso antes de salir a carretera?", "paginas": [9]},
+    {"pregunta": "¿Qué equipo de emergencia debo llevar en un viaje?", "paginas": [9]},
+    {"pregunta": "Mi auto no enciende, ¿qué reviso?", "paginas": [11]},
+    {"pregunta": "Se está calentando el motor, ¿qué hago?", "paginas": [11, 5]},
+    {"pregunta": "¿Qué no cubre la garantía?", "paginas": [12]}
+  ]
+}

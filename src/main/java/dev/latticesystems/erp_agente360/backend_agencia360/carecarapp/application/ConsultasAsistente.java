@@ -21,4 +21,11 @@ public interface ConsultasAsistente {
 	long contarDelCliente(long clienteId, Instant desde);
 
 	long contarTodas(Instant desde);
+
+	/**
+	 * Guarda si la respuesta le sirvió al cliente (V2-M24.07).
+	 *
+	 * @return false si la consulta no existe o no es de ese cliente
+	 */
+	boolean calificar(long consultaId, long clienteId, boolean util);
 }

@@ -64,4 +64,10 @@ public class ConsultasAsistenteJdbc implements ConsultasAsistente {
 				Timestamp.from(desde));
 		return total == null ? 0 : total;
 	}
+
+	@Override
+	public boolean calificar(long consultaId, long clienteId, boolean util) {
+		return jdbc.update("update consulta_asistente set util = ? where id = ? and cliente_id = ?", util, consultaId,
+				clienteId) == 1;
+	}
 }

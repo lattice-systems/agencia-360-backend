@@ -153,6 +153,51 @@ class AsistenteIntegrationTest extends AbstractIntegrationTest {
 				.header(HttpHeaders.AUTHORIZATION, "Bearer " + token)).andExpect(status().isBadRequest());
 	}
 
+	@Test
+	void calificarUnaRespuestaGuardaSiFueUtilYSePuedeCambiar() throws Exception {
+		subirManual(modelo).andExpect(status().isOk());
+		long consultaId = consultaDe(preguntar(vehiculoId, "¿Cada cuánto cambio el aceite?"));
+
+		calificar(consultaId, token, "{\"util\":true}").andExpect(status().isNoContent());
+		assertThat(utilDe(consultaId)).isTrue();
+
+		calificar(consultaId, token, "{\"util\":false}").andExpect(status().isNoContent());
+		assertThat(utilDe(consultaId)).isFalse();
+	}
+
+	@Test
+	void calificarUnaConsultaAjenaOInexistenteResponde404YSinUtilResponde400() throws Exception {
+		subirManual(modelo).andExpect(status().isOk());
+		long consultaId = consultaDe(preguntar(vehiculoId, "¿Cada cuánto cambio el aceite?"));
+
+		String unico = UUID.randomUUID().toString().replace("-", "").substring(0, 8);
+		Long otro = registroClientesService
+				.registrar(new NuevoCliente("Otro Cliente", "otro-" + unico + "@correo.com", null, null)).id();
+		cuentasAppService.abrir(otro, "Temporal123");
+		String tokenAjeno = jwtService.generateToken(otro, "otro-" + unico + "@correo.com",
+				List.of(Role.CLIENTE_CARECAR));
+
+		calificar(consultaId, tokenAjeno, "{\"util\":true}").andExpect(status().isNotFound());
+		calificar(Long.MAX_VALUE, token, "{\"util\":true}").andExpect(status().isNotFound());
+		calificar(consultaId, token, "{}").andExpect(status().isBadRequest());
+		assertThat(utilDe(consultaId)).isNull();
+	}
+
+	private ResultActions calificar(long consultaId, String conToken, String cuerpo) throws Exception {
+		return mockMvc.perform(post("/api/v1/app/asistente/consultas/" + consultaId + "/calificacion")
+				.contentType(MediaType.APPLICATION_JSON).content(cuerpo)
+				.header(HttpHeaders.AUTHORIZATION, "Bearer " + conToken));
+	}
+
+	private static long consultaDe(ResultActions respuesta) throws Exception {
+		String cuerpo = respuesta.andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
+		return ((Number) com.jayway.jsonpath.JsonPath.read(cuerpo, "$.consultaId")).longValue();
+	}
+
+	private Boolean utilDe(long consultaId) {
+		return jdbc.queryForObject("select util from consulta_asistente where id = ?", Boolean.class, consultaId);
+	}
+
 	private ResultActions preguntar(Long vehiculo, String pregunta) throws Exception {
 		String cuerpo = "{\"vehiculoId\":" + vehiculo + ",\"pregunta\":\"" + pregunta.replace("\"", "\\\"") + "\"}";
 		return mockMvc.perform(post("/api/v1/app/asistente/preguntas").contentType(MediaType.APPLICATION_JSON)
