@@ -231,6 +231,7 @@ class TrasladoSeguimientoIntegrationTest extends AbstractIntegrationTest {
 
 		enviar(post("/api/v1/app/citas/" + citaId + "/cancelar"), tokenDeAna, null).andExpect(status().isOk());
 
+		entityManager.flush();
 		entityManager.clear();
 		assertThat(trasladoRepository.findById(entregar).orElseThrow().getEstado()).isEqualTo(EstadoTraslado.CANCELADO);
 		assertThat(trasladoRepository.findById(recoger).orElseThrow().getEstado()).isEqualTo(EstadoTraslado.EN_CAMINO);
@@ -249,6 +250,7 @@ class TrasladoSeguimientoIntegrationTest extends AbstractIntegrationTest {
 				"{\"franjaId\": " + franjaDelDia(otroDia) + ", \"fecha\": \"" + otroDia + "\"}")
 				.andExpect(status().isOk());
 
+		entityManager.flush();
 		entityManager.clear();
 		Traslado programado = trasladoRepository.findById(entregar).orElseThrow();
 		assertThat(programado.getFecha()).isEqualTo(otroDia);
