@@ -108,7 +108,8 @@ public class AsistenciaAppService {
 	 * @throws RecursoNoEncontradoException
 	 *             si la solicitud no existe (404)
 	 * @throws ConflictoException
-	 *             con {@code TRANSICION_INVALIDA} si el paso no está permitido (409)
+	 *             con {@code TRANSICION_INVALIDA} si el paso no está permitido
+	 *             (409)
 	 */
 	@Transactional
 	public SolicitudAsistenciaApp cambiarEstado(Long solicitudId, String estado) {
