@@ -64,6 +64,11 @@ public class LecturaKm {
 		return new LecturaKm(vehiculoClienteId, km, FuenteLectura.CLIENTE, registradaEn);
 	}
 
+	/** Guarda la clave del archivo con la foto que probó la lectura. */
+	public void adjuntarFoto(String clave) {
+		this.fotoUrl = clave;
+	}
+
 	public static void exigirKmValido(int km) {
 		if (km < 1 || km > KM_MAXIMO) {
 			throw new IllegalArgumentException("El kilometraje debe estar entre 1 y " + KM_MAXIMO);
