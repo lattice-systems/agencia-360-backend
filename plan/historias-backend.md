@@ -254,7 +254,7 @@ Detalle: [`carecar-mobile/plan/modulos/M05-mantenimiento-inteligente.md`](https:
 
 #### Diseño técnico — V2-M05.01, M05.02, M05.03 y M05.06 (parte B de Juan Pablo)
 
-Vive en `carecarapp` (la historia lo ubica en `servicio`, pero solo consume su API pública `HistorialDeServicios`; evita un módulo más mientras el ERP sigue congelado). Migraciones `V38` (tablas) y `V39` (planes de ejemplo).
+Vive en `carecarapp` (la historia lo ubica en `servicio`, pero solo consume su API pública `HistorialDeServicios`; evita un módulo más mientras el ERP sigue congelado). Migraciones `V40` (tablas) y `V41` (planes de ejemplo).
 
 - `plan_mantenimiento`: `id`, `modelo` (Tipo, p. ej. March; sin distinguir mayúsculas), `anio_desde`, `anio_hasta`, `km`, `meses`, `nombre`, `precio_estimado`. `concepto_mantenimiento`: `id`, `plan_mantenimiento_id` (FK), `concepto`. Como en el resto del repo, `modelo` es el Tipo y el año del vehículo cae entre `anio_desde` y `anio_hasta`.
 - `lectura_km`: `id`, `vehiculo_cliente_id` (FK), `km`, `fuente` (`TALLER`, `CLIENTE`), `foto_url` (nula; la foto opcional se sube con V2-T05.09), `registrada_en`. El km oficial del taller no se sobrescribe: las lecturas del cliente son filas aparte.
@@ -512,7 +512,7 @@ Detalle: [`carecar-mobile/plan/modulos/M18-bitacora-conductor.md`](https://githu
 
 #### Diseño técnico — V2-M18.01 y V2-M18.04 (parte B de Juan Pablo)
 
-Todo vive en `carecarapp` (no cruza módulos: el kilometraje oficial se lee por `VehiculosDeClientes` y `HistorialDeServicios`). Migración `V38` (junto con M05).
+Todo vive en `carecarapp` (no cruza módulos: el kilometraje oficial se lee por `VehiculosDeClientes` y `HistorialDeServicios`). Migración `V40` (junto con M05).
 
 - `gasto_vehiculo`: `id`, `vehiculo_cliente_id` (FK), `tipo` (`GASOLINA`, `ESTACIONAMIENTO`, `CASETAS`, `LAVADO`, `OTRO`), `monto` (> 0), `litros` (nulo salvo gasolina), `km` (nulo salvo gasolina; opcional en los demás), `fecha`, `ticket_url` (de la ficha; sin uso hasta que haya carga de tickets), `descripcion` (≤ 200; se agrega a lo que pide la ficha porque el tipo `otro` la exige), `lectura_km_id` (FK nula: la lectura que creó la carga) y `created_at`/`updated_at`.
 - Reglas: gasolina exige `litros > 0` y `km`; `otro` exige `descripcion`; la fecha no puede ser futura (hora de México); todo lo demás es 400 `DATOS_INVALIDOS`.
