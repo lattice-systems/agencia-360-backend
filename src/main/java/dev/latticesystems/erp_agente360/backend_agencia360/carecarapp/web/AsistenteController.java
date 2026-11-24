@@ -111,6 +111,9 @@ public class AsistenteController {
 				}
 			} catch (AppDesconectada ex) {
 				// La respuesta parcial ya quedó guardada.
+			} catch (RuntimeException ex) {
+				// Nunca dejar el flujo abierto: la app se quedaría esperando.
+				emisor.completeWithError(ex);
 			}
 		});
 		return emisor;

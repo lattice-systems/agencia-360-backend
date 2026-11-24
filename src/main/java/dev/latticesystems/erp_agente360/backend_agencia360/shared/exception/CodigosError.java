@@ -20,6 +20,10 @@ public final class CodigosError {
 	public static final String WALLET_NO_CONFIGURADO = "WALLET_NO_CONFIGURADO";
 	public static final String ASISTENTE_SIN_MANUAL = "ASISTENTE_SIN_MANUAL";
 	public static final String ASISTENTE_LIMITE = "ASISTENTE_LIMITE";
+	/** V2-M16.02: el modelo del catálogo no tiene precio publicado. */
+	public static final String ESTRENO_SIN_PRECIO = "ESTRENO_SIN_PRECIO";
+	/** V2-M16.01: ya hay una solicitud abierta del mismo modelo y tipo. */
+	public static final String ESTRENO_DUPLICADA = "ESTRENO_DUPLICADA";
 	public static final String ASISTENTE_NO_DISPONIBLE = "ASISTENTE_NO_DISPONIBLE";
 	public static final String SIN_PARAMETROS_DE_VALUACION = "SIN_PARAMETROS_DE_VALUACION";
 	public static final String SOLICITUD_ABIERTA = "SOLICITUD_ABIERTA";

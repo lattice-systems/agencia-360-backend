@@ -25,4 +25,18 @@ class ConsultaVendedoresService implements ConsultaVendedores {
 		return usuarioRepository.buscarPorIdConRol(usuarioId).filter(Usuario::isActivo)
 				.map(usuario -> usuario.getRol().comoRole() == Role.VENTAS).orElse(false);
 	}
+
+	@Override
+	@Transactional(readOnly = true)
+	public java.util.List<Long> vendedoresActivos() {
+		return usuarioRepository.buscarActivosConRol(Role.VENTAS.name()).stream().map(Usuario::getId).toList();
+	}
+
+	@Override
+	@Transactional(readOnly = true)
+	public java.util.Optional<String> nombreDe(Long usuarioId) {
+		return usuarioId == null
+				? java.util.Optional.empty()
+				: usuarioRepository.findById(usuarioId).map(Usuario::getNombre);
+	}
 }

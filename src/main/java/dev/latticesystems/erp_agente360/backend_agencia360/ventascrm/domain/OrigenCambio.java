@@ -5,5 +5,7 @@ package dev.latticesystems.erp_agente360.backend_agencia360.ventascrm.domain;
  * por evento de dominio (CRM-1.1).
  */
 public enum OrigenCambio {
-	CRM, ERP
+	CRM, ERP,
+	/** La app CareCar (V2-M16.01: prospectos de estreno). */
+	APP
 }

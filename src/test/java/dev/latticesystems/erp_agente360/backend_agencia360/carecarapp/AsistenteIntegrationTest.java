@@ -262,7 +262,8 @@ class AsistenteIntegrationTest extends AbstractIntegrationTest {
 	}
 
 	private static String esperarFin(org.springframework.test.web.servlet.MvcResult resultado) throws Exception {
-		for (int intento = 0; intento < 100; intento++) {
+		// Hasta 30 s: en CI la primera pregunta también indexa el manual.
+		for (int intento = 0; intento < 300; intento++) {
 			String cuerpo = resultado.getResponse().getContentAsString(java.nio.charset.StandardCharsets.UTF_8);
 			if (cuerpo.contains("event:fin")) {
 				return cuerpo;

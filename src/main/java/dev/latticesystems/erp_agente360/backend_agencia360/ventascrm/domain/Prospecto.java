@@ -142,6 +142,24 @@ public class Prospecto extends Auditable {
 	}
 
 	/**
+	 * Prospecto que pide el cliente desde la app (V2-M16.01): mismas reglas que
+	 * {@link #registrar}, pero el historial queda con origen APP.
+	 */
+	public static Prospecto registrarDesdeApp(String nombre, String telefono, String correo, Long vendedorId,
+			Instant ahora) {
+		String nombreLimpio = limpiar(nombre);
+		String telefonoLimpio = normalizarTelefono(telefono);
+		String correoLimpio = normalizarCorreo(correo);
+		if (nombreLimpio == null || (telefonoLimpio == null && correoLimpio == null)) {
+			throw new IllegalArgumentException("El cliente de la app no tiene nombre o contacto");
+		}
+		Objects.requireNonNull(vendedorId, "vendedorId");
+		Prospecto prospecto = new Prospecto(nombreLimpio, telefonoLimpio, correoLimpio, vendedorId);
+		prospecto.moverA(Etapa.PRIMER_CONTACTO, OrigenCambio.APP, vendedorId, ahora);
+		return prospecto;
+	}
+
+	/**
 	 * Cambio de etapa que hace el vendedor desde el CRM (CRM-1.1):
 	 * <ul>
 	 * <li>Desde Primer contacto, Visita o Cotización puede ir a cualquiera de las

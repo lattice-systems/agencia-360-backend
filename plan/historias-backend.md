@@ -387,11 +387,11 @@ Detalle: [`carecar-mobile/plan/modulos/M16-estreno.md`](https://github.com/latti
 | ID | Historia | Criterios de aceptación | Dueño |
 | --- | --- | --- | --- |
 | V2-M16.01 | Como cliente quiero pedir una prueba de manejo | `POST /estreno/solicitudes` tipo `PRUEBA_MANEJO` con modelo y preferencia de día y franja · evento `SolicitudEstrenoCreada` → `ventascrm` crea el prospecto (etapa `PRIMER_CONTACTO`, historial origen `APP`) asignado al vendedor activo con menos prospectos abiertos · duplicado abierto del mismo modelo y tipo → 409 `ESTRENO_DUPLICADA` | Daniel |
-| V2-M16.02 | Como cliente quiero cotizar un auto nuevo con mensualidad estimada | `POST /estreno/cotizaciones/calculo` (no guarda) con modelo, enganche y plazo → precio, monto financiado, tasa, mensualidad y leyenda no vinculante · parámetros en `parametro_financiamiento` · sin precio → 409 `ESTRENO_SIN_PRECIO`, enganche bajo o plazo no permitido → 400 · la solicitud `COTIZACION` guarda la cotización y crea prospecto en etapa `COTIZACION` | Daniel |
+| V2-M16.02 | Como cliente quiero cotizar un auto nuevo con mensualidad estimada | `POST /estreno/cotizaciones/calculo` (no guarda) con modelo, enganche y plazo → precio, monto financiado, tasa, mensualidad y leyenda no vinculante · parámetros en `parametro_financiamiento` · sin precio → 409 `ESTRENO_SIN_PRECIO`, enganche bajo o plazo no permitido → 400 · la solicitud `COTIZACION` guarda la cotización y crea el prospecto igual que la prueba (en `PRIMER_CONTACTO`: el vendedor lo mueve, para no saltar las reglas de etapas del CRM) | Daniel |
 | V2-M16.03 | Como cliente quiero adjuntar mi estimación de toma a cuenta | `estimacionTomaCuentaId` opcional en la solicitud; debe ser del cliente (si no, 404) · queda en `solicitud_estreno` junto al `prospecto_id`, así el prospecto llega a ella | Daniel |
 | V2-M16.04 | Como cliente quiero ver el estado de mis solicitudes | `GET /estreno/solicitudes` paginado, más recientes primero · estado `RECIBIDA` (sin prospecto aún), `EN_ATENCION` (con nombre del vendedor) o `CERRADA` (prospecto cerrado) calculado de `ventascrm` | Daniel |
 
-#### Diseño de M16 (V2-M16.01 a V2-M16.04)
+#### Diseño de M16 (V2-M16.01 a V2-M16.04) — implementado
 
 - **Migración `V39`:**
   - `solicitud_estreno` (id, cliente_id → `cliente`, modelo_catalogo_id → `modelo_catalogo`, tipo `PRUEBA_MANEJO`|`COTIZACION`, preferencia_fecha date, preferencia_franja `MANANA`|`TARDE` (solo prueba), enganche numeric(12,2), plazo_meses int, mensualidad numeric(12,2), tasa_anual numeric(6,4) (solo cotización), estimacion_toma_cuenta_id → `estimacion_toma_cuenta` (nullable), prospecto_id → `prospecto` (nullable hasta que `ventascrm` lo crea), created_at). Índice (cliente_id, created_at desc).
