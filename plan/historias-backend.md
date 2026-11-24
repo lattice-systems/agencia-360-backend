@@ -386,10 +386,22 @@ Detalle: [`carecar-mobile/plan/modulos/M16-estreno.md`](https://github.com/latti
 
 | ID | Historia | Criterios de aceptación | Dueño |
 | --- | --- | --- | --- |
-| V2-M16.01 | Como cliente quiero pedir una prueba de manejo | Crea prospecto en backend vía evento de dominio · confirmación | Daniel |
-| V2-M16.02 | Como cliente quiero cotizar un auto nuevo con mensualidad estimada | Cálculo en backend · leyenda no vinculante | Daniel |
-| V2-M16.03 | Como cliente quiero adjuntar mi estimación de toma a cuenta | Se liga a la solicitud y al prospecto | Daniel |
-| V2-M16.04 | Como cliente quiero ver el estado de mis solicitudes | Estado y vendedor asignado | Daniel |
+| V2-M16.01 | Como cliente quiero pedir una prueba de manejo | `POST /estreno/solicitudes` tipo `PRUEBA_MANEJO` con modelo y preferencia de día y franja · evento `SolicitudEstrenoCreada` → `ventascrm` crea el prospecto (etapa `PRIMER_CONTACTO`, historial origen `APP`) asignado al vendedor activo con menos prospectos abiertos · duplicado abierto del mismo modelo y tipo → 409 `ESTRENO_DUPLICADA` | Daniel |
+| V2-M16.02 | Como cliente quiero cotizar un auto nuevo con mensualidad estimada | `POST /estreno/cotizaciones/calculo` (no guarda) con modelo, enganche y plazo → precio, monto financiado, tasa, mensualidad y leyenda no vinculante · parámetros en `parametro_financiamiento` · sin precio → 409 `ESTRENO_SIN_PRECIO`, enganche bajo o plazo no permitido → 400 · la solicitud `COTIZACION` guarda la cotización y crea prospecto en etapa `COTIZACION` | Daniel |
+| V2-M16.03 | Como cliente quiero adjuntar mi estimación de toma a cuenta | `estimacionTomaCuentaId` opcional en la solicitud; debe ser del cliente (si no, 404) · queda en `solicitud_estreno` junto al `prospecto_id`, así el prospecto llega a ella | Daniel |
+| V2-M16.04 | Como cliente quiero ver el estado de mis solicitudes | `GET /estreno/solicitudes` paginado, más recientes primero · estado `RECIBIDA` (sin prospecto aún), `EN_ATENCION` (con nombre del vendedor) o `CERRADA` (prospecto cerrado) calculado de `ventascrm` | Daniel |
+
+#### Diseño de M16 (V2-M16.01 a V2-M16.04)
+
+- **Migración `V39`:**
+  - `solicitud_estreno` (id, cliente_id → `cliente`, modelo_catalogo_id → `modelo_catalogo`, tipo `PRUEBA_MANEJO`|`COTIZACION`, preferencia_fecha date, preferencia_franja `MANANA`|`TARDE` (solo prueba), enganche numeric(12,2), plazo_meses int, mensualidad numeric(12,2), tasa_anual numeric(6,4) (solo cotización), estimacion_toma_cuenta_id → `estimacion_toma_cuenta` (nullable), prospecto_id → `prospecto` (nullable hasta que `ventascrm` lo crea), created_at). Índice (cliente_id, created_at desc).
+  - `parametro_financiamiento` (una fila): tasa_anual 0.1499, enganche_minimo_pct 0.10, plazos `12,24,36,48,60`, updated_at. Se edita después desde el CRM (congelado): por ahora solo por migración.
+  - `historial_etapa.origen` acepta `APP` además de `CRM` y `ERP` (se amplía el check; nada se quita, R1).
+- **Cálculo:** pago fijo (sistema francés) `M = P·r / (1 − (1 + r)^−n)` con `r = tasa_anual / 12`, `P = precio_desde − enganche`, redondeado a centavos. Leyenda fija: «Estimación no vinculante. No incluye seguro, comisión por apertura ni IVA de intereses; tu asesor te da la cotización formal.»
+- **Eventos (Spring Modulith):** `carecarapp` publica `SolicitudEstrenoCreada(solicitudId, clienteId, modeloCatalogoId, tipo)` en `shared/eventos`; `ventascrm` la escucha con `@ApplicationModuleListener`, crea el prospecto (nombre, teléfono y correo del cliente) asignado al vendedor `VENTAS` activo con menos prospectos abiertos (empate: menor id) y publica `ProspectoDeEstrenoCreado(solicitudId, prospectoId)`; `carecarapp` guarda el `prospecto_id`. Si no hay vendedores activos, no crea nada y la solicitud sigue `RECIBIDA`; se reintenta al reiniciar (registro de publicaciones de Modulith).
+- **Estado:** `carecarapp` lo calcula con la interfaz pública `ventascrm.ConsultaProspectos` (etapa y nombre del vendedor), sin cruzar tablas.
+- **Contrato 2.10.0:** `POST /estreno/cotizaciones/calculo`, `POST /estreno/solicitudes`, `GET /estreno/solicitudes`. Errores: 400 `DATOS_INVALIDOS`, 404 modelo o estimación ajena, 409 `ESTRENO_SIN_PRECIO` y `ESTRENO_DUPLICADA`.
+- **Fuera de alcance:** sucursal (llega con V2-M27.02); el CRM web no cambia (R9): ya lista los prospectos y su historial muestra el origen `APP`.
 
 ### M17 · Recolección y entrega a domicilio — H5 — módulo `servicio`
 
