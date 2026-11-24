@@ -109,4 +109,22 @@ public class RecoleccionService {
 				.stream().map(TrasladoApp::de).toList();
 		return new RecoleccionApp(direccion.getId(), costo.multiply(BigDecimal.valueOf(2)), creados);
 	}
+
+	/**
+	 * La cita se canceló: sus traslados programados se cancelan en la misma
+	 * transacción y los que ya salieron no se tocan (V2-M17.05).
+	 */
+	@Transactional
+	public void cancelarDeCita(Long citaId) {
+		traslados.findByCitaIdOrderByIdAsc(citaId).forEach(Traslado::cancelarPorCita);
+	}
+
+	/**
+	 * La cita se movió de día: sus traslados programados toman la fecha nueva con
+	 * la misma ventana y los que ya salieron no se tocan (V2-M17.05).
+	 */
+	@Transactional
+	public void reprogramarDeCita(Long citaId, LocalDate nuevaFecha) {
+		traslados.findByCitaIdOrderByIdAsc(citaId).forEach(traslado -> traslado.reprogramar(nuevaFecha));
+	}
 }
