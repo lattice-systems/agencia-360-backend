@@ -103,8 +103,20 @@ public class KilometrajeService {
 	 *             si el km no está entre 1 y 2 000 000 (400)
 	 */
 	public LecturaKm registrar(VehiculoDeCliente vehiculo, int km) {
+		return registrar(vehiculo, km, null);
+	}
+
+	/**
+	 * Igual que {@link #registrar(VehiculoDeCliente, int)} y deja la clave del
+	 * archivo con la foto que prueba la lectura.
+	 *
+	 * @param fotoClave
+	 *            clave de {@code AlmacenArchivos}; {@code null} si no hay foto
+	 */
+	public LecturaKm registrar(VehiculoDeCliente vehiculo, int km, String fotoClave) {
 		LecturaKm nueva = LecturaKm.delCliente(vehiculo.id(), km, reloj.instant());
 		exigirNoMenorAlConocido(vehiculo, km, null);
+		nueva.adjuntarFoto(fotoClave);
 		return lecturas.saveAndFlush(nueva);
 	}
 
