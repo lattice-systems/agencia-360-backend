@@ -36,6 +36,7 @@ import org.springframework.test.web.servlet.ResultActions;
  * M16 Estreno de punta a punta: cálculo, solicitudes, prospecto en el CRM y
  * estado.
  */
+@AutoConfigureMockMvc
 class EstrenoIntegrationTest extends AbstractIntegrationTest {
 
 	@Autowired
