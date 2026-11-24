@@ -295,7 +295,7 @@ Detalle: [`carecar-mobile/plan/modulos/M11-asistencia-en-camino.md`](https://git
 
 Vive en `carecarapp` (la tabla es de la ficha; el módulo `asistencia` nuevo queda para V2-M11.04 cuando haya estados y eventos).
 
-**Tabla `solicitud_asistencia`** (migración V26, nombres de la ficha): `id`, `cliente_id` (FK `cliente`), `vehiculo_cliente_id` (FK `vehiculo_cliente`), `tipo` (`LLANTA`, `BATERIA`, `CHOQUE`, `SIN_GASOLINA`, `OTRO`), `lat` y `lng` (`numeric(9,6)`, nulos juntos), `comentario` (≤ 500), `estado` (`RECIBIDA`, `EN_CAMINO`, `ATENDIDA`, `CANCELADA`), `creada_en`. Índice único parcial por `cliente_id` donde `estado in ('RECIBIDA','EN_CAMINO')`: una sola abierta por cliente, también bajo concurrencia.
+**Tabla `solicitud_asistencia`** (migración V35, nombres de la ficha): `id`, `cliente_id` (FK `cliente`), `vehiculo_cliente_id` (FK `vehiculo_cliente`), `tipo` (`LLANTA`, `BATERIA`, `CHOQUE`, `SIN_GASOLINA`, `OTRO`), `lat` y `lng` (`numeric(9,6)`, nulos juntos), `comentario` (≤ 500), `estado` (`RECIBIDA`, `EN_CAMINO`, `ATENDIDA`, `CANCELADA`), `creada_en`. Índice único parcial por `cliente_id` donde `estado in ('RECIBIDA','EN_CAMINO')`: una sola abierta por cliente, también bajo concurrencia.
 
 **Endpoints** (rol `CLIENTE_CARECAR`; en JSON `tipo` y `estado` viajan en minúsculas):
 
@@ -376,7 +376,7 @@ Detalle: [`carecar-mobile/plan/modulos/M17-recoleccion-y-entrega.md`](https://gi
 
 #### Diseño técnico — V2-M17.01 y V2-M17.02 (parte B de Juan Pablo)
 
-**Tablas** (migraciones V27 y V28, nombres de la ficha):
+**Tablas** (migraciones V36 y V37, nombres de la ficha):
 
 - `direccion_cliente`: `id`, `cliente_id` (FK), `alias` (≤ 40), `calle`, `colonia`, `cp` (5 dígitos), `ciudad`, `lat`, `lng` (obligatorias: el pin en el mapa es lo que valida la cobertura), más `created_at`/`updated_at`.
 - `traslado`: `id`, `cita_id` (FK `cita`), `direccion_cliente_id` (FK), `tipo` (`RECOGER`, `ENTREGAR`), `chofer_id` (nulo hasta que se asigne; sin FK mientras el ERP siga congelado), `estado` (`PROGRAMADO` al nacer; el resto lo agrega V2-M17.03), `costo`, más `fecha`, `ventana_inicio`, `ventana_fin` y `created_at`/`updated_at`. Un traslado de cada tipo por cita (único `cita_id, tipo`).
