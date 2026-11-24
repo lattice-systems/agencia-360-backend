@@ -66,7 +66,7 @@ public class RecoleccionService {
 		if (fecha.isBefore(hoy) || fecha.isAfter(hoy.plusDays(horario.diasDeAnticipacion()))) {
 			throw new IllegalArgumentException("La fecha está fuera del plazo para agendar");
 		}
-		if (!horario.abre(fecha)) {
+		if (horario.franjasPorDia().getOrDefault(fecha.getDayOfWeek(), java.util.List.of()).isEmpty()) {
 			throw new IllegalArgumentException("El taller no abre ese día");
 		}
 		DireccionCliente direccion = cubierta(clienteId, direccionId);
