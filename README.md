@@ -110,7 +110,7 @@ src/main/java/dev/latticesystems/erp_agente360/backend_agencia360/
 ├── clientes/        # Clientes de la agencia y sus vehículos — CRM-1.5
 ├── facturacion/     # Facturación                       — ERP HU 1.3 (emisión con folio interno y PDF)
 ├── inventario/      # Vehículos, refacciones y recepciones — ERP HU 2.0 · 2.1
-├── servicio/        # Expediente del vehículo y sus servicios — ERP HU 3.0
+├── servicio/        # Expediente, órdenes y taller en vivo — ERP HU 3.0 · V2-M04
 ├── refacciones/     # Ventas directas de refacciones     — ERP HU 3.2
 ├── caja/            # Caja (pagos, cobros, cancelaciones) — ERP HU 4.1
 ├── contabilidad/    # Balance de ingresos y egresos       — ERP HU 4.2
@@ -154,6 +154,8 @@ Todos van bajo `/api/v1` y, salvo el login, piden el token en `Authorization: Be
 | `clientes` | `GET /clientes?buscar=`, `GET /clientes/{id}`, `POST /clientes`, `POST /clientes/{id}/vehiculos` | Gerente de marketing |
 | `servicio` | `GET /expedientes?vin=`, `GET /expedientes/{vehiculoId}`, `GET /expedientes/{vehiculoId}/servicios/{servicioId}` | Servicio y Administrador |
 | `servicio` | `PATCH /expedientes/{vehiculoId}` (placas y kilometraje), `POST /expedientes/{vehiculoId}/servicios` | Servicio |
+| `servicio` | `POST /taller/ordenes` (abre la orden; 409 `ORDEN_ABIERTA`), `POST /taller/ordenes/{id}/etapas` (pasa de etapa, nunca regresa; 409 `ORDEN_CERRADA`), `POST /taller/ordenes/{id}/inspeccion`, `POST /taller/ordenes/{id}/evidencias` (multipart: foto JPEG, PNG o WebP o video MP4, `puntoInspeccionId` opcional), `POST /taller/ordenes/{id}/adicionales` (V2-M04, mientras el ERP no tenga pantalla) | Servicio |
+| `servicio` | `GET /taller/ordenes/{id}` | Servicio y Administrador |
 | `carecarapp` | `GET` y `POST /clientes/{id}/cuenta-app`, `POST /clientes/{id}/cuenta-app/desactivar` y `/activar` | Gerente de marketing |
 | `carecarapp` | `POST /app/auth/login`, `/refrescar`, `/cerrar-sesion`, `/recuperar-contrasena`, `/restablecer-contrasena` | Clientes de la app (sin token) |
 | `carecarapp` | `POST /app/auth/cambiar-contrasena`, `GET /app/perfil` | Clientes de la app (rol `CLIENTE_CARECAR`) |
@@ -170,7 +172,8 @@ Todos van bajo `/api/v1` y, salvo el login, piden el token en `Authorization: Be
 | `carecarapp` | `GET /app/manuales/{id}/archivo?expira=&firma=` (URL temporal del PDF, vence a los 15 minutos) | Clientes de la app (sin token: la URL va firmada) |
 | `carecarapp` | `POST /manuales` (multipart: `marca`, `modelo`, `anio`, `archivo`; si ya hay uno, lo reemplaza) | Gerente de marketing |
 | `carecarapp` | `GET /app/eventos` (Server-Sent Events: evento `orden` cuando cambia una orden de servicio del cliente) | Clientes de la app (rol `CLIENTE_CARECAR`) |
-| `archivos` | `GET /archivos/{carpeta}/{id}?expira=&firma=` (URL temporal de un archivo, vence a los 15 minutos) | Cualquiera con la URL firmada (sin token) |
+| `carecarapp` | `GET /app/ordenes/activas` (tarjeta de Inicio: órdenes sin entregar), `GET /app/ordenes/{id}` (etapas con su hora, entrega estimada, inspección con fotos y videos, trabajos adicionales y totales), `POST /app/ordenes/{id}/adicionales/{aid}/respuesta` (aprobar o rechazar con la firma en PNG; 409 `ADICIONAL_YA_RESPONDIDO` u `ORDEN_CERRADA`) | Clientes de la app (rol `CLIENTE_CARECAR`) |
+| `archivos` | `GET /archivos/{carpeta}/{id}?expira=&firma=` (URL temporal de un archivo: imagen JPEG, PNG o WebP, PDF o video MP4; vence a los 15 minutos) | Cualquiera con la URL firmada (sin token) |
 | `shared` | WebSocket STOMP en `/ws` (fuera de `/api/v1`): el `CONNECT` lleva `Authorization: Bearer <token>`; solo se suscribe a `/user/queue/...` y solo manda a `/app/...` | Personal y clientes con token |
 
 Reglas del inventario (decisiones del PO del 13 de octubre):
