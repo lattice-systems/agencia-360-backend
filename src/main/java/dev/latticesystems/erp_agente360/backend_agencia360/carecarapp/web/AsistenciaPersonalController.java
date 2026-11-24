@@ -33,7 +33,8 @@ public class AsistenciaPersonalController {
 			+ "atendida o cancelada. Avisa en vivo al cliente dueño (evento asistencia.estado). Al cerrarse se borra "
 			+ "la ubicación. Responde 400 si el estado no existe, 404 si la solicitud no existe y 409 con "
 			+ "TRANSICION_INVALIDA si el paso no está permitido.")
-	public SolicitudAsistenciaApp cambiarEstado(@PathVariable Long id, @Valid @RequestBody CambioEstadoRequest request) {
+	public SolicitudAsistenciaApp cambiarEstado(@PathVariable Long id,
+			@Valid @RequestBody CambioEstadoRequest request) {
 		return asistenciaAppService.cambiarEstado(id, request.estado());
 	}
 }
