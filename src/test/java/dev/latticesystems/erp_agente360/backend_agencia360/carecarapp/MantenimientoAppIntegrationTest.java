@@ -1,6 +1,7 @@
 package dev.latticesystems.erp_agente360.backend_agencia360.carecarapp;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.hamcrest.Matchers.startsWith;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -204,9 +205,8 @@ class MantenimientoAppIntegrationTest extends AbstractIntegrationTest {
 		String json = lecturaConFoto(tokenDeAna, marchDeAna, "5200",
 				new MockMultipartFile("foto", "tablero.jpg", "image/jpeg", jpeg)).andExpect(status().isCreated())
 				.andExpect(jsonPath("$.km").value(5200)).andExpect(jsonPath("$.fuente").value("cliente"))
-				.andExpect(
-						jsonPath("$.fotoUrl").value(org.hamcrest.Matchers.startsWith("/api/v1/archivos/lecturas-km/")))
-				.andReturn().getResponse().getContentAsString();
+				.andExpect(jsonPath("$.fotoUrl").value(startsWith("/api/v1/archivos/lecturas-km/"))).andReturn()
+				.getResponse().getContentAsString();
 		String url = com.jayway.jsonpath.JsonPath.read(json, "$.fotoUrl");
 		assertThat(url).contains("expira=").contains("firma=");
 
