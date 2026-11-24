@@ -252,6 +252,21 @@ Detalle: [`carecar-mobile/plan/modulos/M05-mantenimiento-inteligente.md`](https:
 | V2-M05.05 | Como cliente quiero un recordatorio cuando se acerque mi servicio | Push a 1 000 km o 2 semanas antes (configurable) | Juan Pablo |
 | V2-M05.06 | Como cliente quiero ver qué incluye cada servicio y su precio estimado | Conceptos y precio con leyenda de estimado | Juan Pablo |
 
+#### Diseño técnico — V2-M05.01, M05.02, M05.03 y M05.06 (parte B de Juan Pablo)
+
+Vive en `carecarapp` (la historia lo ubica en `servicio`, pero solo consume su API pública `HistorialDeServicios`; evita un módulo más mientras el ERP sigue congelado). Migraciones `V38` (tablas) y `V39` (planes de ejemplo).
+
+- `plan_mantenimiento`: `id`, `modelo` (Tipo, p. ej. March; sin distinguir mayúsculas), `anio_desde`, `anio_hasta`, `km`, `meses`, `nombre`, `precio_estimado`. `concepto_mantenimiento`: `id`, `plan_mantenimiento_id` (FK), `concepto`. Como en el resto del repo, `modelo` es el Tipo y el año del vehículo cae entre `anio_desde` y `anio_hasta`.
+- `lectura_km`: `id`, `vehiculo_cliente_id` (FK), `km`, `fuente` (`TALLER`, `CLIENTE`), `foto_url` (nula; la foto opcional se sube con V2-T05.09), `registrada_en`. El km oficial del taller no se sobrescribe: las lecturas del cliente son filas aparte.
+- **Km oficial** = el mayor entre `vehiculo_cliente.kilometraje`, el km de las órdenes cerradas y las lecturas `TALLER`. **kmActual** = el mayor entre el oficial y la última lectura del cliente; `kmFuente` dice cuál ganó (`taller` si empatan) y `kmActualizadoEn` su fecha (nula si viene solo del vehículo).
+- `POST /vehiculos/{id}/lecturas-km` `{km}` → 201 `LecturaKm`. 422 `KM_INVALIDO` si `km` es menor al oficial o a la última lectura del cliente (igual sí se acepta); 400 si falta o no es mayor a 0.
+- `GET /vehiculos/{id}/mantenimiento` → 200 `PlanMantenimiento`. Sin plan para el modelo/año: `servicios` vacío y `proximo` nulo.
+- **Hecho** (cruce con `orden_servicio`, V2-M02.05): un servicio del plan se marca `hecho` si existe una orden **cerrada** (`TERMINADO` o `ENTREGADO`) con kilometraje a ±1 500 km del `km` del plan; `hechoEn` es la fecha de esa orden. **vencido**: no hecho y `kmActual` ya pasó su `km`. **proximo**: el no hecho de menor `km` que aún no se alcanza. El resto, `pendiente`.
+- **Promedio diario**: con las lecturas del cliente más el km oficial fechado (órdenes y lecturas del taller), (último − primero) / días entre ambos; nulo con menos de dos puntos o sin días de diferencia.
+- **Próximo servicio**: por km, `hoy + faltanKm / promedio` (solo con promedio); por tiempo, fecha base (la del último servicio hecho; si no hay, hoy) más los meses del plan menos los del último hecho. Gana la fecha más cercana y `motivo` es `km` o `tiempo`.
+- Errores: 401, 403, 404 (vehículo ajeno), 400, 422 `KM_INVALIDO`. Los precios son una estimación no vinculante.
+- Fuera de esta entrega: M05.05 (recordatorio push) espera a M06.
+
 ### M06 · Notificaciones y bandeja — H3 — módulo `notificaciones (nuevo)`
 
 Detalle: [`carecar-mobile/plan/modulos/M06-notificaciones.md`](https://github.com/lattice-systems/carecar-mobile/blob/main/plan/modulos/M06-notificaciones.md)
@@ -444,6 +459,18 @@ Detalle: [`carecar-mobile/plan/modulos/M18-bitacora-conductor.md`](https://githu
 | --- | --- | --- | --- |
 | V2-M18.01 | Como cliente quiero registrar una carga de gasolina para llevar el control de lo que gasto | Tabla `gasto_vehiculo` · `POST /vehiculos/{id}/gastos` tipo gasolina con litros, monto, km y fecha · 422 si el km es menor a la última `lectura_km` · crea una `lectura_km` de fuente cliente · `GET` paginado por mes | Juan Pablo |
 | V2-M18.04 | Como cliente quiero registrar otros gastos para conocer el costo total de mi auto | Mismo `POST /vehiculos/{id}/gastos` con tipo estacionamiento, casetas, lavado u otro (descripción obligatoria en otro) · `PUT/DELETE /gastos/{id}` solo del dueño | Juan Pablo |
+
+#### Diseño técnico — V2-M18.01 y V2-M18.04 (parte B de Juan Pablo)
+
+Todo vive en `carecarapp` (no cruza módulos: el kilometraje oficial se lee por `VehiculosDeClientes` y `HistorialDeServicios`). Migración `V38` (junto con M05).
+
+- `gasto_vehiculo`: `id`, `vehiculo_cliente_id` (FK), `tipo` (`GASOLINA`, `ESTACIONAMIENTO`, `CASETAS`, `LAVADO`, `OTRO`), `monto` (> 0), `litros` (nulo salvo gasolina), `km` (nulo salvo gasolina; opcional en los demás), `fecha`, `ticket_url` (de la ficha; sin uso hasta que haya carga de tickets), `descripcion` (≤ 200; se agrega a lo que pide la ficha porque el tipo `otro` la exige), `lectura_km_id` (FK nula: la lectura que creó la carga) y `created_at`/`updated_at`.
+- Reglas: gasolina exige `litros > 0` y `km`; `otro` exige `descripcion`; la fecha no puede ser futura (hora de México); todo lo demás es 400 `DATOS_INVALIDOS`.
+- `POST /vehiculos/{id}/gastos` → 201 `Gasto`. Una carga de gasolina valida el km con la misma regla que `POST /vehiculos/{id}/lecturas-km` (422 `KM_INVALIDO` si es menor al oficial o a la última lectura del cliente) y crea una `lectura_km` de fuente `CLIENTE`.
+- `GET /vehiculos/{id}/gastos?mes=YYYY-MM&pagina=&tamano=` → `PaginaGastos` (`contenido`, `pagina`, `totalPaginas`), más recientes primero (fecha e id descendentes); sin `mes` devuelve todos. Mes mal formado: 400.
+- `PUT /gastos/{id}` reemplaza el gasto (mismas reglas). Si es gasolina, actualiza o crea su lectura; la validación del km ignora la lectura propia. `DELETE /gastos/{id}` → 204 y **conserva** la lectura (el km ya ocurrió). Ajeno o inexistente: 404.
+- Las estadísticas (km/l, $/km, gasto por mes) las calcula la app con estos datos.
+- Errores: 400 `DATOS_INVALIDOS`, 401, 403, 404, 422 `KM_INVALIDO` (código nuevo en `CodigosError` y en el enum de `Problema`).
 
 ### M19 · Cuentas familiares y conductores autorizados — H6 — módulo `carecarapp`
 
