@@ -1,7 +1,10 @@
 package dev.latticesystems.erp_agente360.backend_agencia360.carecarapp;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -33,6 +36,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
+import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
@@ -189,6 +193,47 @@ class MantenimientoAppIntegrationTest extends AbstractIntegrationTest {
 	}
 
 	@Test
+	void unaLecturaSinFotoNoTraeFotoUrl() throws Exception {
+		registrarLectura(tokenDeAna, marchDeAna, "{\"km\":5000}").andExpect(status().isCreated())
+				.andExpect(jsonPath("$.fotoUrl").doesNotExist());
+	}
+
+	@Test
+	void unaLecturaConFotoDevuelveUnaUrlFirmadaQueSirveLaImagen() throws Exception {
+		byte[] jpeg = {(byte) 0xFF, (byte) 0xD8, (byte) 0xFF, 1, 2, 3};
+		String json = lecturaConFoto(tokenDeAna, marchDeAna, "5200",
+				new MockMultipartFile("foto", "tablero.jpg", "image/jpeg", jpeg)).andExpect(status().isCreated())
+				.andExpect(jsonPath("$.km").value(5200)).andExpect(jsonPath("$.fuente").value("cliente"))
+				.andExpect(
+						jsonPath("$.fotoUrl").value(org.hamcrest.Matchers.startsWith("/api/v1/archivos/lecturas-km/")))
+				.andReturn().getResponse().getContentAsString();
+		String url = com.jayway.jsonpath.JsonPath.read(json, "$.fotoUrl");
+		assertThat(url).contains("expira=").contains("firma=");
+
+		mockMvc.perform(get(url)).andExpect(status().isOk()).andExpect(content().bytes(jpeg));
+	}
+
+	@Test
+	void sinFotoElMultipartTambienRegistraLaLectura() throws Exception {
+		lecturaConFoto(tokenDeAna, marchDeAna, "5300", null).andExpect(status().isCreated())
+				.andExpect(jsonPath("$.km").value(5300)).andExpect(jsonPath("$.fotoUrl").doesNotExist());
+	}
+
+	@Test
+	void unKmInvalidoNoGuardaLaFotoYUnaFotoQueNoEsImagenResponde400() throws Exception {
+		MockMultipartFile imagen = new MockMultipartFile("foto", "t.png", "image/png", new byte[]{1, 2});
+		lecturaConFoto(tokenDeAna, marchDeAna, "0", imagen).andExpect(status().isBadRequest());
+		lecturaConFoto(tokenDeAna, marchDeAna, "abc", imagen).andExpect(status().isBadRequest());
+		lecturaConFoto(tokenDeAna, marchDeAna, "5000",
+				new MockMultipartFile("foto", "t.pdf", "application/pdf", new byte[]{1, 2}))
+				.andExpect(status().isBadRequest()).andExpect(jsonPath("$.codigo").value("DATOS_INVALIDOS"));
+		lecturaConFoto(tokenDeAna, vehiculoDeBruno, "5000", imagen).andExpect(status().isNotFound());
+		registrarLectura(tokenDeAna, marchDeAna, "{\"km\":9000}").andExpect(status().isCreated());
+		lecturaConFoto(tokenDeAna, marchDeAna, "8000", imagen).andExpect(status().isUnprocessableEntity())
+				.andExpect(jsonPath("$.codigo").value("KM_INVALIDO"));
+	}
+
+	@Test
 	void sinDiasDeDiferenciaNoHayPromedio() throws Exception {
 		registrarServicio(marchDeAna, hoy(), 10200);
 		registrarLectura(tokenDeAna, marchDeAna, "{\"km\":10400}").andExpect(status().isCreated());
@@ -205,6 +250,16 @@ class MantenimientoAppIntegrationTest extends AbstractIntegrationTest {
 		return mockMvc.perform(post("/api/v1/app/vehiculos/{id}/lecturas-km", vehiculoId)
 				.header(HttpHeaders.AUTHORIZATION, "Bearer " + token).contentType(MediaType.APPLICATION_JSON)
 				.content(cuerpo));
+	}
+
+	private ResultActions lecturaConFoto(String token, Long vehiculoId, String km, MockMultipartFile foto)
+			throws Exception {
+		var peticion = multipart("/api/v1/app/vehiculos/{id}/lecturas-km", vehiculoId);
+		peticion.param("km", km);
+		if (foto != null) {
+			peticion.file(foto);
+		}
+		return mockMvc.perform(peticion.header(HttpHeaders.AUTHORIZATION, "Bearer " + token));
 	}
 
 	private Long asignar(Long clienteId, String vin, String modelo) {
