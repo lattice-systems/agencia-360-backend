@@ -12,6 +12,7 @@ import com.jayway.jsonpath.JsonPath;
 import dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.application.CuentasAppService;
 import dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.application.EnvioCorreos;
 import dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.infrastructure.CitaRepository;
+import dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.infrastructure.FranjaHorarioRepository;
 import dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.infrastructure.TrasladoRepository;
 import dev.latticesystems.erp_agente360.backend_agencia360.clientes.application.NuevoCliente;
 import dev.latticesystems.erp_agente360.backend_agencia360.clientes.application.RegistroClientesService;
@@ -85,6 +86,9 @@ class RecoleccionAppIntegrationTest extends AbstractIntegrationTest {
 	private String tokenDeBruno;
 	private Long vehiculoDeAna;
 	private LocalDate diaHabil;
+
+	@Autowired
+	private FranjaHorarioRepository franjaHorarioRepository;
 
 	@BeforeEach
 	void registrarClientes() {
@@ -184,8 +188,8 @@ class RecoleccionAppIntegrationTest extends AbstractIntegrationTest {
 	@Test
 	void agendarConRecoleccionCreaLaCitaYLosDosTrasladosJuntos() throws Exception {
 		long id = crearDireccion(tokenDeAna, DENTRO);
-		String respuesta = agendar(tokenDeAna, 1, "{\"direccionId\": " + id + "}").andExpect(status().isCreated())
-				.andExpect(jsonPath("$.recoleccion.direccionId").value(id))
+		String respuesta = agendar(tokenDeAna, primeraFranja(), "{\"direccionId\": " + id + "}")
+				.andExpect(status().isCreated()).andExpect(jsonPath("$.recoleccion.direccionId").value(id))
 				.andExpect(jsonPath("$.recoleccion.costoTotal").isNumber())
 				.andExpect(jsonPath("$.recoleccion.traslados.length()").value(2))
 				.andExpect(jsonPath("$.recoleccion.traslados[0].tipo").value("recoger"))
@@ -204,7 +208,7 @@ class RecoleccionAppIntegrationTest extends AbstractIntegrationTest {
 
 	@Test
 	void agendarSinRecoleccionNoCreaTraslados() throws Exception {
-		agendar(tokenDeAna, 1, null).andExpect(status().isCreated())
+		agendar(tokenDeAna, primeraFranja(), null).andExpect(status().isCreated())
 				.andExpect(jsonPath("$.recoleccion").doesNotExist());
 		assertThat(trasladoRepository.count()).isZero();
 	}
@@ -213,7 +217,7 @@ class RecoleccionAppIntegrationTest extends AbstractIntegrationTest {
 	void unaDireccionAjenaResponde404SinDejarLaCita() throws Exception {
 		long deBruno = crearDireccion(tokenDeBruno, DENTRO);
 		long citasAntes = citaRepository.count();
-		agendar(tokenDeAna, 1, "{\"direccionId\": " + deBruno + "}").andExpect(status().isNotFound());
+		agendar(tokenDeAna, primeraFranja(), "{\"direccionId\": " + deBruno + "}").andExpect(status().isNotFound());
 		assertThat(citaRepository.count()).isEqualTo(citasAntes);
 		assertThat(trasladoRepository.count()).isZero();
 	}
@@ -226,7 +230,8 @@ class RecoleccionAppIntegrationTest extends AbstractIntegrationTest {
 		jdbcTemplate.update("update direccion_cliente set lat = 19.4326, lng = -99.1332 where id = ?", id);
 		entityManager.clear();
 		long citasAntes = citaRepository.count();
-		agendar(tokenDeAna, 1, "{\"direccionId\": " + id + "}").andExpect(status().isUnprocessableEntity())
+		agendar(tokenDeAna, primeraFranja(), "{\"direccionId\": " + id + "}")
+				.andExpect(status().isUnprocessableEntity())
 				.andExpect(jsonPath("$.codigo").value("FUERA_DE_COBERTURA"));
 		assertThat(citaRepository.count()).isEqualTo(citasAntes);
 	}
@@ -242,7 +247,7 @@ class RecoleccionAppIntegrationTest extends AbstractIntegrationTest {
 				.param("fecha", fecha.toString()).header(HttpHeaders.AUTHORIZATION, "Bearer " + token));
 	}
 
-	private ResultActions agendar(String token, long franjaId, String recoleccion) throws Exception {
+	private ResultActions agendar(String token, Long franjaId, String recoleccion) throws Exception {
 		String cuerpo = "{\"vehiculoId\": %d, \"franjaId\": %d, \"fecha\": \"%s\"%s}".formatted(vehiculoDeAna, franjaId,
 				diaHabil, recoleccion == null ? "" : ", \"recoleccion\": " + recoleccion);
 		return mandar(post("/api/v1/app/citas"), token, cuerpo);
@@ -255,5 +260,10 @@ class RecoleccionAppIntegrationTest extends AbstractIntegrationTest {
 			peticion.contentType(MediaType.APPLICATION_JSON).content(cuerpo);
 		}
 		return mockMvc.perform(peticion);
+	}
+
+	private Long primeraFranja() {
+		return franjaHorarioRepository.findByActivaTrueOrderByDiaSemanaAscHoraInicioAsc().stream()
+				.filter(franja -> franja.esDe(diaHabil)).findFirst().orElseThrow().getId();
 	}
 }
