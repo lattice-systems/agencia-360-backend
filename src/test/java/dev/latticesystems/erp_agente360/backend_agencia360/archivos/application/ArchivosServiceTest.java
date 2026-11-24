@@ -39,6 +39,16 @@ class ArchivosServiceTest {
 	}
 
 	@Test
+	void guardaLosVideosMp4DeLasEvidencias() {
+		byte[] video = {0, 0, 0, 24, 'f', 't', 'y', 'p'};
+
+		ArchivoGuardado guardado = service.guardar("evidencias", "video/mp4", video);
+
+		assertThat(guardado.tipoContenido()).isEqualTo("video/mp4");
+		verify(deposito).guardar(guardado.clave(), "video/mp4", video);
+	}
+
+	@Test
 	void rechazaCarpetasTiposYTamanosNoValidos() {
 		assertThatThrownBy(() -> service.guardar("../etc", "image/jpeg", FOTO))
 				.isInstanceOf(IllegalArgumentException.class);
