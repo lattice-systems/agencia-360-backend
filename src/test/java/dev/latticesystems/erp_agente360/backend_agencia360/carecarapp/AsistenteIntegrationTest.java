@@ -173,6 +173,7 @@ class AsistenteIntegrationTest extends AbstractIntegrationTest {
 		String unico = UUID.randomUUID().toString().replace("-", "").substring(0, 8);
 		Long otro = registroClientesService
 				.registrar(new NuevoCliente("Otro Cliente", "otro-" + unico + "@correo.com", null, null)).id();
+		cuentasAppService.abrir(otro, "Temporal123");
 		String tokenAjeno = jwtService.generateToken(otro, "otro-" + unico + "@correo.com",
 				List.of(Role.CLIENTE_CARECAR));
 
