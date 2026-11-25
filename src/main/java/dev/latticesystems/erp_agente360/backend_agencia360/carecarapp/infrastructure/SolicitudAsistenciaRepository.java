@@ -11,4 +11,7 @@ public interface SolicitudAsistenciaRepository extends JpaRepository<SolicitudAs
 	/** La solicitud del cliente que sigue en alguno de los estados dados. */
 	Optional<SolicitudAsistencia> findFirstByClienteIdAndEstadoInOrderByIdDesc(Long clienteId,
 			Collection<EstadoAsistencia> estados);
+
+	/** La solicitud, solo si es del cliente. */
+	Optional<SolicitudAsistencia> findByIdAndClienteId(Long id, Long clienteId);
 }

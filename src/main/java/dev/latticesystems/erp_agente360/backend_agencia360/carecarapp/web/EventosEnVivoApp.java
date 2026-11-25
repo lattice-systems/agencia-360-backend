@@ -1,5 +1,6 @@
 package dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.web;
 
+import dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.application.AvisoAlCliente;
 import dev.latticesystems.erp_agente360.backend_agencia360.servicio.OrdenServicioCambiada;
 import java.io.IOException;
 import java.time.Duration;
@@ -42,6 +43,16 @@ class EventosEnVivoApp {
 				cambio.estatus().name());
 		conexiones.getOrDefault(cambio.clienteId(), Set.of()).forEach(conexion -> enviar(cambio.clienteId(), conexion,
 				SseEmitter.event().name(EVENTO_ORDEN).data(datos, MediaType.APPLICATION_JSON)));
+	}
+
+	/**
+	 * Manda cualquier aviso del módulo (asistencia, traslados) solo a las
+	 * conexiones del cliente dueño, con el nombre y los datos que trae.
+	 */
+	@TransactionalEventListener(fallbackExecution = true)
+	void alAvisarAlCliente(AvisoAlCliente aviso) {
+		conexiones.getOrDefault(aviso.clienteId(), Set.of()).forEach(conexion -> enviar(aviso.clienteId(), conexion,
+				SseEmitter.event().name(aviso.evento()).data(aviso.datos(), MediaType.APPLICATION_JSON)));
 	}
 
 	@Scheduled(fixedRate = 25_000)
