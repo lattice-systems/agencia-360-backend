@@ -215,6 +215,7 @@ public class AgendaAppService {
 		citaRepository.bloquearFranja(claveDeBloqueo(nuevoDia, franjaId));
 		verificarDisponible(cita.getVehiculoClienteId(), nuevoDia, franja, cita.getId());
 		cita.reprogramar(ahora, nuevoDia, franjaId, franja.getHoraInicio(), franja.getHoraFin());
+		recoleccion.reprogramarDeCita(cita.getId(), nuevoDia);
 		return CitaApp.de(cita,
 				vehiculos.buscarPorId(cita.getVehiculoClienteId())
 						.filter(vehiculo -> vehiculo.propietario().id().equals(clienteId)).map(CitaApp::describir)
@@ -259,6 +260,7 @@ public class AgendaAppService {
 		Cita cita = citaRepository.findByIdAndClienteId(citaId, clienteId)
 				.orElseThrow(() -> new RecursoNoEncontradoException("No existe la cita " + citaId));
 		cita.cancelar(LocalDateTime.now(reloj), horario.plazoParaCancelar(), reloj.instant());
+		recoleccion.cancelarDeCita(cita.getId());
 		return CitaApp.de(cita,
 				vehiculos.buscarPorId(cita.getVehiculoClienteId())
 						.filter(vehiculo -> vehiculo.propietario().id().equals(clienteId)).map(CitaApp::describir)

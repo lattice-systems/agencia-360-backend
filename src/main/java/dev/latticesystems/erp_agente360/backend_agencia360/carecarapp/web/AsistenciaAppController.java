@@ -11,6 +11,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -18,7 +19,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
-/** Asistencia en camino (SOS) de la app (V2-M11.01). */
+/** Asistencia en camino (SOS) de la app (V2-M11.01 y M11.04). */
 @RestController
 @RequestMapping("/api/v1/app/asistencia")
 @Tag(name = "App CareCar - Asistencia", description = "Solicitudes de ayuda del cliente con su ubicación")
@@ -52,5 +53,13 @@ public class AsistenciaAppController {
 		}
 		return asistenciaAppService.activa(cliente.id()).map(ResponseEntity::ok)
 				.orElseGet(() -> ResponseEntity.noContent().build());
+	}
+
+	@GetMapping("/{id}")
+	@PreAuthorize("hasRole('CLIENTE_CARECAR')")
+	@Operation(summary = "Una solicitud de asistencia mía", description = "Con su estado actual; la ubicación se "
+			+ "omite cuando ya se cerró. Responde 404 si no existe o es de otro cliente.")
+	public SolicitudAsistenciaApp obtener(@PathVariable Long id, @AuthenticationPrincipal UsuarioAutenticado cliente) {
+		return asistenciaAppService.obtener(cliente.id(), id);
 	}
 }

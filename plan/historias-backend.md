@@ -252,6 +252,24 @@ Detalle: [`carecar-mobile/plan/modulos/M05-mantenimiento-inteligente.md`](https:
 | V2-M05.05 | Como cliente quiero un recordatorio cuando se acerque mi servicio | Push a 1 000 km o 2 semanas antes (configurable) | Juan Pablo |
 | V2-M05.06 | Como cliente quiero ver qué incluye cada servicio y su precio estimado | Conceptos y precio con leyenda de estimado | Juan Pablo |
 
+#### Diseño técnico — V2-M05.01, M05.02, M05.03 y M05.06 (parte B de Juan Pablo)
+
+Vive en `carecarapp` (la historia lo ubica en `servicio`, pero solo consume su API pública `HistorialDeServicios`; evita un módulo más mientras el ERP sigue congelado). Migraciones `V40` (tablas) y `V41` (planes de ejemplo).
+
+- `plan_mantenimiento`: `id`, `modelo` (Tipo, p. ej. March; sin distinguir mayúsculas), `anio_desde`, `anio_hasta`, `km`, `meses`, `nombre`, `precio_estimado`. `concepto_mantenimiento`: `id`, `plan_mantenimiento_id` (FK), `concepto`. Como en el resto del repo, `modelo` es el Tipo y el año del vehículo cae entre `anio_desde` y `anio_hasta`.
+- `lectura_km`: `id`, `vehiculo_cliente_id` (FK), `km`, `fuente` (`TALLER`, `CLIENTE`), `foto_url` (nula; la foto opcional se sube con V2-T05.09), `registrada_en`. El km oficial del taller no se sobrescribe: las lecturas del cliente son filas aparte.
+- **Km oficial** = el mayor entre `vehiculo_cliente.kilometraje`, el km de las órdenes cerradas y las lecturas `TALLER`. **kmActual** = el mayor entre el oficial y la última lectura del cliente; `kmFuente` dice cuál ganó (`taller` si empatan) y `kmActualizadoEn` su fecha (nula si viene solo del vehículo).
+- `POST /vehiculos/{id}/lecturas-km` `{km}` → 201 `LecturaKm`. 422 `KM_INVALIDO` si `km` es menor al oficial o a la última lectura del cliente (igual sí se acepta); 400 si falta o no es mayor a 0.
+- `GET /vehiculos/{id}/mantenimiento` → 200 `PlanMantenimiento`. Sin plan para el modelo/año: `servicios` vacío y `proximo` nulo.
+- **Hecho** (cruce con `orden_servicio`, V2-M02.05): un servicio del plan se marca `hecho` si existe una orden **cerrada** (`TERMINADO` o `ENTREGADO`) con kilometraje a ±1 500 km del `km` del plan; `hechoEn` es la fecha de esa orden. **vencido**: no hecho y `kmActual` ya pasó su `km`. **proximo**: el no hecho de menor `km` que aún no se alcanza. El resto, `pendiente`.
+- **Promedio diario**: con las lecturas del cliente más el km oficial fechado (órdenes y lecturas del taller), (último − primero) / días entre ambos; nulo con menos de dos puntos o sin días de diferencia.
+- **Próximo servicio**: por km, `hoy + faltanKm / promedio` (solo con promedio); por tiempo, fecha base (la del último servicio hecho; si no hay, hoy) más los meses del plan menos los del último hecho. Gana la fecha más cercana y `motivo` es `km` o `tiempo`.
+- Errores: 401, 403, 404 (vehículo ajeno), 400, 422 `KM_INVALIDO`. Los precios son una estimación no vinculante.
+- Fuera de esta entrega: M05.05 (recordatorio push) espera a M06.
+
+
+**Foto de la lectura (V2-M05.03, parte B):** `POST /vehiculos/{id}/lecturas-km` sigue aceptando el JSON `{km}` y suma `multipart/form-data` con `km` y `foto` (imagen JPEG/PNG/WebP opcional) en la misma ruta. El km se valida primero (400/422) y solo después se guarda la foto con `AlmacenArchivos` (carpeta `lecturas-km`); `lectura_km.foto_url` guarda la clave. `LecturaKm` devuelve `fotoUrl` firmada de 15 min cuando hay foto (se omite si no). Foto no imagen o vacía: 400.
+
 ### M06 · Notificaciones y bandeja — H3 — módulo `notificaciones (nuevo)`
 
 Detalle: [`carecar-mobile/plan/modulos/M06-notificaciones.md`](https://github.com/lattice-systems/carecar-mobile/blob/main/plan/modulos/M06-notificaciones.md)
@@ -332,7 +350,22 @@ Vive en `carecarapp` (la tabla es de la ficha; el módulo `asistencia` nuevo que
 | `POST /asistencia` | `{vehiculoId, tipo, lat?, lng?, comentario?}` | 201 `{id, vehiculoId, tipo, lat, lng, comentario, estado: "recibida", creadaEn}` · 400 `DATOS_INVALIDOS` (tipo desconocido, lat fuera de -90..90, lng fuera de -180..180, solo una de las dos) · 404 si el vehículo no es del cliente · 409 `SOLICITUD_ABIERTA` si ya tiene una `recibida` o `en_camino` |
 | `GET /asistencia?activa=true` | - | 200 con la solicitud abierta · 204 si no hay · 400 si `activa` no es `true` |
 
-La ubicación se conserva mientras la solicitud está abierta; limpiarla al cerrarse es de V2-M11.04.
+La ubicación se conserva mientras la solicitud está abierta; V2-M11.04 la borra al cerrarse.
+
+#### Diseño técnico — V2-M11.04 (parte B de Juan Pablo)
+
+Sigue en `carecarapp`. Sin tablas nuevas: `solicitud_asistencia` gana `cerrada_en` (migración V42, que comparte con M17.03 y M17.04).
+
+**Transiciones** (`EstadoAsistencia`): `recibida` → `en_camino` o `cancelada`; `en_camino` → `atendida` o `cancelada`; `atendida` y `cancelada` son finales. Al cerrarse (`atendida`/`cancelada`) se guarda `cerrada_en` y se **borran `lat` y `lng`** de la fila (privacidad: la ubicación solo vive mientras hay ayuda por llegar).
+
+| Método y ruta | Quién | Cuerpo | Respuestas |
+| --- | --- | --- | --- |
+| `GET /app/asistencia/{id}` | `CLIENTE_CARECAR`, solo el dueño | - | 200 `SolicitudAsistencia` (sin `lat`/`lng` si ya se cerró) · 404 si no existe o es ajena |
+| `PATCH /asistencia/{id}/estado` (fuera de `/app`) | personal `GERENTE_MARKETING` (rol interno que el repo ya usa para endpoints de personal mientras el ERP siga congelado) | `{estado}` en minúsculas: `en_camino`, `atendida`, `cancelada` | 200 `SolicitudAsistencia` (con ubicación si sigue abierta) · 400 `DATOS_INVALIDOS` (estado desconocido) · 404 · 409 `TRANSICION_INVALIDA` · 401/403 |
+
+**Evento** (cada cambio, al cliente dueño, por el SSE de `GET /app/eventos`): nombre `asistencia.estado`, `data` `{"solicitudId":12,"estado":"en_camino"}`. Se publica un `AvisoAlCliente(clienteId, evento, datos)` de Spring (módulo `carecarapp`); `EventosEnVivoApp` lo escucha con `@TransactionalEventListener(fallbackExecution = true)` y lo manda solo a las conexiones de ese cliente. El push (M06) escuchará el mismo evento cuando exista.
+
+Pendiente (historia nueva, `Borrador`): bandeja del personal para listar solicitudes abiertas con su ubicación.
 
 ### M12 · Lealtad y recompensas — H4 — módulo `lealtad (nuevo)`
 
@@ -434,7 +467,39 @@ Detalle: [`carecar-mobile/plan/modulos/M17-recoleccion-y-entrega.md`](https://gi
 | `GET /recoleccion/cotizacion?direccionId=&fecha=` | - | 200 `{direccionId, fecha, costoPorTraslado, costoTotal, recoleccion: {inicio, fin}, entrega: {inicio, fin}}` · 400 (fecha sin servicio o fuera de anticipación) · 404 · 422 `FUERA_DE_COBERTURA` |
 | `POST /citas` | suma `recoleccion: {direccionId}` | 201 la cita con `recoleccion: {direccionId, costoTotal, traslados: [{id, tipo, estado, costo, fecha, ventanaInicio, ventanaFin}]}` (nulo si no se pidió) · 404 dirección ajena · 422 `FUERA_DE_COBERTURA` · los traslados nacen en la misma transacción: si algo falla no queda ni cita ni traslados |
 
-Pendiente (historia nueva, `Borrador`): cancelar los traslados al cancelar o reprogramar la cita.
+Cancelar o reprogramar la cita cancela o mueve sus traslados: lo resuelve V2-M17.05 (ver el diseño de M17.03 y M17.04 más abajo).
+
+#### Diseño técnico — V2-M17.03 y V2-M17.04 (parte B de Juan Pablo)
+
+**Migración V42** (compartida con M11.04 y M05.03):
+
+- `traslado` gana `chofer_lat`, `chofer_lng` (`numeric(9,6)`, nulos juntos) y `ubicacion_en`. Solo tienen valor mientras el estado es `en_camino` o `de_regreso`; al salir de ellos se borran.
+- `checklist_traslado` (nombres de la ficha): `id`, `traslado_id` (FK, único: un checklist por traslado), `km`, `gasolina` (`VACIO`, `UN_CUARTO`, `MEDIO`, `TRES_CUARTOS`, `LLENO`), `notas` (≤ 500), `fotos` (`jsonb`, arreglo de claves de `AlmacenArchivos`), `firma_url` (clave del archivo de la firma), más `created_at`/`updated_at`.
+- `solicitud_asistencia.cerrada_en` (M11.04).
+
+**Estados por tipo** (`EstadoTraslado`, el chofer los mueve en orden; lo demás es 409 `TRANSICION_INVALIDA`):
+
+- `recoger`: `programado` → `en_camino` → `recogido` → `en_taller` (final).
+- `entregar`: `programado` → `de_regreso` → `entregado` (final).
+- `cancelado` (final) solo desde `programado`, y solo lo pone el sistema cuando se cancela la cita.
+
+La primera vez que el chofer mueve el traslado se guarda su id en `chofer_id` (el usuario del personal que llama; sigue sin FK).
+
+| Método y ruta | Quién | Cuerpo | Respuestas |
+| --- | --- | --- | --- |
+| `GET /app/traslados/{id}` | `CLIENTE_CARECAR`, dueño de la cita | - | 200 `{id, citaId, tipo, estado, costo, fecha, ventanaInicio, ventanaFin, ubicacionChofer?: {lat, lng, actualizadaEn}}`; `ubicacionChofer` solo en `en_camino`/`de_regreso` y con al menos un reporte · 404 si es ajeno |
+| `PATCH /traslados/{id}/estado` | personal `GERENTE_MARKETING` | `{estado}` | 200 el mismo objeto · 400 · 404 · 409 `TRANSICION_INVALIDA` |
+| `PUT /traslados/{id}/ubicacion` | personal `GERENTE_MARKETING` | `{lat, lng}` | 204 · 400 (fuera de rango) · 404 · 409 `TRANSICION_INVALIDA` si el estado no es `en_camino`/`de_regreso` |
+| `GET /app/traslados/{id}/checklist` | `CLIENTE_CARECAR`, dueño | - | 200 `{trasladoId, km, gasolina, notas, fotos: [url], firmaUrl, registradoEn}` con URL firmadas de 15 min (`AlmacenArchivos.urlTemporal`) · 404 si es ajeno o no hay checklist |
+| `PUT /traslados/{id}/checklist` | personal `GERENTE_MARKETING` | `multipart/form-data`: `km` (1..2 000 000), `gasolina`, `notas?`, `fotos` (0 a 10 imágenes), `firma?` (imagen) | 200 el checklist · 400 · 404 · 409 `TRANSICION_INVALIDA` si el traslado sigue `programado` o está `cancelado`. Reemplaza el anterior y borra sus archivos |
+
+El módulo `archivos` no tiene endpoint de carga, solo `AlmacenArchivos.guardar`; por eso el personal sube por multipart al endpoint del módulo dueño y este guarda con las carpetas `checklist-fotos` y `checklist-firmas`.
+
+**Eventos SSE** (al cliente dueño de la cita): `traslado.estado` con `{"trasladoId":5,"citaId":9,"tipo":"recoger","estado":"en_camino"}` en cada cambio de estado, y `traslado.ubicacion` con `{"trasladoId":5,"lat":21.13,"lng":-101.69,"actualizadaEn":"2026-01-01T10:00:00Z"}` en cada reporte.
+
+**Cita ↔ traslados (V2-M17.05, antes deuda de M17.02):** al cancelar una cita, sus traslados `programado` pasan a `cancelado`; al reprogramarla, sus traslados `programado` toman la nueva `fecha` (la ventana horaria no cambia). Los que ya salieron no se tocan. Todo ocurre en la transacción de la cita (`RecoleccionService.cancelarDeCita` y `reprogramarDeCita`, llamados desde `AgendaAppService`).
+
+**Implementación (decisiones al programar):** `gasolina` viaja en minúsculas en el JSON (`vacio`, `un_cuarto`, `medio`, `tres_cuartos`, `lleno`) y en mayúsculas en la base, como el resto de los enumerados. `registradoEn` del checklist es `updated_at`. Las carpetas de `AlmacenArchivos` son `checklist-fotos` y `checklist-firmas`; si la carga falla se borran los archivos recién guardados y, al reemplazar, los del checklist anterior. Fotos y firma deben ser JPEG, PNG o WebP (el almacén también admite PDF, aquí no). `GET /app/traslados/{id}` responde con `SeguimientoTrasladoApp` (agrega `citaId` y `ubicacionChofer`) y no cambia el `Traslado` que ya devuelve la cita.
 
 ### M18 · Bitácora del conductor — H6 — módulo `carecarapp`
 
@@ -444,6 +509,18 @@ Detalle: [`carecar-mobile/plan/modulos/M18-bitacora-conductor.md`](https://githu
 | --- | --- | --- | --- |
 | V2-M18.01 | Como cliente quiero registrar una carga de gasolina para llevar el control de lo que gasto | Tabla `gasto_vehiculo` · `POST /vehiculos/{id}/gastos` tipo gasolina con litros, monto, km y fecha · 422 si el km es menor a la última `lectura_km` · crea una `lectura_km` de fuente cliente · `GET` paginado por mes | Juan Pablo |
 | V2-M18.04 | Como cliente quiero registrar otros gastos para conocer el costo total de mi auto | Mismo `POST /vehiculos/{id}/gastos` con tipo estacionamiento, casetas, lavado u otro (descripción obligatoria en otro) · `PUT/DELETE /gastos/{id}` solo del dueño | Juan Pablo |
+
+#### Diseño técnico — V2-M18.01 y V2-M18.04 (parte B de Juan Pablo)
+
+Todo vive en `carecarapp` (no cruza módulos: el kilometraje oficial se lee por `VehiculosDeClientes` y `HistorialDeServicios`). Migración `V40` (junto con M05).
+
+- `gasto_vehiculo`: `id`, `vehiculo_cliente_id` (FK), `tipo` (`GASOLINA`, `ESTACIONAMIENTO`, `CASETAS`, `LAVADO`, `OTRO`), `monto` (> 0), `litros` (nulo salvo gasolina), `km` (nulo salvo gasolina; opcional en los demás), `fecha`, `ticket_url` (de la ficha; sin uso hasta que haya carga de tickets), `descripcion` (≤ 200; se agrega a lo que pide la ficha porque el tipo `otro` la exige), `lectura_km_id` (FK nula: la lectura que creó la carga) y `created_at`/`updated_at`.
+- Reglas: gasolina exige `litros > 0` y `km`; `otro` exige `descripcion`; la fecha no puede ser futura (hora de México); todo lo demás es 400 `DATOS_INVALIDOS`.
+- `POST /vehiculos/{id}/gastos` → 201 `Gasto`. Una carga de gasolina valida el km con la misma regla que `POST /vehiculos/{id}/lecturas-km` (422 `KM_INVALIDO` si es menor al oficial o a la última lectura del cliente) y crea una `lectura_km` de fuente `CLIENTE`.
+- `GET /vehiculos/{id}/gastos?mes=YYYY-MM&pagina=&tamano=` → `PaginaGastos` (`contenido`, `pagina`, `totalPaginas`), más recientes primero (fecha e id descendentes); sin `mes` devuelve todos. Mes mal formado: 400.
+- `PUT /gastos/{id}` reemplaza el gasto (mismas reglas). Si es gasolina, actualiza o crea su lectura; la validación del km ignora la lectura propia. `DELETE /gastos/{id}` → 204 y **conserva** la lectura (el km ya ocurrió). Ajeno o inexistente: 404.
+- Las estadísticas (km/l, $/km, gasto por mes) las calcula la app con estos datos.
+- Errores: 400 `DATOS_INVALIDOS`, 401, 403, 404, 422 `KM_INVALIDO` (código nuevo en `CodigosError` y en el enum de `Problema`).
 
 ### M19 · Cuentas familiares y conductores autorizados — H6 — módulo `carecarapp`
 
