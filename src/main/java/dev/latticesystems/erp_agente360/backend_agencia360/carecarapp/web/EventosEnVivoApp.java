@@ -4,6 +4,7 @@ import dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.applicatio
 import dev.latticesystems.erp_agente360.backend_agencia360.servicio.OrdenServicioCambiada;
 import java.io.IOException;
 import java.time.Duration;
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
@@ -39,8 +40,12 @@ class EventosEnVivoApp {
 
 	@TransactionalEventListener(fallbackExecution = true)
 	void alCambiarOrden(OrdenServicioCambiada cambio) {
-		Map<String, Object> datos = Map.of("ordenId", cambio.ordenId(), "vehiculoId", cambio.vehiculoId(), "estatus",
-				cambio.estatus().name());
+		Map<String, Object> datos = new LinkedHashMap<>();
+		datos.put("ordenId", cambio.ordenId());
+		datos.put("vehiculoId", cambio.vehiculoId());
+		datos.put("estatus", cambio.estatus().name());
+		datos.put("etapa", cambio.etapa() == null ? null : cambio.etapa().name());
+		datos.put("motivo", cambio.motivo() == null ? null : cambio.motivo().name());
 		conexiones.getOrDefault(cambio.clienteId(), Set.of()).forEach(conexion -> enviar(cambio.clienteId(), conexion,
 				SseEmitter.event().name(EVENTO_ORDEN).data(datos, MediaType.APPLICATION_JSON)));
 	}

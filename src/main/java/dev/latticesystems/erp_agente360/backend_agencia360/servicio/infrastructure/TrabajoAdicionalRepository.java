@@ -1,6 +1,5 @@
 package dev.latticesystems.erp_agente360.backend_agencia360.servicio.infrastructure;
 
-import dev.latticesystems.erp_agente360.backend_agencia360.servicio.EstadoAdicional;
 import dev.latticesystems.erp_agente360.backend_agencia360.servicio.domain.TrabajoAdicional;
 import java.util.List;
 import java.util.Optional;
@@ -11,6 +10,4 @@ public interface TrabajoAdicionalRepository extends JpaRepository<TrabajoAdicion
 	List<TrabajoAdicional> findByOrdenServicioIdOrderByIdAsc(Long ordenServicioId);
 
 	Optional<TrabajoAdicional> findByIdAndOrdenServicioId(Long id, Long ordenServicioId);
-
-	long countByOrdenServicioIdAndEstado(Long ordenServicioId, EstadoAdicional estado);
 }

@@ -49,11 +49,12 @@ import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilde
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * Taller en vivo de punta a punta (V2-M04.01, V2-M04.02, V2-M04.04 y
- * V2-M04.05): Servicio abre la orden, la pasa de etapa, registra la inspección
- * con fotos y videos y propone trabajos adicionales; el cliente lo ve en la app
- * y responde con su firma. Base de datos real (Testcontainers); cada prueba se
- * revierte al terminar.
+ * Taller en vivo de punta a punta (V2-M04.01 a V2-M04.07): Servicio abre la
+ * orden, la pasa de etapa, registra la inspección con fotos y videos, propone
+ * trabajos adicionales y carga los renglones del ticket; el cliente lo ve en la
+ * app, responde con su firma, sabe cuándo recogerlo y al entregarse lo
+ * encuentra en su historial. Base de datos real (Testcontainers); cada prueba
+ * se revierte al terminar.
  */
 @AutoConfigureMockMvc
 @Transactional
@@ -249,6 +250,66 @@ class TallerAppIntegrationTest extends AbstractIntegrationTest {
 	}
 
 	@Test
+	void listaParaEntregaTraeElTotalYElHorarioYAlEntregarseQuedaEnElHistorialConSuTicket() throws Exception {
+		Long ordenId = abrir();
+		renglon(ordenId, "MANO_DE_OBRA", "Afinación", "900.00").andExpect(status().isCreated())
+				.andExpect(jsonPath("$.totalEstimado").value(900.0));
+		String propuesta = proponer(ordenId, "Cambio de balatas", "450.00", "1200.50").andReturn().getResponse()
+				.getContentAsString();
+		Integer balatas = JsonPath.read(propuesta, "$.adicionales[0].id");
+		String otra = proponer(ordenId, "Lavado de motor", "200.00", "0.00").andReturn().getResponse()
+				.getContentAsString();
+		Integer lavado = JsonPath.read(otra, "$.adicionales[1].id");
+		responder(tokenDeAna, ordenId, balatas, true).andExpect(status().isOk());
+		responder(tokenDeAna, ordenId, lavado, false).andExpect(status().isOk());
+
+		comoAna(get("/api/v1/app/ordenes/activas")).andExpect(jsonPath("$[0].totalEstimado").value(2550.5))
+				.andExpect(jsonPath("$[0].horarioEntrega").isEmpty());
+		avanzar(ordenId, "LISTO_PARA_ENTREGA").andExpect(status().isOk())
+				.andExpect(jsonPath("$.totalEstimado").value(2550.5));
+		comoAna(get("/api/v1/app/ordenes/activas")).andExpect(jsonPath("$[0].etapa").value("LISTO_PARA_ENTREGA"))
+				.andExpect(jsonPath("$[0].totalEstimado").value(2550.5))
+				.andExpect(jsonPath("$[0].horarioEntrega.fecha").isNotEmpty())
+				.andExpect(jsonPath("$[0].horarioEntrega.desde").value("09:00"))
+				.andExpect(jsonPath("$[0].horarioEntrega.hasta").value("17:00"));
+		comoAna(get("/api/v1/app/ordenes/{id}", ordenId)).andExpect(jsonPath("$.horarioEntrega.desde").value("09:00"))
+				.andExpect(jsonPath("$.totalEstimado").value(2550.5));
+		comoAna(get("/api/v1/app/servicios/{id}", ordenId)).andExpect(status().isOk())
+				.andExpect(jsonPath("$.manoDeObra.length()").value(2))
+				.andExpect(jsonPath("$.manoDeObra[1].concepto").value("Cambio de balatas"))
+				.andExpect(jsonPath("$.refacciones.length()").value(1))
+				.andExpect(jsonPath("$.refacciones[0].importe").value(1200.5))
+				.andExpect(jsonPath("$.total").value(2550.5));
+		renglon(ordenId, "REFACCION", "Bujías", "95.50").andExpect(status().isConflict())
+				.andExpect(jsonPath("$.codigo").value("ORDEN_CERRADA"));
+
+		avanzar(ordenId, "ENTREGADO").andExpect(status().isOk()).andExpect(jsonPath("$.totalEstimado").value(2550.5));
+		comoAna(get("/api/v1/app/vehiculos/{id}/servicios", marchDeAna)).andExpect(status().isOk())
+				.andExpect(jsonPath("$.contenido.length()").value(1))
+				.andExpect(jsonPath("$.contenido[0].id").value(ordenId))
+				.andExpect(jsonPath("$.contenido[0].estatus").value("ENTREGADO"))
+				.andExpect(jsonPath("$.contenido[0].total").value(2550.5));
+		assertThat(jdbcTemplate.queryForObject("select incorporado_en from trabajo_adicional where id = ?",
+				Object.class, balatas.longValue())).isNotNull();
+		assertThat(jdbcTemplate.queryForObject("select incorporado_en from trabajo_adicional where id = ?",
+				Object.class, lavado.longValue())).isNull();
+	}
+
+	@Test
+	void unRenglonInvalidoOParaUnaOrdenQueNoExisteSeRechaza() throws Exception {
+		Long ordenId = abrir();
+
+		renglon(ordenId, "MANO_DE_OBRA", " ", "900.00").andExpect(status().isBadRequest())
+				.andExpect(jsonPath("$.codigo").value("DATOS_INVALIDOS"));
+		renglon(ordenId, "REFACCION", "Bujías", "-1.00").andExpect(status().isBadRequest());
+		renglon(999_999L, "REFACCION", "Bujías", "95.50").andExpect(status().isNotFound());
+		mockMvc.perform(post("/api/v1/taller/ordenes/{id}/renglones", ordenId)
+				.header(HttpHeaders.AUTHORIZATION, "Bearer " + tokenDeAna).contentType(MediaType.APPLICATION_JSON)
+				.content("{\"tipo\":\"REFACCION\",\"concepto\":\"Bujías\",\"cantidad\":1,\"precioUnitario\":1}"))
+				.andExpect(status().isForbidden());
+	}
+
+	@Test
 	void unaFirmaInvalidaUnaOrdenAjenaOTerminadaNoSeResponden() throws Exception {
 		Long ordenId = abrir();
 		String propuesta = proponer(ordenId, "Cambio de balatas", "450.00", "0.00").andReturn().getResponse()
@@ -304,6 +365,12 @@ class TallerAppIntegrationTest extends AbstractIntegrationTest {
 		return comoServicio(post("/api/v1/taller/ordenes/{id}/adicionales", ordenId)
 				.contentType(MediaType.APPLICATION_JSON).content("{\"concepto\":\"" + concepto + "\",\"manoDeObra\":"
 						+ manoDeObra + ",\"refacciones\":" + refacciones + "}"));
+	}
+
+	private ResultActions renglon(Long ordenId, String tipo, String concepto, String precio) throws Exception {
+		return comoServicio(post("/api/v1/taller/ordenes/{id}/renglones", ordenId)
+				.contentType(MediaType.APPLICATION_JSON).content("{\"tipo\":\"" + tipo + "\",\"concepto\":\"" + concepto
+						+ "\",\"cantidad\":1,\"precioUnitario\":" + precio + "}"));
 	}
 
 	private ResultActions subir(Long ordenId, MockMultipartFile archivo, Integer puntoId) throws Exception {

@@ -17,7 +17,10 @@
  * multipunto ({@code punto_inspeccion}) con fotos y videos
  * ({@code evidencia_orden}, en el almacén de {@code archivos}) y propone
  * trabajos adicionales ({@code trabajo_adicional}) que el cliente aprueba o
- * rechaza con su firma desde la app ({@code servicio.TallerEnVivo}).
+ * rechaza con su firma desde la app ({@code servicio.TallerEnVivo}). Los
+ * aprobados pasan a ser renglones de la orden al quedar lista, y cada cambio
+ * publica {@code servicio.OrdenServicioCambiada} con su motivo para los avisos
+ * en vivo y el push.
  *
  * <p>
  * Siguen pendientes los tickets imprimibles del ERP (ERP HU 3.1) y la captura

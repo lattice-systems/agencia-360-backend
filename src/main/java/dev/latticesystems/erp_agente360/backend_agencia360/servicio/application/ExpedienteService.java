@@ -3,6 +3,7 @@ package dev.latticesystems.erp_agente360.backend_agencia360.servicio.application
 import dev.latticesystems.erp_agente360.backend_agencia360.acceso.DirectorioUsuarios;
 import dev.latticesystems.erp_agente360.backend_agencia360.clientes.VehiculosDeClientes;
 import dev.latticesystems.erp_agente360.backend_agencia360.clientes.VehiculosDeClientes.VehiculoDeCliente;
+import dev.latticesystems.erp_agente360.backend_agencia360.servicio.MotivoCambio;
 import dev.latticesystems.erp_agente360.backend_agencia360.servicio.OrdenServicioCambiada;
 import dev.latticesystems.erp_agente360.backend_agencia360.servicio.domain.OrdenServicio;
 import dev.latticesystems.erp_agente360.backend_agencia360.servicio.infrastructure.OrdenServicioRepository;
@@ -98,7 +99,7 @@ public class ExpedienteService {
 		OrdenServicio servicio = ordenServicioRepository.save(OrdenServicio.registrar(vehiculoId, nuevo.fecha(),
 				nuevo.kilometraje(), actor.id(), nuevo.renglones(), ZonedDateTime.now(reloj)));
 		eventos.publishEvent(new OrdenServicioCambiada(servicio.getId(), vehiculoId, vehiculo.propietario().id(),
-				servicio.getEstatus()));
+				servicio.getEstatus(), null, MotivoCambio.REGISTRO));
 		return ServicioDetalle.de(servicio, nombreDe(directorioUsuarios.nombresDe(List.of(actor.id())), servicio));
 	}
 

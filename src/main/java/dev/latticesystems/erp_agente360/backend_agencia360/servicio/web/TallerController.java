@@ -2,6 +2,7 @@ package dev.latticesystems.erp_agente360.backend_agencia360.servicio.web;
 
 import dev.latticesystems.erp_agente360.backend_agencia360.servicio.TallerEnVivo.OrdenEnVivo;
 import dev.latticesystems.erp_agente360.backend_agencia360.servicio.application.TallerService;
+import dev.latticesystems.erp_agente360.backend_agencia360.servicio.domain.RenglonNuevo;
 import dev.latticesystems.erp_agente360.backend_agencia360.shared.security.UsuarioAutenticado;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -23,10 +24,11 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
 /**
- * La orden en el taller del lado de Servicio (V2-M04.01 a V2-M04.05). El ERP
+ * La orden en el taller del lado de Servicio (V2-M04.01 a V2-M04.07). El ERP
  * está congelado: mientras no tenga pantalla, el taller usa estas rutas para
- * abrir la orden, pasarla de etapa, registrar la inspección con fotos y videos
- * y proponer trabajos adicionales. El cliente lo ve en la app.
+ * abrir la orden, pasarla de etapa, registrar la inspección con fotos y videos,
+ * proponer trabajos adicionales y cargar los renglones que trae el ticket. El
+ * cliente lo ve en la app.
  */
 @RestController
 @RequestMapping("/api/v1/taller/ordenes")
@@ -94,6 +96,17 @@ public class TallerController {
 		}
 		return ResponseEntity.status(201)
 				.body(tallerService.agregarEvidencia(ordenId, puntoInspeccionId, archivo.getContentType(), contenido));
+	}
+
+	@PostMapping("/{ordenId}/renglones")
+	@PreAuthorize("hasRole('SERVICIO')")
+	@Operation(summary = "Agregar un renglón a la orden", description = "Mano de obra o refacción con precio con IVA "
+			+ "incluido; recalcula los montos y es lo que trae el ticket al cerrar. Responde 400 si un dato no es "
+			+ "válido, 404 si la orden no existe y 409 ORDEN_CERRADA si ya está terminada.")
+	public ResponseEntity<OrdenEnVivo> agregarRenglon(@PathVariable Long ordenId,
+			@Valid @RequestBody RegistrarServicioRequest.Renglon renglon) {
+		return ResponseEntity.status(201).body(tallerService.agregarRenglon(ordenId,
+				new RenglonNuevo(renglon.tipo(), renglon.concepto(), renglon.cantidad(), renglon.precioUnitario())));
 	}
 
 	@PostMapping("/{ordenId}/adicionales")

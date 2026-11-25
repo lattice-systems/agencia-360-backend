@@ -12,13 +12,16 @@ import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Objects;
 
 /**
  * Trabajo que el taller propone además de lo acordado (V2-M04.05). Los montos
  * traen el IVA incluido y el total es la mano de obra más las refacciones. El
  * cliente lo aprueba o lo rechaza una sola vez y con su firma; la fila guarda
- * quién respondió, cuándo y la clave de la firma, y ya no cambia.
+ * quién respondió, cuándo y la clave de la firma, y ya no cambia. Al quedar
+ * lista la orden, los aprobados pasan a ella como renglones.
  */
 @Entity
 @Table(name = "trabajo_adicional")
@@ -58,6 +61,9 @@ public class TrabajoAdicional extends Auditable {
 
 	@Column(name = "firma_url", length = 300)
 	private String firmaUrl;
+
+	@Column(name = "incorporado_en")
+	private Instant incorporadoEn;
 
 	protected TrabajoAdicional() {
 	}
@@ -123,6 +129,32 @@ public class TrabajoAdicional extends Auditable {
 		respondidoEn = momento;
 	}
 
+	/**
+	 * Pasa el trabajo aprobado a la orden cuando queda lista (V2-M04.06 y
+	 * V2-M04.07): devuelve sus renglones, uno de mano de obra y otro de refacciones
+	 * si cuestan algo, y lo marca como incorporado para no sumarlo dos veces. Un
+	 * trabajo pendiente, rechazado o ya incorporado no agrega nada.
+	 */
+	public List<RenglonNuevo> incorporar(Instant momento) {
+		Objects.requireNonNull(momento, "momento");
+		if (estado != EstadoAdicional.APROBADO || incorporadoEn != null) {
+			return List.of();
+		}
+		incorporadoEn = momento;
+		List<RenglonNuevo> renglones = new ArrayList<>();
+		if (manoDeObra.signum() > 0) {
+			renglones.add(new RenglonNuevo(TipoRenglon.MANO_DE_OBRA, concepto, 1, manoDeObra));
+		}
+		if (refacciones.signum() > 0) {
+			renglones.add(new RenglonNuevo(TipoRenglon.REFACCION, concepto, 1, refacciones));
+		}
+		return List.copyOf(renglones);
+	}
+
+	public boolean estaIncorporado() {
+		return incorporadoEn != null;
+	}
+
 	public boolean estaPendiente() {
 		return estado == EstadoAdicional.PENDIENTE;
 	}
@@ -165,5 +197,9 @@ public class TrabajoAdicional extends Auditable {
 
 	public String getFirmaUrl() {
 		return firmaUrl;
+	}
+
+	public Instant getIncorporadoEn() {
+		return incorporadoEn;
 	}
 }
