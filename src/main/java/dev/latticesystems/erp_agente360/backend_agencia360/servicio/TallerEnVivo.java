@@ -47,15 +47,19 @@ public interface TallerEnVivo {
 	 *            nombre de quien la atiende; {@code null} si no se sabe
 	 * @param avance
 	 *            de 0 a 100 según la etapa
+	 * @param totalEstimado
+	 *            total de la orden más los adicionales aprobados que aún no pasan a
+	 *            ella, con IVA incluido
 	 */
 	record OrdenEnCurso(Long id, Long vehiculoId, EtapaTaller etapa, EstatusOrden estatus, Instant entregaEstimada,
-			String asesor, int avance, int adicionalesPendientes) {
+			String asesor, int avance, int adicionalesPendientes, BigDecimal totalEstimado) {
 	}
 
 	/**
 	 * La orden completa. {@code etapas} trae solo las que ya empezaron, en orden;
 	 * la última es la actual. {@code totalEstimado} es el total de la orden más los
-	 * trabajos adicionales aprobados, con IVA incluido.
+	 * trabajos adicionales aprobados que aún no pasan a ella, con IVA incluido: al
+	 * quedar lista la orden, los aprobados ya están en su total.
 	 */
 	record OrdenEnVivo(Long id, Long vehiculoId, EstatusOrden estatus, EtapaTaller etapa, Instant entregaEstimada,
 			String asesor, int avance, List<PasoDeEtapa> etapas, List<PuntoRevisado> inspeccion,

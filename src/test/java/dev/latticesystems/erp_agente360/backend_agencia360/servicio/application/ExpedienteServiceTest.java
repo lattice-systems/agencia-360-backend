@@ -12,6 +12,7 @@ import dev.latticesystems.erp_agente360.backend_agencia360.clientes.VehiculosDeC
 import dev.latticesystems.erp_agente360.backend_agencia360.clientes.VehiculosDeClientes.Propietario;
 import dev.latticesystems.erp_agente360.backend_agencia360.clientes.VehiculosDeClientes.VehiculoDeCliente;
 import dev.latticesystems.erp_agente360.backend_agencia360.servicio.EstatusOrden;
+import dev.latticesystems.erp_agente360.backend_agencia360.servicio.MotivoCambio;
 import dev.latticesystems.erp_agente360.backend_agencia360.servicio.OrdenServicioCambiada;
 import dev.latticesystems.erp_agente360.backend_agencia360.servicio.domain.OrdenServicio;
 import dev.latticesystems.erp_agente360.backend_agencia360.servicio.domain.RenglonNuevo;
@@ -115,7 +116,8 @@ class ExpedienteServiceTest {
 		assertThat(detalle.total()).isEqualByComparingTo("580.00");
 		assertThat(detalle.renglones()).singleElement()
 				.satisfies(renglon -> assertThat(renglon.importe()).isEqualByComparingTo("580.00"));
-		verify(eventos).publishEvent(new OrdenServicioCambiada(null, 3L, 9L, EstatusOrden.TERMINADO));
+		verify(eventos).publishEvent(
+				new OrdenServicioCambiada(null, 3L, 9L, EstatusOrden.TERMINADO, null, MotivoCambio.REGISTRO));
 	}
 
 	@Test

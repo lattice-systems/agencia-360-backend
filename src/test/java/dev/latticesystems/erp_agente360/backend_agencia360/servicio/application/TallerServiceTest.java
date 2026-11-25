@@ -19,10 +19,13 @@ import dev.latticesystems.erp_agente360.backend_agencia360.clientes.VehiculosDeC
 import dev.latticesystems.erp_agente360.backend_agencia360.servicio.EstadoAdicional;
 import dev.latticesystems.erp_agente360.backend_agencia360.servicio.EstatusOrden;
 import dev.latticesystems.erp_agente360.backend_agencia360.servicio.EtapaTaller;
+import dev.latticesystems.erp_agente360.backend_agencia360.servicio.MotivoCambio;
 import dev.latticesystems.erp_agente360.backend_agencia360.servicio.OrdenServicioCambiada;
 import dev.latticesystems.erp_agente360.backend_agencia360.servicio.TallerEnVivo.OrdenEnVivo;
 import dev.latticesystems.erp_agente360.backend_agencia360.servicio.domain.EtapaOrden;
 import dev.latticesystems.erp_agente360.backend_agencia360.servicio.domain.OrdenServicio;
+import dev.latticesystems.erp_agente360.backend_agencia360.servicio.domain.RenglonNuevo;
+import dev.latticesystems.erp_agente360.backend_agencia360.servicio.domain.TipoRenglon;
 import dev.latticesystems.erp_agente360.backend_agencia360.servicio.domain.TrabajoAdicional;
 import dev.latticesystems.erp_agente360.backend_agencia360.servicio.infrastructure.EtapaOrdenRepository;
 import dev.latticesystems.erp_agente360.backend_agencia360.servicio.infrastructure.EvidenciaOrdenRepository;
@@ -141,7 +144,8 @@ class TallerServiceTest {
 		assertThat(abierta.etapas()).hasSize(1);
 		assertThat(abierta.asesor()).isEqualTo("Laura Méndez");
 		assertThat(abierta.entregaEstimada()).isEqualTo(Instant.parse("2026-11-25T00:00:00Z"));
-		verify(eventos).publishEvent(new OrdenServicioCambiada(50L, 3L, 9L, EstatusOrden.RECIBIDO));
+		verify(eventos).publishEvent(new OrdenServicioCambiada(50L, 3L, 9L, EstatusOrden.RECIBIDO, EtapaTaller.RECIBIDO,
+				MotivoCambio.APERTURA));
 	}
 
 	@Test
@@ -175,9 +179,55 @@ class TallerServiceTest {
 		assertThat(enReparacion.etapa()).isEqualTo(EtapaTaller.EN_REPARACION);
 		assertThat(enReparacion.estatus()).isEqualTo(EstatusOrden.EN_PROCESO);
 		assertThat(enReparacion.avance()).isEqualTo(43);
-		verify(eventos).publishEvent(new OrdenServicioCambiada(5L, 3L, 9L, EstatusOrden.EN_PROCESO));
+		verify(eventos).publishEvent(new OrdenServicioCambiada(5L, 3L, 9L, EstatusOrden.EN_PROCESO,
+				EtapaTaller.EN_REPARACION, MotivoCambio.ETAPA));
 		assertThatThrownBy(() -> service.avanzar(5L, EtapaTaller.DIAGNOSTICO, null, null))
 				.isInstanceOf(IllegalArgumentException.class);
+	}
+
+	@Test
+	void alQuedarListaLosAdicionalesAprobadosPasanAlTicketSinContarseDosVeces() {
+		OrdenServicio orden = orden(5L);
+		orden.agregarRenglon(new RenglonNuevo(TipoRenglon.MANO_DE_OBRA, "Afinación", 1, new BigDecimal("900.00")));
+		TrabajoAdicional balatas = adicional(11L, 5L, "1650.50");
+		balatas.responder(true, 9L, "firmas/a", AHORA);
+		TrabajoAdicional lavado = adicional(12L, 5L, "200.00");
+		lavado.responder(false, 9L, "firmas/b", AHORA);
+		EtapaOrden lavando = EtapaOrden.empezar(5L, EtapaTaller.LAVADO, AHORA.minusSeconds(600), null);
+		List<EtapaOrden> recorridas = new ArrayList<>(List.of(lavando));
+		when(ordenes.bloquear(5L)).thenReturn(Optional.of(orden));
+		when(etapas.findByOrdenServicioIdOrderByInicioAscIdAsc(5L)).thenAnswer(invocacion -> List.copyOf(recorridas));
+		when(etapas.save(any(EtapaOrden.class))).thenAnswer(invocacion -> {
+			recorridas.add(invocacion.getArgument(0));
+			return invocacion.getArgument(0);
+		});
+		when(vehiculos.buscarPorId(3L)).thenReturn(Optional.of(SENTRA));
+		when(adicionales.findByOrdenServicioIdOrderByIdAsc(5L)).thenReturn(List.of(balatas, lavado));
+		sinDetalle(5L);
+
+		OrdenEnVivo lista = service.avanzar(5L, EtapaTaller.LISTO_PARA_ENTREGA, null, null);
+
+		assertThat(balatas.estaIncorporado()).isTrue();
+		assertThat(lavado.estaIncorporado()).isFalse();
+		assertThat(orden.getRenglonesManoDeObra()).hasSize(1);
+		assertThat(orden.getTotal()).isEqualByComparingTo("2550.50");
+		assertThat(lista.estatus()).isEqualTo(EstatusOrden.TERMINADO);
+		assertThat(lista.totalEstimado()).isEqualByComparingTo("2550.50");
+		verify(eventos).publishEvent(new OrdenServicioCambiada(5L, 3L, 9L, EstatusOrden.TERMINADO,
+				EtapaTaller.LISTO_PARA_ENTREGA, MotivoCambio.ETAPA));
+	}
+
+	@Test
+	void unRenglonSoloSeAgregaAUnaOrdenAbierta() {
+		OrdenServicio orden = orden(5L);
+		orden.pasarA(EtapaTaller.LISTO_PARA_ENTREGA, AHORA);
+		when(ordenes.bloquear(5L)).thenReturn(Optional.of(orden));
+
+		assertThatThrownBy(() -> service.agregarRenglon(5L,
+				new RenglonNuevo(TipoRenglon.REFACCION, "Bujías", 4, new BigDecimal("95.50"))))
+				.isInstanceOf(ConflictoException.class).extracting("codigo").isEqualTo(CodigosError.ORDEN_CERRADA);
+		assertThat(orden.getTotal()).isEqualByComparingTo("0.00");
+		verify(eventos, never()).publishEvent(any(Object.class));
 	}
 
 	@Test

@@ -7,6 +7,7 @@ import dev.latticesystems.erp_agente360.backend_agencia360.clientes.VehiculosDeC
 import dev.latticesystems.erp_agente360.backend_agencia360.servicio.EstadoAdicional;
 import dev.latticesystems.erp_agente360.backend_agencia360.servicio.EstatusOrden;
 import dev.latticesystems.erp_agente360.backend_agencia360.servicio.EtapaTaller;
+import dev.latticesystems.erp_agente360.backend_agencia360.servicio.MotivoCambio;
 import dev.latticesystems.erp_agente360.backend_agencia360.servicio.OrdenServicioCambiada;
 import dev.latticesystems.erp_agente360.backend_agencia360.servicio.ResultadoInspeccion;
 import dev.latticesystems.erp_agente360.backend_agencia360.servicio.TallerEnVivo;
@@ -14,6 +15,7 @@ import dev.latticesystems.erp_agente360.backend_agencia360.servicio.domain.Etapa
 import dev.latticesystems.erp_agente360.backend_agencia360.servicio.domain.EvidenciaOrden;
 import dev.latticesystems.erp_agente360.backend_agencia360.servicio.domain.OrdenServicio;
 import dev.latticesystems.erp_agente360.backend_agencia360.servicio.domain.PuntoInspeccion;
+import dev.latticesystems.erp_agente360.backend_agencia360.servicio.domain.RenglonNuevo;
 import dev.latticesystems.erp_agente360.backend_agencia360.servicio.domain.TrabajoAdicional;
 import dev.latticesystems.erp_agente360.backend_agencia360.servicio.infrastructure.EtapaOrdenRepository;
 import dev.latticesystems.erp_agente360.backend_agencia360.servicio.infrastructure.EvidenciaOrdenRepository;
@@ -46,8 +48,9 @@ import org.springframework.transaction.annotation.Transactional;
  * La orden en el taller (V2-M04.01, V2-M04.02, V2-M04.04 y V2-M04.05). Servicio
  * abre la orden, la pasa de etapa, registra la inspección con sus fotos y
  * videos y propone trabajos adicionales; el cliente sigue todo desde la app y
- * responde los adicionales con su firma. Cada cambio de etapa avisa con
- * {@link OrdenServicioCambiada}.
+ * responde los adicionales con su firma. Cada cambio de la orden avisa con
+ * {@link OrdenServicioCambiada} y su motivo; al quedar lista, los adicionales
+ * aprobados pasan a ser renglones de la orden (V2-M04.07).
  */
 @Service
 public class TallerService implements TallerEnVivo {
@@ -119,13 +122,15 @@ public class TallerService implements TallerEnVivo {
 		OrdenServicio orden = ordenes.save(
 				OrdenServicio.abrir(vehiculoId, kilometraje, actor.id(), citaId, enLaAgencia(entregaEstimada), ahora));
 		etapas.save(EtapaOrden.empezar(orden.getId(), EtapaTaller.RECIBIDO, ahora.toInstant(), null));
-		avisar(orden, vehiculo);
+		avisar(orden, vehiculo, EtapaTaller.RECIBIDO, MotivoCambio.APERTURA);
 		return vista(orden);
 	}
 
 	/**
 	 * Termina la etapa en curso y empieza la que sigue. Se puede saltar una etapa
-	 * (sin lavado, por ejemplo), pero nunca volver.
+	 * (sin lavado, por ejemplo), pero nunca volver. Al quedar lista para entrega (o
+	 * entregada sin pasar por lista), los trabajos adicionales aprobados pasan a la
+	 * orden como renglones, para que el total y el ticket los traigan.
 	 *
 	 * @param entregaEstimada
 	 *            nueva hora estimada de entrega en hora de la agencia; {@code null}
@@ -161,8 +166,11 @@ public class TallerService implements TallerEnVivo {
 		}
 		actual.terminar(ahora);
 		etapas.save(siguiente);
+		if (etapa.estatus().cerrada() && !orden.getEstatus().cerrada()) {
+			incorporarAprobados(orden, ahora);
+		}
 		orden.pasarA(etapa, ahora);
-		vehiculos.buscarPorId(orden.getVehiculoClienteId()).ifPresent(vehiculo -> avisar(orden, vehiculo));
+		avisar(orden, etapa, MotivoCambio.ETAPA);
 		return vista(orden);
 	}
 
@@ -176,6 +184,7 @@ public class TallerService implements TallerEnVivo {
 	public OrdenEnVivo revisar(Long ordenId, String punto, ResultadoInspeccion resultado, String comentario) {
 		OrdenServicio orden = existente(ordenId);
 		puntos.save(PuntoInspeccion.revisar(ordenId, punto, resultado, comentario));
+		avisar(orden, MotivoCambio.INSPECCION);
 		return vista(orden);
 	}
 
@@ -200,6 +209,7 @@ public class TallerService implements TallerEnVivo {
 		var tipo = EvidenciaOrden.tipoDe(tipoContenido);
 		String clave = almacen.guardar(CARPETA_EVIDENCIAS, tipoContenido, contenido).clave();
 		evidencias.save(EvidenciaOrden.de(ordenId, puntoId, tipo, clave));
+		avisar(orden, MotivoCambio.INSPECCION);
 		return vista(orden);
 	}
 
@@ -218,6 +228,27 @@ public class TallerService implements TallerEnVivo {
 		OrdenServicio orden = bloquear(ordenId);
 		exigirAbierta(orden);
 		adicionales.save(TrabajoAdicional.proponer(ordenId, concepto, manoDeObra, refacciones));
+		avisar(orden, MotivoCambio.ADICIONAL);
+		return vista(orden);
+	}
+
+	/**
+	 * Agrega a la orden un renglón de mano de obra o de refacción, con el precio
+	 * con IVA incluido (V2-M04.07). Es lo que el ticket de la orden cerrada trae.
+	 *
+	 * @throws RecursoNoEncontradoException
+	 *             si la orden no existe (404)
+	 * @throws ConflictoException
+	 *             si la orden ya está terminada ({@code ORDEN_CERRADA}) (409)
+	 * @throws IllegalArgumentException
+	 *             si el renglón no es válido o el total se pasa del máximo (400)
+	 */
+	@Transactional
+	public OrdenEnVivo agregarRenglon(Long ordenId, RenglonNuevo renglon) {
+		OrdenServicio orden = bloquear(ordenId);
+		exigirAbierta(orden);
+		orden.agregarRenglon(renglon);
+		avisar(orden, MotivoCambio.RENGLON);
 		return vista(orden);
 	}
 
@@ -241,9 +272,11 @@ public class TallerService implements TallerEnVivo {
 				.nombresDe(abiertas.stream().map(TallerService::asesorDe).distinct().toList());
 		return abiertas.stream().map(orden -> {
 			EtapaTaller etapa = etapaActual(orden, etapas.findByOrdenServicioIdOrderByInicioAscIdAsc(orden.getId()));
+			List<TrabajoAdicional> propuestos = adicionales.findByOrdenServicioIdOrderByIdAsc(orden.getId());
+			int pendientes = (int) propuestos.stream().filter(TrabajoAdicional::estaPendiente).count();
 			return new OrdenEnCurso(orden.getId(), orden.getVehiculoClienteId(), etapa, orden.getEstatus(),
-					orden.getEntregaEstimada(), nombres.get(asesorDe(orden)), etapa.avance(),
-					(int) adicionales.countByOrdenServicioIdAndEstado(orden.getId(), EstadoAdicional.PENDIENTE));
+					orden.getEntregaEstimada(), nombres.get(asesorDe(orden)), etapa.avance(), pendientes,
+					orden.getTotal().add(sinIncorporar(propuestos)));
 		}).toList();
 	}
 
@@ -267,6 +300,7 @@ public class TallerService implements TallerEnVivo {
 		exigirFirmaPng(firmaPng);
 		String clave = almacen.guardar(CARPETA_FIRMAS, "image/png", firmaPng).clave();
 		adicional.responder(aprobado, clienteId, clave, Instant.now(reloj));
+		avisar(orden, MotivoCambio.RESPUESTA);
 		return vista(orden);
 	}
 
@@ -291,9 +325,24 @@ public class TallerService implements TallerEnVivo {
 		}
 	}
 
-	private void avisar(OrdenServicio orden, VehiculoDeCliente vehiculo) {
+	private void incorporarAprobados(OrdenServicio orden, Instant ahora) {
+		for (TrabajoAdicional trabajo : adicionales.findByOrdenServicioIdOrderByIdAsc(orden.getId())) {
+			trabajo.incorporar(ahora).forEach(orden::agregarRenglon);
+		}
+	}
+
+	private void avisar(OrdenServicio orden, MotivoCambio motivo) {
+		avisar(orden, etapaActual(orden, etapas.findByOrdenServicioIdOrderByInicioAscIdAsc(orden.getId())), motivo);
+	}
+
+	private void avisar(OrdenServicio orden, EtapaTaller etapa, MotivoCambio motivo) {
+		vehiculos.buscarPorId(orden.getVehiculoClienteId())
+				.ifPresent(vehiculo -> avisar(orden, vehiculo, etapa, motivo));
+	}
+
+	private void avisar(OrdenServicio orden, VehiculoDeCliente vehiculo, EtapaTaller etapa, MotivoCambio motivo) {
 		eventos.publishEvent(new OrdenServicioCambiada(orden.getId(), orden.getVehiculoClienteId(),
-				vehiculo.propietario().id(), orden.getEstatus()));
+				vehiculo.propietario().id(), orden.getEstatus(), etapa, motivo));
 	}
 
 	private OrdenEnVivo vista(OrdenServicio orden) {
@@ -313,7 +362,7 @@ public class TallerService implements TallerEnVivo {
 				recorridas.stream().map(TallerService::paso).toList(), inspeccion,
 				evidenciasDe(todas, evidencia -> evidencia.getPuntoInspeccionId() == null),
 				propuestos.stream().map(TallerService::adicional).toList(), orden.getTotal(), aprobados, pendientes,
-				orden.getTotal().add(aprobados));
+				orden.getTotal().add(sinIncorporar(propuestos)));
 	}
 
 	private PuntoRevisado revisado(PuntoInspeccion punto, List<EvidenciaOrden> todas) {
@@ -339,6 +388,12 @@ public class TallerService implements TallerEnVivo {
 			}
 		}
 		return List.copyOf(elegidas);
+	}
+
+	private static BigDecimal sinIncorporar(List<TrabajoAdicional> trabajos) {
+		return trabajos.stream()
+				.filter(trabajo -> trabajo.getEstado() == EstadoAdicional.APROBADO && !trabajo.estaIncorporado())
+				.map(TrabajoAdicional::getTotal).reduce(BigDecimal.ZERO.setScale(2), BigDecimal::add);
 	}
 
 	private static BigDecimal suma(List<TrabajoAdicional> trabajos, EstadoAdicional estado) {

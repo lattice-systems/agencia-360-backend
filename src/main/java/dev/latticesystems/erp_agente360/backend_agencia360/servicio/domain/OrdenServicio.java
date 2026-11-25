@@ -118,16 +118,7 @@ public class OrdenServicio extends Auditable {
 		}
 		OrdenServicio orden = new OrdenServicio(vehiculoClienteId, fecha, kilometraje, atendidoPor);
 		renglones.forEach(nuevo -> orden.agregar(RenglonOrden.de(orden, nuevo)));
-		orden.manoDeObra = suma(orden.renglonesManoDeObra);
-		orden.refacciones = suma(orden.renglonesRefaccion);
-		BigDecimal sumaTotal = orden.manoDeObra.add(orden.refacciones);
-		if (sumaTotal.compareTo(TOTAL_MAXIMO) > 0) {
-			throw new IllegalArgumentException("El total del servicio no puede pasar de " + TOTAL_MAXIMO);
-		}
-		Montos montos = Montos.desglosar(sumaTotal);
-		orden.subtotal = montos.subtotal();
-		orden.iva = montos.iva();
-		orden.total = montos.total();
+		orden.recalcularMontos();
 		orden.estatus = EstatusOrden.TERMINADO;
 		orden.fechaCierre = ahora.toInstant();
 		return orden;
@@ -190,6 +181,42 @@ public class OrdenServicio extends Auditable {
 			throw new IllegalArgumentException("La entrega estimada no puede ser anterior a ahora");
 		}
 		this.entregaEstimada = entregaEstimada;
+	}
+
+	/**
+	 * Agrega un renglón a la orden que sigue en el taller y recalcula sus montos
+	 * (V2-M04.07): así el ticket de la orden cerrada trae lo que se hizo.
+	 *
+	 * @throws IllegalStateException
+	 *             si la orden ya está terminada o entregada
+	 * @throws IllegalArgumentException
+	 *             si el renglón no es válido, la orden ya tiene 100 renglones o el
+	 *             total se pasa del máximo
+	 */
+	public void agregarRenglon(RenglonNuevo nuevo) {
+		if (estatus.cerrada()) {
+			throw new IllegalStateException("La orden ya está terminada");
+		}
+		if (renglonesManoDeObra.size() + renglonesRefaccion.size() >= MAXIMO_RENGLONES) {
+			throw new IllegalArgumentException("El servicio admite hasta " + MAXIMO_RENGLONES + " renglones");
+		}
+		agregar(RenglonOrden.de(this, nuevo));
+		recalcularMontos();
+	}
+
+	private void recalcularMontos() {
+		BigDecimal sumaManoDeObra = suma(renglonesManoDeObra);
+		BigDecimal sumaRefacciones = suma(renglonesRefaccion);
+		BigDecimal sumaTotal = sumaManoDeObra.add(sumaRefacciones);
+		if (sumaTotal.compareTo(TOTAL_MAXIMO) > 0) {
+			throw new IllegalArgumentException("El total del servicio no puede pasar de " + TOTAL_MAXIMO);
+		}
+		Montos montos = Montos.desglosar(sumaTotal);
+		manoDeObra = sumaManoDeObra;
+		refacciones = sumaRefacciones;
+		subtotal = montos.subtotal();
+		iva = montos.iva();
+		total = montos.total();
 	}
 
 	private void agregar(RenglonOrden renglon) {

@@ -7,6 +7,8 @@ import dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.applicatio
 import dev.latticesystems.erp_agente360.backend_agencia360.clientes.application.NuevoCliente;
 import dev.latticesystems.erp_agente360.backend_agencia360.clientes.application.RegistroClientesService;
 import dev.latticesystems.erp_agente360.backend_agencia360.servicio.EstatusOrden;
+import dev.latticesystems.erp_agente360.backend_agencia360.servicio.EtapaTaller;
+import dev.latticesystems.erp_agente360.backend_agencia360.servicio.MotivoCambio;
 import dev.latticesystems.erp_agente360.backend_agencia360.servicio.OrdenServicioCambiada;
 import dev.latticesystems.erp_agente360.backend_agencia360.shared.AbstractIntegrationTest;
 import dev.latticesystems.erp_agente360.backend_agencia360.shared.security.JwtService;
@@ -84,11 +86,13 @@ class EventosEnVivoAppIntegrationTest extends AbstractIntegrationTest {
 		Long ana = clienteConCuenta("Ana En Vivo", "ana.envivo@correo.com");
 		BlockingQueue<String> avisos = suscribir(token(ana, "ana.envivo@correo.com"));
 
-		publicar(new OrdenServicioCambiada(41L, 7L, ana, EstatusOrden.TERMINADO));
+		publicar(new OrdenServicioCambiada(41L, 7L, ana, EstatusOrden.TERMINADO, EtapaTaller.LISTO_PARA_ENTREGA,
+				MotivoCambio.ETAPA));
 
 		assertThat(avisos.poll(ESPERA.toSeconds(), TimeUnit.SECONDS)).isEqualTo("orden");
 		String datos = avisos.poll(ESPERA.toSeconds(), TimeUnit.SECONDS);
-		assertThat(datos).contains("\"ordenId\":41").contains("\"vehiculoId\":7").contains("\"estatus\":\"TERMINADO\"");
+		assertThat(datos).contains("\"ordenId\":41").contains("\"vehiculoId\":7").contains("\"estatus\":\"TERMINADO\"")
+				.contains("\"etapa\":\"LISTO_PARA_ENTREGA\"").contains("\"motivo\":\"ETAPA\"");
 	}
 
 	@Test
@@ -97,7 +101,7 @@ class EventosEnVivoAppIntegrationTest extends AbstractIntegrationTest {
 		Long bruno = clienteConCuenta("Bruno En Vivo", "bruno.envivo@correo.com");
 		BlockingQueue<String> avisos = suscribir(token(ana, "ana.envivo@correo.com"));
 
-		publicar(new OrdenServicioCambiada(42L, 8L, bruno, EstatusOrden.TERMINADO));
+		publicar(new OrdenServicioCambiada(42L, 8L, bruno, EstatusOrden.TERMINADO, null, MotivoCambio.REGISTRO));
 
 		assertThat(avisos.poll(1, TimeUnit.SECONDS)).isNull();
 	}

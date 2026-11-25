@@ -124,6 +124,44 @@ class TallerDominioTest {
 	}
 
 	@Test
+	void unRenglonNuevoRecalculaLosMontosDeLaOrdenAbierta() {
+		OrdenServicio orden = OrdenServicio.abrir(3L, 15_000, 7L, null, null, AHORA);
+
+		orden.agregarRenglon(new RenglonNuevo(TipoRenglon.MANO_DE_OBRA, "Afinación", 1, new BigDecimal("900.00")));
+		orden.agregarRenglon(new RenglonNuevo(TipoRenglon.REFACCION, "Bujías", 4, new BigDecimal("95.50")));
+
+		assertThat(orden.getManoDeObra()).isEqualByComparingTo("900.00");
+		assertThat(orden.getRefacciones()).isEqualByComparingTo("382.00");
+		assertThat(orden.getTotal()).isEqualByComparingTo("1282.00");
+		assertThat(orden.getSubtotal().add(orden.getIva())).isEqualByComparingTo(orden.getTotal());
+		assertThat(orden.getRenglonesManoDeObra()).hasSize(1);
+		assertThat(orden.getRenglonesRefaccion()).hasSize(1);
+		orden.pasarA(EtapaTaller.LISTO_PARA_ENTREGA, AHORA.toInstant());
+		assertThatThrownBy(() -> orden
+				.agregarRenglon(new RenglonNuevo(TipoRenglon.MANO_DE_OBRA, "Lavado", 1, new BigDecimal("100.00"))))
+				.isInstanceOf(IllegalStateException.class);
+	}
+
+	@Test
+	void unAdicionalAprobadoSeIncorporaUnaSolaVezComoRenglones() {
+		TrabajoAdicional balatas = TrabajoAdicional.proponer(1L, "Cambio de balatas", new BigDecimal("450.00"),
+				new BigDecimal("1200.50"));
+		TrabajoAdicional lavado = TrabajoAdicional.proponer(1L, "Lavado de motor", new BigDecimal("200.00"),
+				BigDecimal.ZERO);
+		Instant momento = AHORA.toInstant();
+		balatas.responder(true, 9L, "firmas/a", momento);
+		lavado.responder(false, 9L, "firmas/b", momento);
+
+		assertThat(balatas.incorporar(momento)).containsExactly(
+				new RenglonNuevo(TipoRenglon.MANO_DE_OBRA, "Cambio de balatas", 1, new BigDecimal("450.00")),
+				new RenglonNuevo(TipoRenglon.REFACCION, "Cambio de balatas", 1, new BigDecimal("1200.50")));
+		assertThat(balatas.estaIncorporado()).isTrue();
+		assertThat(balatas.incorporar(momento)).isEmpty();
+		assertThat(lavado.incorporar(momento)).isEmpty();
+		assertThat(lavado.estaIncorporado()).isFalse();
+	}
+
+	@Test
 	void elAdicionalNoAceptaMontosNegativosNiTotalEnCero() {
 		assertThatThrownBy(() -> TrabajoAdicional.proponer(1L, "Lavado", BigDecimal.ZERO, BigDecimal.ZERO))
 				.isInstanceOf(IllegalArgumentException.class);
