@@ -78,6 +78,23 @@ class PrivacidadIntegrationTest extends AbstractIntegrationTest {
 	}
 
 	@Test
+	void laVersionDosNombraALosProveedoresExternosQueRecibenDatos() {
+		String texto = jdbc.queryForObject("select texto from aviso_privacidad where version = 2", String.class);
+
+		assertThat(texto).contains("Microsoft Azure").contains("Neon").contains("OpenStreetMap").contains("Gemini")
+				.contains("Derechos ARCO");
+		assertThat(texto)
+				.doesNotContain("Transferencias: solo compartimos tus datos con autoridades cuando la ley lo exige");
+	}
+
+	@Test
+	void unaCuentaNuevaVeComoVigenteAlMenosLaVersionDos() throws Exception {
+		avisoVigente().andExpect(status().isOk())
+				.andExpect(jsonPath("$.version").value(org.hamcrest.Matchers.greaterThanOrEqualTo(2)))
+				.andExpect(jsonPath("$.aceptado").value(false));
+	}
+
+	@Test
 	void aceptarRegistraLaVersionUnaSolaVezAunqueSeRepita() throws Exception {
 		long aviso = idDelVigente();
 
