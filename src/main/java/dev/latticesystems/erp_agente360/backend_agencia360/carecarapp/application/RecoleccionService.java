@@ -9,7 +9,11 @@ import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.LocalDate;
 import java.time.ZoneId;
+import java.util.Collection;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -108,6 +112,34 @@ public class RecoleccionService {
 								cita.getFecha(), entregar.inicio(), entregar.fin())))
 				.stream().map(TrasladoApp::de).toList();
 		return new RecoleccionApp(direccion.getId(), costo.multiply(BigDecimal.valueOf(2)), creados);
+	}
+
+	/**
+	 * La recolección de cada cita con su estado actual, en una sola consulta; las
+	 * citas sin traslados no aparecen en el mapa (V2-M17.03).
+	 */
+	@Transactional(readOnly = true)
+	public Map<Long, RecoleccionApp> deCitas(Collection<Long> citaIds) {
+		if (citaIds.isEmpty()) {
+			return Map.of();
+		}
+		Map<Long, List<Traslado>> porCita = traslados.findByCitaIdInOrderByIdAsc(citaIds).stream()
+				.collect(Collectors.groupingBy(Traslado::getCitaId, LinkedHashMap::new, Collectors.toList()));
+		Map<Long, RecoleccionApp> recolecciones = new LinkedHashMap<>();
+		porCita.forEach((citaId, deLaCita) -> recolecciones.put(citaId, recoleccionDe(deLaCita)));
+		return recolecciones;
+	}
+
+	/** La recolección de una cita, o {@code null} si no pidió traslados. */
+	@Transactional(readOnly = true)
+	public RecoleccionApp deCita(Long citaId) {
+		return deCitas(List.of(citaId)).get(citaId);
+	}
+
+	private static RecoleccionApp recoleccionDe(List<Traslado> deLaCita) {
+		BigDecimal total = deLaCita.stream().map(Traslado::getCosto).reduce(BigDecimal.ZERO, BigDecimal::add);
+		return new RecoleccionApp(deLaCita.getFirst().getDireccionClienteId(), total,
+				deLaCita.stream().map(TrasladoApp::de).toList());
 	}
 
 	/**

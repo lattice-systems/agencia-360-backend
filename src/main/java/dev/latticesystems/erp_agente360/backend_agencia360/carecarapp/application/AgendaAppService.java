@@ -26,6 +26,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.domain.Page;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -126,10 +127,12 @@ public class AgendaAppService {
 		Set<EstadoCita> estados = estado == null ? EnumSet.allOf(EstadoCita.class) : EnumSet.of(estado);
 		Map<Long, String> descripciones = vehiculos.deCliente(clienteId).stream()
 				.collect(Collectors.toMap(VehiculoDeCliente::id, CitaApp::describir, (a, b) -> a));
-		return Pagina.de(
-				citaRepository.delCliente(clienteId, estados, desde == null ? SIN_INICIO : desde,
-						hasta == null ? SIN_FIN : hasta, Pagina.pedir(pagina, tamano)),
-				cita -> CitaApp.de(cita, descripciones.get(cita.getVehiculoClienteId())));
+		Page<Cita> pedidas = citaRepository.delCliente(clienteId, estados, desde == null ? SIN_INICIO : desde,
+				hasta == null ? SIN_FIN : hasta, Pagina.pedir(pagina, tamano));
+		Map<Long, RecoleccionApp> recolecciones = recoleccion
+				.deCitas(pedidas.getContent().stream().map(Cita::getId).toList());
+		return Pagina.de(pedidas, cita -> CitaApp.de(cita, descripciones.get(cita.getVehiculoClienteId()))
+				.conRecoleccion(recolecciones.get(cita.getId())));
 	}
 
 	/**
@@ -216,10 +219,9 @@ public class AgendaAppService {
 		verificarDisponible(cita.getVehiculoClienteId(), nuevoDia, franja, cita.getId());
 		cita.reprogramar(ahora, nuevoDia, franjaId, franja.getHoraInicio(), franja.getHoraFin());
 		recoleccion.reprogramarDeCita(cita.getId(), nuevoDia);
-		return CitaApp.de(cita,
-				vehiculos.buscarPorId(cita.getVehiculoClienteId())
-						.filter(vehiculo -> vehiculo.propietario().id().equals(clienteId)).map(CitaApp::describir)
-						.orElse(null));
+		return CitaApp.de(cita, vehiculos.buscarPorId(cita.getVehiculoClienteId())
+				.filter(vehiculo -> vehiculo.propietario().id().equals(clienteId)).map(CitaApp::describir).orElse(null))
+				.conRecoleccion(recoleccion.deCita(cita.getId()));
 	}
 
 	private FranjaHorario validarFranja(LocalDate fecha, Long franjaId) {
@@ -261,10 +263,9 @@ public class AgendaAppService {
 				.orElseThrow(() -> new RecursoNoEncontradoException("No existe la cita " + citaId));
 		cita.cancelar(LocalDateTime.now(reloj), horario.plazoParaCancelar(), reloj.instant());
 		recoleccion.cancelarDeCita(cita.getId());
-		return CitaApp.de(cita,
-				vehiculos.buscarPorId(cita.getVehiculoClienteId())
-						.filter(vehiculo -> vehiculo.propietario().id().equals(clienteId)).map(CitaApp::describir)
-						.orElse(null));
+		return CitaApp.de(cita, vehiculos.buscarPorId(cita.getVehiculoClienteId())
+				.filter(vehiculo -> vehiculo.propietario().id().equals(clienteId)).map(CitaApp::describir).orElse(null))
+				.conRecoleccion(recoleccion.deCita(cita.getId()));
 	}
 
 	private static String clave(LocalDate fecha, Long franjaId) {
