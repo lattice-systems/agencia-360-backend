@@ -11,6 +11,9 @@ public interface TrasladoRepository extends JpaRepository<Traslado, Long> {
 
 	List<Traslado> findByCitaIdOrderByIdAsc(Long citaId);
 
-	/** Los traslados de varias citas en una sola consulta (evita el N+1 de la lista). */
+	/**
+	 * Los traslados de varias citas en una sola consulta (evita el N+1 de la
+	 * lista).
+	 */
 	List<Traslado> findByCitaIdInOrderByIdAsc(Collection<Long> citaIds);
 }
