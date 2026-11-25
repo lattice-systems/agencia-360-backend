@@ -691,6 +691,20 @@ Detalle: [`carecar-mobile/plan/modulos/M25-widgets-y-wallet.md`](https://github.
 - Sin migración: el pase se arma al vuelo con la cita y el vehículo.
 - Historia nueva (`Borrador`): **V2-M25.06 · Servicio de actualización de pases** para marcar `voided` (Apple, con `webServiceURL`, registro de dispositivos y APNs) y `EXPIRED` (Google, PATCH con OAuth) los pases ya emitidos al cancelar o reprogramar la cita.
 
+#### Diseño técnico — V2-M25.06 (parte B de Juan Pablo)
+
+El pase de Wallet de una cita cancelada o reprogramada deja de servir. **Google quedó hecho; Apple queda diseñado, sin implementar.**
+
+- **Evento** `CambioDePaseDeCita` (`citaId`, `tipo` `CANCELADA` o `REPROGRAMADA`, `inicio`, `fin`, `vehiculoNombre`): lo publica `AgendaAppService.cancelar` y `.reprogramar` dentro de su transacción. La agenda no conoce Wallet.
+- **Google** (`ActualizadorDePasesGoogle`, escucha el evento): obtiene un token de la cuenta de servicio (JWT bearer, alcance `wallet_object.issuer`) y hace `PATCH …/genericObject/{issuer}.carecar_cita_{id}`: cancelada → `state: EXPIRED`; reprogramada → `validTimeInterval` y módulo «Fecha y hora» nuevos. Un 404 (el cliente nunca guardó el pase) no es error; cualquier otro fallo se registra y **nunca** revierte la cancelación. Sin credenciales (`app.wallet.google.*`) no hace nada. Llamadas HTTP detrás de `LlamadaHttp` para probarlo sin red.
+- **Apple (pendiente, diseño):** hay que (1) agregar `webServiceURL` y `authenticationToken` al `pass.json` de `PaseAppleGenerador`; (2) tabla `registro_pase_apple` (`dispositivo`, `push_token`, `serial` = id de cita) y los endpoints que Apple exige (`POST/DELETE /v1/devices/{dev}/registrations/{passType}/{serial}`, `GET /v1/devices/{dev}/registrations/{passType}?passesUpdatedSince=`, `GET /v1/passes/{passType}/{serial}`, `POST /v1/log`), fuera de `/api/v1/app` y con el token del pase; (3) al llegar `CambioDePaseDeCita`, marcar el pase `voided: true` o con la fecha nueva y mandar un push vacío por APNs a los `push_token` registrados. Requiere el certificado del Pass Type ID (R8: solo en el ambiente) y un dominio HTTPS público, que hoy no tenemos (proyecto solo local).
+
+**Supuestos y lo que falta**
+
+- **Apple no se puede probar** sin cuenta de desarrollador, certificado y dominio público; por eso queda como diseño. El pase de Apple de una cita cancelada **sigue sirviendo** hasta que se implemente; la recepción lo rechaza igual porque valida el QR contra la cita (`FirmaCitas`), que ya no está confirmada.
+- **Google tampoco se probó contra Google**: solo con un transporte falso. Probar con una cuenta de servicio real antes de entregar.
+- Los pases guardados antes de reprogramar no se actualizan si el cliente no los tenía guardados (404, se ignora).
+
 ### M26 · Valuación y toma a cuenta avanzada — H5 — módulo `ventascrm`
 
 Detalle: [`carecar-mobile/plan/modulos/M26-valuacion.md`](https://github.com/lattice-systems/carecar-mobile/blob/main/plan/modulos/M26-valuacion.md)
