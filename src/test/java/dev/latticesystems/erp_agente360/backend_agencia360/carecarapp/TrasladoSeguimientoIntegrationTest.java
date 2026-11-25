@@ -264,23 +264,22 @@ class TrasladoSeguimientoIntegrationTest extends AbstractIntegrationTest {
 		long recoger = trasladoDe(conRecoleccion, "recoger");
 		cambiar(recoger, "en_camino").andExpect(status().isOk());
 		LocalDate otroDia = diaHabilDesde(diaHabil.plusDays(1));
-		String sinRecoleccion = "{\"vehiculoId\": %d, \"franjaId\": %d, \"fecha\": \"%s\"}"
-				.formatted(vehiculoDeAna, franjaDelDia(otroDia), otroDia);
+		String sinRecoleccion = "{\"vehiculoId\": %d, \"franjaId\": %d, \"fecha\": \"%s\"}".formatted(vehiculoDeAna,
+				franjaDelDia(otroDia), otroDia);
 		enviar(post("/api/v1/app/citas"), tokenDeAna, sinRecoleccion).andExpect(status().isCreated());
 
 		String lista = enviar(get("/api/v1/app/citas"), tokenDeAna, null).andExpect(status().isOk()).andReturn()
 				.getResponse().getContentAsString();
 
-		String con = "$.contenido[?(@.id==" + conRecoleccion + ")]";
-		assertThat(JsonPath.<List<Object>>read(lista, "$.contenido")).hasSize(2);
-		assertThat(JsonPath.<List<Number>>read(lista, con + ".recoleccion.direccionId")).hasSize(1);
-		assertThat(JsonPath.<List<Number>>read(lista, con + ".recoleccion.direccionId").getFirst().longValue())
-				.isEqualTo(direccionDeAna);
-		assertThat(JsonPath.<List<Object>>read(lista, con + ".recoleccion.traslados[*]")).hasSize(1);
-		List<List<String>> estados = JsonPath.read(lista, con + ".recoleccion.traslados[*].estado");
-		assertThat(estados.getFirst()).containsExactlyInAnyOrder("en_camino", "programado");
-		List<Object> sin = JsonPath.read(lista, "$.contenido[?(@.id!=" + conRecoleccion + ")].recoleccion");
-		assertThat(sin).hasSize(1).containsOnlyNulls();
+		List<Number> ids = JsonPath.read(lista, "$.contenido[*].id");
+		assertThat(ids).hasSize(2);
+		int con = ids.get(0).longValue() == conRecoleccion ? 0 : 1;
+		String propia = "$.contenido[" + con + "].recoleccion";
+		assertThat(JsonPath.<Number>read(lista, propia + ".direccionId").longValue()).isEqualTo(direccionDeAna);
+		assertThat(JsonPath.<Number>read(lista, propia + ".costoTotal")).isNotNull();
+		List<String> estados = JsonPath.read(lista, propia + ".traslados[*].estado");
+		assertThat(estados).containsExactlyInAnyOrder("en_camino", "programado");
+		assertThat(JsonPath.<Object>read(lista, "$.contenido[" + (1 - con) + "].recoleccion")).isNull();
 	}
 
 	@Test
