@@ -568,6 +568,20 @@ Detalle: [`carecar-mobile/plan/modulos/M22-seguridad-y-privacidad.md`](https://g
 - **Quién bloquea:** el servidor no rechaza el resto de la API por falta de aceptación (la app v1 instalada no la conoce); la puerta la pone la app. Lo que queda registrado, con fecha, es lo que cuenta ante una reclamación.
 - **Fuera de alcance:** idiomas del aviso, y un listado de versiones con conteo de aceptaciones para el CRM (congelado, R9).
 
+#### Diseño de V2-M22.02 — descargar mis datos (acceso ARCO)
+
+- **Migración `V44`** (número provisional):
+  - `solicitud_arco` (id, cliente_id → `cliente`, tipo `ACCESO`|`RECTIFICACION`|`CANCELACION`|`OPOSICION`, estado `PENDIENTE`|`RESUELTA`|`FALLIDA`, archivo_url, creada_en, resuelta_en). Índice (cliente_id, creada_en desc) e índice único parcial (cliente_id, tipo) donde el estado es `PENDIENTE`: dos toques seguidos, o dos teléfonos, no abren dos archivos.
+  - `archivo_arco` (solicitud_arco_id, contenido `bytea`, tamano_bytes, created_at): la copia, aparte. `archivo_url` (el nombre es el de la ficha) guarda la ruta de la API desde la que se descarga.
+  - **Por qué no el módulo `archivos`:** solo admite imágenes, PDF y video, y abrirlo a JSON ampliaría lo que cualquier subida puede guardar. Además sus URL firmadas son públicas durante 15 minutos: para datos personales la descarga solo pasa por la API con sesión.
+- **Flujo asíncrono:** `POST /privacidad/arco/acceso` crea la solicitud `PENDIENTE` y responde 202; después de confirmar la transacción, un `@ApplicationModuleListener` arma el archivo, lo guarda en `archivo_arco`, la pasa a `RESUELTA` con `resuelta_en` y publica `AvisoAlCliente` con el evento `arco.estado`. La inserción usa `on conflict … do nothing` contra el índice único: si otra petición ganó, se devuelve esa sin que una excepción estropee la transacción. Si algo falla queda `FALLIDA` (sin datos personales en el registro) y se avisa igual. Si ya hay una `PENDIENTE` de acceso, se devuelve esa (200).
+- **El archivo:** JSON con `generadoEn`, un `alcance` (qué incluye y qué no) y una sección por tabla, armada con `to_jsonb` sobre las filas de la cuenta (así una columna nueva entra sola): `cliente`, `cuentaApp` (sin hash de contraseña), `vehiculos`, `citas`, `traslados` y sus checklists, `direcciones`, `servicios` (órdenes), `estimacionesTomaCuenta`, `solicitudesEstreno`, `solicitudesAsistencia`, `consultasAsistente`, `lecturasKm`, `gastos`, `avisosAceptados` y `solicitudesArco`.
+  - **No incluye** (y el archivo lo dice): lo fiscal y comercial que la agencia conserva por obligación legal (ventas, pagos, facturas), las notas internas del CRM y las fotos adjuntas; se piden en la agencia.
+- **Vigencia:** 7 días desde `resuelta_en`. Pasado ese plazo la solicitud se lista `VENCIDA` y la descarga responde 404; una limpieza diaria (03:30, hora de México) borra el archivo. Pedir una solicitud nueva borra el archivo de la anterior: por cuenta nunca hay más de uno.
+- **Endpoints de la app** (`CLIENTE_CARECAR`, contrato 2.14.0): `POST /privacidad/arco/acceso` (202 o 200), `GET /privacidad/arco` (las últimas 20), `GET /privacidad/arco/{id}/archivo` (JSON como adjunto, sin caché; 404 si no es de la cuenta, no está `RESUELTA` o venció). Evento `arco.estado` con `{solicitudId, tipo, estado}`.
+- **Fuera de alcance:** rectificación y oposición (el tipo existe en la tabla; hoy se atienden en la agencia) y la cancelación, que es V2-M22.03.
+- **Exportador:** una sección por tabla con `to_jsonb` sobre las filas de la cuenta, en su propia transacción (`REQUIRES_NEW`) para que una consulta que falle no estropee la transacción que marca la solicitud como fallida. Una columna nueva entra sola al archivo. Si se agrega una tabla con datos de la persona, se agrega su sección en `ExportadorDeDatosJdbc`.
+
 ### M23 · Analítica y observabilidad — H2 — módulo `shared`
 
 Detalle: [`carecar-mobile/plan/modulos/M23-analitica-y-observabilidad.md`](https://github.com/lattice-systems/carecar-mobile/blob/main/plan/modulos/M23-analitica-y-observabilidad.md)
