@@ -553,6 +553,7 @@ Detalle: [`carecar-mobile/plan/modulos/M22-seguridad-y-privacidad.md`](https://g
 | V2-M22.01 | Como cliente quiero leer el aviso de privacidad real | Texto versionado del backend · aceptación registrada en primer ingreso y al cambiar de versión | Daniel |
 | V2-M22.02 | Como cliente quiero descargar mis datos (acceso ARCO) | Solicitud genera archivo con todos mis datos · aviso al estar listo | Daniel |
 | V2-M22.03 | Como cliente quiero pedir que borren mi cuenta (cancelación ARCO) | Flujo con confirmación · se desactiva `cuenta_app` y se anonimizan datos no obligatorios por ley; lo fiscal se conserva | Daniel |
+| V2-M22.10 | Como cliente quiero saber qué proveedores externos reciben mis datos | El aviso de privacidad nombra el alojamiento, el mapa, el geocodificador y el asistente · versión 2 vigente que todas las cuentas deben aceptar | Daniel |
 
 #### Diseño de V2-M22.01 — aviso de privacidad versionado
 
@@ -613,6 +614,14 @@ Detalle: [`carecar-mobile/plan/modulos/M23-analitica-y-observabilidad.md`](https
 | ID | Historia | Criterios de aceptación | Dueño |
 | --- | --- | --- | --- |
 | V2-M23.06 | Como equipo queremos un tablero de objetivos | Panel con indicadores O1–O10 enlazado en `plan/proposito.md` | Haziel |
+
+#### Diseño de V2-M22.10 — aviso de privacidad versión 2
+
+- **Migración `V45`** (número provisional; se toma al integrar): inserta la versión 2 en `aviso_privacidad` con `vigente_desde = now()`. No toca la versión 1 (el disparador de V43 lo impediría). Como la vigente es la mayor ya llegada, todas las cuentas deben leerla y aceptarla otra vez.
+- **Qué agrega al texto:** quién recibe datos y cuáles. Alojamiento en Microsoft Azure y Neon; OpenStreetMap (teselas del mapa: dirección IP y zona que se ve); el geocodificador del sistema (texto de la dirección o coordenadas); y Gemini, de Google, solo si se usa el asistente (la pregunta sin lo que parezca correo, teléfono, placas o VIN, el modelo y año del auto y la foto del tablero sin EXIF ni GPS), con la advertencia de que Google puede usar ese contenido en el nivel gratuito. La frase «solo compartimos tus datos con autoridades» pasa a «fuera de estos proveedores».
+- **De dónde sale cada afirmación:** ADR 0007, `LimpiadorDatosPersonales` y `LimpiadorImagen` (asistente) y `lib/nucleo/mapas` de la app (teselas y geocodificador; ningún build define `TILES_URL`, así que usan el servidor público de OpenStreetMap). El ADR 0007 decía que el aviso ya explicaba lo de Google; con la versión 2 es cierto.
+- **Pruebas:** `PrivacidadIntegrationTest` (el texto de la versión 2 nombra a los proveedores y ya no dice que solo las autoridades reciben datos; una cuenta nueva ve como vigente al menos la versión 2).
+- **Fuera de alcance:** la revisión legal del texto (la agencia puede publicar el definitivo como versión 3 con `POST /api/v1/avisos-privacidad`, sin desplegar) y el aviso en inglés.
 
 ### M24 · Asistente CareCar (IA) — H6 — módulo `asistente (nuevo)`
 
