@@ -272,7 +272,7 @@ Vive en `carecarapp` (la historia lo ubica en `servicio`, pero solo consume su A
 
 #### Diseño técnico — V2-M05.05 (parte B de Juan Pablo)
 
-Recordatorio del próximo servicio, en `carecarapp`. Migración `V44`.
+Recordatorio del próximo servicio, en `carecarapp`. Migración `V46`.
 
 - **Tabla** `recordatorio_mantenimiento`: `id`, `vehiculo_cliente_id` (FK), `plan_mantenimiento_id` (FK), `motivo` (`km` o `tiempo`), `enviado_en`; única por (vehículo, servicio) para no repetir el aviso.
 - **Regla** (`PoliticaRecordatorioMantenimiento`, pura): avisa si faltan `app.mantenimiento.recordatorio.km` km (1 000) **o** `...dias` días (14) para el próximo servicio de `MantenimientoAppService.plan(...)`; con los dos cumplidos gana `km`. Umbrales y cron (`0 0 9 * * *`, hora de México) salen de variables de entorno.
@@ -284,7 +284,7 @@ Recordatorio del próximo servicio, en `carecarapp`. Migración `V44`.
 - **Push (V2-M06.02 y V2-M06.07, Jael):** no existe el servicio único de envío. Este job publica el evento de dominio `AvisoAlCliente`; cuando el módulo `notificaciones` escuche ese evento, el recordatorio llegará como push **sin cambiar este código**. Falta que M06.07 decida el texto y la preferencia del cliente («elegir qué avisos recibir», V2-M06.05): hasta entonces el aviso solo llega por SSE a quien tenga la app abierta.
 - **Configurable por cliente:** la historia dice «configurable»; aquí lo es por entorno (servidor). Un umbral por cliente depende de las preferencias de V2-M06.05.
 - **Vehículos sin lecturas** no reciben recordatorio por tiempo; se resuelve si V2-M05.02 empieza a estimar con la fecha de compra o de la última orden.
-- La migración `V44` es la siguiente libre de `main` al escribir esto; si otro PR la toma antes, renumerar al integrar.
+- La migración `V46` es la siguiente libre de `main` al escribir esto; si otro PR la toma antes, renumerar al integrar.
 
 ### M06 · Notificaciones y bandeja — H3 — módulo `notificaciones (nuevo)`
 
@@ -569,6 +569,7 @@ Detalle: [`carecar-mobile/plan/modulos/M22-seguridad-y-privacidad.md`](https://g
 | V2-M22.01 | Como cliente quiero leer el aviso de privacidad real | Texto versionado del backend · aceptación registrada en primer ingreso y al cambiar de versión | Daniel |
 | V2-M22.02 | Como cliente quiero descargar mis datos (acceso ARCO) | Solicitud genera archivo con todos mis datos · aviso al estar listo | Daniel |
 | V2-M22.03 | Como cliente quiero pedir que borren mi cuenta (cancelación ARCO) | Flujo con confirmación · se desactiva `cuenta_app` y se anonimizan datos no obligatorios por ley; lo fiscal se conserva | Daniel |
+| V2-M22.10 | Como cliente quiero saber qué proveedores externos reciben mis datos | El aviso de privacidad nombra el alojamiento, el mapa, el geocodificador y el asistente · versión 2 vigente que todas las cuentas deben aceptar | Daniel |
 
 #### Diseño de V2-M22.01 — aviso de privacidad versionado
 
@@ -584,6 +585,44 @@ Detalle: [`carecar-mobile/plan/modulos/M22-seguridad-y-privacidad.md`](https://g
 - **Quién bloquea:** el servidor no rechaza el resto de la API por falta de aceptación (la app v1 instalada no la conoce); la puerta la pone la app. Lo que queda registrado, con fecha, es lo que cuenta ante una reclamación.
 - **Fuera de alcance:** idiomas del aviso, y un listado de versiones con conteo de aceptaciones para el CRM (congelado, R9).
 
+#### Diseño de V2-M22.02 — descargar mis datos (acceso ARCO)
+
+- **Migración `V44`** (número provisional):
+  - `solicitud_arco` (id, cliente_id → `cliente`, tipo `ACCESO`|`RECTIFICACION`|`CANCELACION`|`OPOSICION`, estado `PENDIENTE`|`RESUELTA`|`FALLIDA`, archivo_url, creada_en, resuelta_en). Índice (cliente_id, creada_en desc) e índice único parcial (cliente_id, tipo) donde el estado es `PENDIENTE`: dos toques seguidos, o dos teléfonos, no abren dos archivos.
+  - `archivo_arco` (solicitud_arco_id, contenido `bytea`, tamano_bytes, created_at): la copia, aparte. `archivo_url` (el nombre es el de la ficha) guarda la ruta de la API desde la que se descarga.
+  - **Por qué no el módulo `archivos`:** solo admite imágenes, PDF y video, y abrirlo a JSON ampliaría lo que cualquier subida puede guardar. Además sus URL firmadas son públicas durante 15 minutos: para datos personales la descarga solo pasa por la API con sesión.
+- **Flujo asíncrono:** `POST /privacidad/arco/acceso` crea la solicitud `PENDIENTE` y responde 202; después de confirmar la transacción, un `@ApplicationModuleListener` arma el archivo, lo guarda en `archivo_arco`, la pasa a `RESUELTA` con `resuelta_en` y publica `AvisoAlCliente` con el evento `arco.estado`. La inserción usa `on conflict … do nothing` contra el índice único: si otra petición ganó, se devuelve esa sin que una excepción estropee la transacción. Si algo falla queda `FALLIDA` (sin datos personales en el registro) y se avisa igual. Si ya hay una `PENDIENTE` de acceso, se devuelve esa (200).
+- **El archivo:** JSON con `generadoEn`, un `alcance` (qué incluye y qué no) y una sección por tabla, armada con `to_jsonb` sobre las filas de la cuenta (así una columna nueva entra sola): `cliente`, `cuentaApp` (sin hash de contraseña), `vehiculos`, `citas`, `traslados` y sus checklists, `direcciones`, `servicios` (órdenes), `estimacionesTomaCuenta`, `solicitudesEstreno`, `solicitudesAsistencia`, `consultasAsistente`, `lecturasKm`, `gastos`, `avisosAceptados` y `solicitudesArco`.
+  - **No incluye** (y el archivo lo dice): lo fiscal y comercial que la agencia conserva por obligación legal (ventas, pagos, facturas), las notas internas del CRM y las fotos adjuntas; se piden en la agencia.
+- **Vigencia:** 7 días desde `resuelta_en`. Pasado ese plazo la solicitud se lista `VENCIDA` y la descarga responde 404; una limpieza diaria (03:30, hora de México) borra el archivo. Pedir una solicitud nueva borra el archivo de la anterior: por cuenta nunca hay más de uno.
+- **Endpoints de la app** (`CLIENTE_CARECAR`, contrato 2.14.0): `POST /privacidad/arco/acceso` (202 o 200), `GET /privacidad/arco` (las últimas 20), `GET /privacidad/arco/{id}/archivo` (JSON como adjunto, sin caché; 404 si no es de la cuenta, no está `RESUELTA` o venció). Evento `arco.estado` con `{solicitudId, tipo, estado}`.
+- **Fuera de alcance:** rectificación y oposición (el tipo existe en la tabla; hoy se atienden en la agencia) y la cancelación, que es V2-M22.03.
+- **Exportador:** una sección por tabla con `to_jsonb` sobre las filas de la cuenta, en su propia transacción (`REQUIRES_NEW`) para que una consulta que falle no estropee la transacción que marca la solicitud como fallida. Una columna nueva entra sola al archivo. Si se agrega una tabla con datos de la persona, se agrega su sección en `ExportadorDeDatosJdbc`.
+
+#### Diseño de V2-M22.03 — cancelar mi cuenta (cancelación ARCO)
+
+- **Sin migración nueva:** usa `solicitud_arco` con tipo `CANCELACION`. Queda `RESUELTA` en la misma transacción.
+- **Endpoint** (`CLIENTE_CARECAR`, contrato 2.15.0): `POST /privacidad/arco/cancelacion` `{contrasena}` → 200 con la solicitud. La contraseña confirma que quien pide borrar la cuenta es su titular y no alguien con el teléfono desbloqueado. Contraseña equivocada o ausente → 400 `DATOS_INVALIDOS` (nunca 401: la app lo leería como sesión vencida y cerraría la sesión). Cuenta con 5 intentos fallidos → 429; el intento equivocado cuenta en el mismo contador que el login, para que un token robado no sirva para adivinar la contraseña.
+- **Todo o nada:** una sola transacción. Si algo falla, no cambia nada. No se puede deshacer.
+- **Qué pasa con cada dato:**
+
+| Dato | Qué pasa | Por qué |
+| --- | --- | --- |
+| `cliente` | nombre, correo y teléfono se reemplazan («Cliente eliminado», sin correo ni teléfono) | Identifican a la persona; la fila se conserva porque citas, traslados y órdenes la referencian |
+| `cuenta_app` | se desactiva; el usuario se anonimiza (`eliminada-<id>`) y la contraseña se invalida; sus sesiones y códigos de recuperación se borran | Ya no se puede entrar ni recuperar la cuenta; el siguiente request con un token vigente responde 403 `CUENTA_DESACTIVADA` |
+| `direccion_cliente` | los campos se vacían (calle, colonia, ciudad, pin) | Los traslados las referencian y no se pueden borrar |
+| `solicitud_asistencia` | ubicación y comentario fuera | Queda el registro del servicio, sin dónde estaba la persona |
+| `consulta_asistente` | se borran | Preguntas y respuestas libres de la persona |
+| `estimacion_toma_cuenta`, `solicitud_estreno` | se borran | No son obligatorias por ley; el prospecto del CRM no se toca |
+| `gasto_vehiculo` y `lectura_km` de la persona (y sus fotos y tickets) | se borran, también los archivos | Bitácora personal; las lecturas del taller se conservan |
+| `solicitud_arco` y `archivo_arco` | los archivos de acceso se borran; las solicitudes quedan | Una copia de datos no se guarda de más, pero el registro prueba qué se pidió |
+| `vehiculo_cliente`, `cita`, `traslado`, `orden_servicio` y sus partes (etapas, inspección, evidencias, trabajos adicionales con la firma de aprobación) | se conservan (ya sin el nombre del cliente) | Historial de servicio y garantía del vehículo; la firma es la prueba de lo que se cobró |
+| `venta`, `pago`, `factura`, `liquidacion`, `prospecto` | no se tocan | Obligación fiscal y comercial; son de otros módulos (ERP y CRM, congelados, R9) |
+| `aceptacion_aviso` | se conserva | Prueba de lo que la persona aceptó |
+
+- **No se reactiva:** `activar` (CRM) responde 409 si la cuenta se canceló por su titular. Abrir una cuenta nueva para esa persona pide un cliente nuevo.
+- **Límites:** no hay periodo de bloqueo ni confirmación por correo (llega con V2-M06); el criterio de qué se conserva es de la agencia y su revisión legal está por hacerse (ver `docs/seguridad/derechos-arco.md` en la app).
+
 ### M23 · Analítica y observabilidad — H2 — módulo `shared`
 
 Detalle: [`carecar-mobile/plan/modulos/M23-analitica-y-observabilidad.md`](https://github.com/lattice-systems/carecar-mobile/blob/main/plan/modulos/M23-analitica-y-observabilidad.md)
@@ -591,6 +630,14 @@ Detalle: [`carecar-mobile/plan/modulos/M23-analitica-y-observabilidad.md`](https
 | ID | Historia | Criterios de aceptación | Dueño |
 | --- | --- | --- | --- |
 | V2-M23.06 | Como equipo queremos un tablero de objetivos | Panel con indicadores O1–O10 enlazado en `plan/proposito.md` | Haziel |
+
+#### Diseño de V2-M22.10 — aviso de privacidad versión 2
+
+- **Migración `V45`** (número provisional; se toma al integrar): inserta la versión 2 en `aviso_privacidad` con `vigente_desde = now()`. No toca la versión 1 (el disparador de V43 lo impediría). Como la vigente es la mayor ya llegada, todas las cuentas deben leerla y aceptarla otra vez.
+- **Qué agrega al texto:** quién recibe datos y cuáles. Alojamiento en Microsoft Azure y Neon; OpenStreetMap (teselas del mapa: dirección IP y zona que se ve); el geocodificador del sistema (texto de la dirección o coordenadas); y Gemini, de Google, solo si se usa el asistente (la pregunta sin lo que parezca correo, teléfono, placas o VIN, el modelo y año del auto y la foto del tablero sin EXIF ni GPS), con la advertencia de que Google puede usar ese contenido en el nivel gratuito. La frase «solo compartimos tus datos con autoridades» pasa a «fuera de estos proveedores».
+- **De dónde sale cada afirmación:** ADR 0007, `LimpiadorDatosPersonales` y `LimpiadorImagen` (asistente) y `lib/nucleo/mapas` de la app (teselas y geocodificador; ningún build define `TILES_URL`, así que usan el servidor público de OpenStreetMap). El ADR 0007 decía que el aviso ya explicaba lo de Google; con la versión 2 es cierto.
+- **Pruebas:** `PrivacidadIntegrationTest` (el texto de la versión 2 nombra a los proveedores y ya no dice que solo las autoridades reciben datos; una cuenta nueva ve como vigente al menos la versión 2).
+- **Fuera de alcance:** la revisión legal del texto (la agencia puede publicar el definitivo como versión 3 con `POST /api/v1/avisos-privacidad`, sin desplegar) y el aviso en inglés.
 
 ### M24 · Asistente CareCar (IA) — H6 — módulo `asistente (nuevo)`
 

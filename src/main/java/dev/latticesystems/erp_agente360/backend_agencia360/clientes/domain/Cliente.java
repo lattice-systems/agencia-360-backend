@@ -26,6 +26,8 @@ import java.util.regex.Pattern;
 public class Cliente extends Auditable {
 
 	private static final Pattern CORREO_VALIDO = Pattern.compile("[^@\\s]+@[^@\\s]+\\.[^@\\s]+");
+	/** Nombre que queda cuando el cliente pidió borrar su cuenta. */
+	public static final String NOMBRE_ANONIMIZADO = "Cliente eliminado";
 	private static final int LARGO_MAXIMO_NOMBRE = 120;
 	private static final int LARGO_MAXIMO_CORREO = 120;
 	private static final int LARGO_MAXIMO_TELEFONO = 20;
@@ -102,6 +104,16 @@ public class Cliente extends Auditable {
 			throw new IllegalArgumentException("El correo no es válido");
 		}
 		return normalizado;
+	}
+
+	/**
+	 * Quita lo que identifica a la persona (V2-M22.03): queda un nombre genérico y
+	 * sin correo ni teléfono. El vínculo con su prospecto no se toca: es del CRM.
+	 */
+	public void anonimizar() {
+		this.nombre = NOMBRE_ANONIMIZADO;
+		this.correo = null;
+		this.telefono = null;
 	}
 
 	public void cambiarCorreo(String correo) {

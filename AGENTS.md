@@ -76,7 +76,7 @@ Monolito modular bajo `src/main/java/dev/latticesystems/erp_agente360/backend_ag
 
 ## Pruebas
 
-Cada módulo con código tiene pruebas de dominio, de servicio (Mockito) y de integración HTTP (`*IntegrationTest`, heredan de `shared/AbstractIntegrationTest`, PostgreSQL real vía Testcontainers). Mayor rigor en pagos, facturación, inventario y contabilidad. Cada criterio de aceptación de una historia **B** tiene su prueba.
+Cada módulo con código tiene pruebas de dominio, de servicio (Mockito) y de integración HTTP (`*IntegrationTest`, heredan de `shared/AbstractIntegrationTest`, PostgreSQL real vía Testcontainers). Mayor rigor en pagos, facturación, inventario y contabilidad. Cada criterio de aceptación de una historia **B** tiene su prueba. Las pruebas de integración con el mismo contexto comparten la base y su orden cambia entre corridas: siembra con datos propios (una marca o un correo con sufijo aleatorio) y no asumas totales globales como «el catálogo tiene un solo modelo». Para reproducir un orden usa `-Dsurefire.runOrder=alphabetical` o `reversealphabetical`.
 
 ## Flujo de una historia B
 

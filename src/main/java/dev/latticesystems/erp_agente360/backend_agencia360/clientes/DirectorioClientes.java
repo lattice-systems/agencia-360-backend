@@ -31,6 +31,16 @@ public interface DirectorioClientes {
 	 */
 	ClienteRegistrado cambiarCorreo(Long clienteId, String correo);
 
+	/**
+	 * Reemplaza los datos personales del cliente (nombre, correo y teléfono) por un
+	 * nombre genérico y sin contacto (V2-M22.03). La fila se conserva porque las
+	 * citas, los traslados y las órdenes de servicio la referencian.
+	 *
+	 * @throws dev.latticesystems.erp_agente360.backend_agencia360.shared.exception.RecursoNoEncontradoException
+	 *             si el cliente no existe (404)
+	 */
+	void anonimizar(Long clienteId);
+
 	/** Datos básicos de un cliente. El correo puede faltar si rechazó la app. */
 	record ClienteRegistrado(Long id, String nombre, String correo) {
 	}

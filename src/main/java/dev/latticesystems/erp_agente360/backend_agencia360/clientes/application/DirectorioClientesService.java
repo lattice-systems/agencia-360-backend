@@ -64,6 +64,13 @@ public class DirectorioClientesService implements DirectorioClientes {
 		return registrado(cliente);
 	}
 
+	@Override
+	@Transactional
+	public void anonimizar(Long clienteId) {
+		clienteRepository.findById(clienteId)
+				.orElseThrow(() -> new RecursoNoEncontradoException("No existe el cliente " + clienteId)).anonimizar();
+	}
+
 	private static ClienteRegistrado registrado(Cliente cliente) {
 		return new ClienteRegistrado(cliente.getId(), cliente.getNombre(), cliente.getCorreo());
 	}

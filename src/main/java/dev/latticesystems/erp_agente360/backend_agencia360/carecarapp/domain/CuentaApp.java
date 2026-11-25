@@ -22,6 +22,9 @@ import java.util.Objects;
 public class CuentaApp extends Auditable {
 
 	public static final int INTENTOS_PERMITIDOS = 5;
+
+	/** Usuario de una cuenta cancelada; un correo siempre lleva arroba, esto no. */
+	static final String PREFIJO_CANCELADA = "eliminada-";
 	public static final Duration DURACION_BLOQUEO = Duration.ofMinutes(15);
 
 	@Id
@@ -119,6 +122,28 @@ public class CuentaApp extends Auditable {
 
 	public void desactivar() {
 		this.activa = false;
+	}
+
+	/**
+	 * La cancela su titular (V2-M22.03): queda desactivada, con un usuario que no
+	 * es un correo y una contraseña que nadie conoce. No se puede reactivar.
+	 *
+	 * @param hashInutilizable
+	 *            hash de un secreto aleatorio que nadie guarda
+	 */
+	public void cancelar(String hashInutilizable) {
+		Objects.requireNonNull(hashInutilizable, "hashInutilizable");
+		this.activa = false;
+		this.usuario = PREFIJO_CANCELADA + id;
+		this.contrasenaHash = hashInutilizable;
+		this.debeCambiarContrasena = false;
+		this.intentosFallidos = 0;
+		this.bloqueadaHasta = null;
+	}
+
+	/** Si su titular la canceló: un usuario anonimizado nunca fue un correo. */
+	public boolean fueCancelada() {
+		return usuario != null && usuario.startsWith(PREFIJO_CANCELADA);
 	}
 
 	public void activar() {
