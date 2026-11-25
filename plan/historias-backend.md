@@ -270,6 +270,22 @@ Vive en `carecarapp` (la historia lo ubica en `servicio`, pero solo consume su A
 
 **Foto de la lectura (V2-M05.03, parte B):** `POST /vehiculos/{id}/lecturas-km` sigue aceptando el JSON `{km}` y suma `multipart/form-data` con `km` y `foto` (imagen JPEG/PNG/WebP opcional) en la misma ruta. El km se valida primero (400/422) y solo después se guarda la foto con `AlmacenArchivos` (carpeta `lecturas-km`); `lectura_km.foto_url` guarda la clave. `LecturaKm` devuelve `fotoUrl` firmada de 15 min cuando hay foto (se omite si no). Foto no imagen o vacía: 400.
 
+#### Diseño técnico — V2-M05.05 (parte B de Juan Pablo)
+
+Recordatorio del próximo servicio, en `carecarapp`. Migración `V46`.
+
+- **Tabla** `recordatorio_mantenimiento`: `id`, `vehiculo_cliente_id` (FK), `plan_mantenimiento_id` (FK), `motivo` (`km` o `tiempo`), `enviado_en`; única por (vehículo, servicio) para no repetir el aviso.
+- **Regla** (`PoliticaRecordatorioMantenimiento`, pura): avisa si faltan `app.mantenimiento.recordatorio.km` km (1 000) **o** `...dias` días (14) para el próximo servicio de `MantenimientoAppService.plan(...)`; con los dos cumplidos gana `km`. Umbrales y cron (`0 0 9 * * *`, hora de México) salen de variables de entorno.
+- **Job** (`RecordatoriosMantenimientoService.revisarTodos`, `@Scheduled`): revisa los vehículos con alguna fila en `lectura_km` (sin lecturas no hay estimación) y, por cada uno que cumple y no se avisó, guarda el registro y publica `AvisoAlCliente` `mantenimiento.recordatorio` (`vehiculoId`, `servicioId`, `nombre`, `faltanKm`, `faltanDias`, `motivo`). El canal en vivo (SSE) ya lo entrega al cliente dueño. Un fallo en un vehículo se registra y no detiene a los demás.
+- **Contrato 2.14.0:** `GET /eventos` documenta el evento y el esquema `AvisoMantenimientoRecordatorio`.
+
+**Supuestos sobre trabajo de otras personas (para reconciliar)**
+
+- **Push (V2-M06.02 y V2-M06.07, Jael):** no existe el servicio único de envío. Este job publica el evento de dominio `AvisoAlCliente`; cuando el módulo `notificaciones` escuche ese evento, el recordatorio llegará como push **sin cambiar este código**. Falta que M06.07 decida el texto y la preferencia del cliente («elegir qué avisos recibir», V2-M06.05): hasta entonces el aviso solo llega por SSE a quien tenga la app abierta.
+- **Configurable por cliente:** la historia dice «configurable»; aquí lo es por entorno (servidor). Un umbral por cliente depende de las preferencias de V2-M06.05.
+- **Vehículos sin lecturas** no reciben recordatorio por tiempo; se resuelve si V2-M05.02 empieza a estimar con la fecha de compra o de la última orden.
+- La migración `V46` es la siguiente libre de `main` al escribir esto; si otro PR la toma antes, renumerar al integrar.
+
 ### M06 · Notificaciones y bandeja — H3 — módulo `notificaciones (nuevo)`
 
 Detalle: [`carecar-mobile/plan/modulos/M06-notificaciones.md`](https://github.com/lattice-systems/carecar-mobile/blob/main/plan/modulos/M06-notificaciones.md)
@@ -721,6 +737,20 @@ Detalle: [`carecar-mobile/plan/modulos/M25-widgets-y-wallet.md`](https://github.
 - **Pase vencido al cancelar, sin servicio de actualización**: el pase emitido no se puede revocar desde el servidor sin un web service de Apple (`webServiceURL` + registro de dispositivos y APNs) ni una llamada OAuth a la API de Google Wallet, y ninguno entra en esta historia. Lo que sí se hace: (1) el pase lleva `expirationDate` / `validTimeInterval.end` igual al fin de la cita, así que vence solo al pasar la hora; (2) el QR sigue siendo el de V2-M02.11, que recepción valida contra el estado actual de la cita, por lo que un pase de una cita cancelada no sirve aunque siga en el teléfono; (3) el endpoint no emite pases de citas canceladas. Marcar `voided` (Apple) o `EXPIRED` (Google) en pases ya emitidos queda como historia nueva `Borrador` (servicio de actualización de pases).
 - Sin migración: el pase se arma al vuelo con la cita y el vehículo.
 - Historia nueva (`Borrador`): **V2-M25.06 · Servicio de actualización de pases** para marcar `voided` (Apple, con `webServiceURL`, registro de dispositivos y APNs) y `EXPIRED` (Google, PATCH con OAuth) los pases ya emitidos al cancelar o reprogramar la cita.
+
+#### Diseño técnico — V2-M25.06 (parte B de Juan Pablo)
+
+El pase de Wallet de una cita cancelada o reprogramada deja de servir. **Google quedó hecho; Apple queda diseñado, sin implementar.**
+
+- **Evento** `CambioDePaseDeCita` (`citaId`, `tipo` `CANCELADA` o `REPROGRAMADA`, `inicio`, `fin`, `vehiculoNombre`): lo publica `AgendaAppService.cancelar` y `.reprogramar` dentro de su transacción. La agenda no conoce Wallet.
+- **Google** (`ActualizadorDePasesGoogle`, escucha el evento): obtiene un token de la cuenta de servicio (JWT bearer, alcance `wallet_object.issuer`) y hace `PATCH …/genericObject/{issuer}.carecar_cita_{id}`: cancelada → `state: EXPIRED`; reprogramada → `validTimeInterval` y módulo «Fecha y hora» nuevos. Un 404 (el cliente nunca guardó el pase) no es error; cualquier otro fallo se registra y **nunca** revierte la cancelación. Sin credenciales (`app.wallet.google.*`) no hace nada. Llamadas HTTP detrás de `LlamadaHttp` para probarlo sin red.
+- **Apple (pendiente, diseño):** hay que (1) agregar `webServiceURL` y `authenticationToken` al `pass.json` de `PaseAppleGenerador`; (2) tabla `registro_pase_apple` (`dispositivo`, `push_token`, `serial` = id de cita) y los endpoints que Apple exige (`POST/DELETE /v1/devices/{dev}/registrations/{passType}/{serial}`, `GET /v1/devices/{dev}/registrations/{passType}?passesUpdatedSince=`, `GET /v1/passes/{passType}/{serial}`, `POST /v1/log`), fuera de `/api/v1/app` y con el token del pase; (3) al llegar `CambioDePaseDeCita`, marcar el pase `voided: true` o con la fecha nueva y mandar un push vacío por APNs a los `push_token` registrados. Requiere el certificado del Pass Type ID (R8: solo en el ambiente) y un dominio HTTPS público, que hoy no tenemos (proyecto solo local).
+
+**Supuestos y lo que falta**
+
+- **Apple no se puede probar** sin cuenta de desarrollador, certificado y dominio público; por eso queda como diseño. El pase de Apple de una cita cancelada **sigue sirviendo** hasta que se implemente; la recepción lo rechaza igual porque valida el QR contra la cita (`FirmaCitas`), que ya no está confirmada.
+- **Google tampoco se probó contra Google**: solo con un transporte falso. Probar con una cuenta de servicio real antes de entregar.
+- Los pases guardados antes de reprogramar no se actualizan si el cliente no los tenía guardados (404, se ignora).
 
 ### M26 · Valuación y toma a cuenta avanzada — H5 — módulo `ventascrm`
 

@@ -18,6 +18,7 @@ import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
+import java.time.ZonedDateTime;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.EnumSet;
@@ -26,6 +27,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Page;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -58,15 +60,17 @@ public class AgendaAppService {
 	private final TicketCitaPdf ticketCitaPdf = new TicketCitaPdf();
 	private final FirmaCitas firmaCitas;
 	private final RecoleccionService recoleccion;
+	private final ApplicationEventPublisher eventos;
 
 	@Autowired
 	public AgendaAppService(HorarioTaller horario, CitaRepository citaRepository, VehiculosDeClientes vehiculos,
-			FirmaCitas firmaCitas, RecoleccionService recoleccion) {
-		this(horario, citaRepository, vehiculos, firmaCitas, recoleccion, Clock.system(ZONA_AGENCIA));
+			FirmaCitas firmaCitas, RecoleccionService recoleccion, ApplicationEventPublisher eventos) {
+		this(horario, citaRepository, vehiculos, firmaCitas, recoleccion, eventos, Clock.system(ZONA_AGENCIA));
 	}
 
 	AgendaAppService(HorarioTaller horario, CitaRepository citaRepository, VehiculosDeClientes vehiculos,
-			FirmaCitas firmaCitas, RecoleccionService recoleccion, Clock reloj) {
+			FirmaCitas firmaCitas, RecoleccionService recoleccion, ApplicationEventPublisher eventos, Clock reloj) {
+		this.eventos = eventos;
 		this.recoleccion = recoleccion;
 		this.firmaCitas = firmaCitas;
 		this.horario = horario;
@@ -219,6 +223,7 @@ public class AgendaAppService {
 		verificarDisponible(cita.getVehiculoClienteId(), nuevoDia, franja, cita.getId());
 		cita.reprogramar(ahora, nuevoDia, franjaId, franja.getHoraInicio(), franja.getHoraFin());
 		recoleccion.reprogramarDeCita(cita.getId(), nuevoDia);
+		avisarAlPase(cita, clienteId, CambioDePaseDeCita.Tipo.REPROGRAMADA);
 		return CitaApp.de(cita, vehiculos.buscarPorId(cita.getVehiculoClienteId())
 				.filter(vehiculo -> vehiculo.propietario().id().equals(clienteId)).map(CitaApp::describir).orElse(null))
 				.conRecoleccion(recoleccion.deCita(cita.getId()));
@@ -263,9 +268,19 @@ public class AgendaAppService {
 				.orElseThrow(() -> new RecursoNoEncontradoException("No existe la cita " + citaId));
 		cita.cancelar(LocalDateTime.now(reloj), horario.plazoParaCancelar(), reloj.instant());
 		recoleccion.cancelarDeCita(cita.getId());
+		avisarAlPase(cita, clienteId, CambioDePaseDeCita.Tipo.CANCELADA);
 		return CitaApp.de(cita, vehiculos.buscarPorId(cita.getVehiculoClienteId())
 				.filter(vehiculo -> vehiculo.propietario().id().equals(clienteId)).map(CitaApp::describir).orElse(null))
 				.conRecoleccion(recoleccion.deCita(cita.getId()));
+	}
+
+	/** Avisa a quien mantiene los pases de Wallet (V2-M25.06). */
+	private void avisarAlPase(Cita cita, Long clienteId, CambioDePaseDeCita.Tipo tipo) {
+		String nombre = vehiculos.buscarPorId(cita.getVehiculoClienteId())
+				.filter(vehiculo -> vehiculo.propietario().id().equals(clienteId)).map(CitaApp::describir).orElse(null);
+		eventos.publishEvent(new CambioDePaseDeCita(cita.getId(), tipo,
+				ZonedDateTime.of(cita.getFecha(), cita.getHoraInicio(), ZONA_AGENCIA),
+				ZonedDateTime.of(cita.getFecha(), cita.getHoraFin(), ZONA_AGENCIA), nombre));
 	}
 
 	private static String clave(LocalDate fecha, Long franjaId) {
