@@ -9,7 +9,9 @@ import java.time.Duration;
 import java.util.Map;
 import org.springframework.stereotype.Component;
 
-/** {@link LlamadaHttp} con el cliente HTTP del JDK y tiempos de espera cortos. */
+/**
+ * {@link LlamadaHttp} con el cliente HTTP del JDK y tiempos de espera cortos.
+ */
 @Component
 class LlamadaHttpDelSistema implements LlamadaHttp {
 
