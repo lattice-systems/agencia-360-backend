@@ -25,7 +25,7 @@ El plan maestro (propósito, objetivos, hitos, módulos, reparto y tablero) vive
 
 | Módulo | Estado hoy | Uso en la v2 |
 | --- | --- | --- |
-| `carecarapp` | Con código (acceso, vehículos, manuales, servicios, citas, catálogo, asistente, avisos en vivo) | Puerta de entrada `/api/v1/app`; orquesta lecturas para la app; el asistente (M24) vive aquí mientras no crezca |
+| `carecarapp` | Con código (acceso, vehículos, manuales, servicios, citas, catálogo, asistente, avisos en vivo, aviso de privacidad) | Puerta de entrada `/api/v1/app`; orquesta lecturas para la app; el asistente (M24) vive aquí mientras no crezca |
 | `clientes` | Con código | Cliente y vehículos del cliente (ficha) |
 | `servicio` | Con código (`orden_servicio`, `orden_refaccion`, `orden_mano_de_obra`; publica `OrdenServicioCambiada`) | Orden de servicio, etapas, inspección, adicionales, mantenimiento, garantía, traslados (lo que V2-T05.01 llamaba `postventa`) |
 | `refacciones`, `inventario` | Inventario con código | Tienda y apartados (M14) |

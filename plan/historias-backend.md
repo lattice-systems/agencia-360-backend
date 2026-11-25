@@ -554,6 +554,20 @@ Detalle: [`carecar-mobile/plan/modulos/M22-seguridad-y-privacidad.md`](https://g
 | V2-M22.02 | Como cliente quiero descargar mis datos (acceso ARCO) | Solicitud genera archivo con todos mis datos · aviso al estar listo | Daniel |
 | V2-M22.03 | Como cliente quiero pedir que borren mi cuenta (cancelación ARCO) | Flujo con confirmación · se desactiva `cuenta_app` y se anonimizan datos no obligatorios por ley; lo fiscal se conserva | Daniel |
 
+#### Diseño de V2-M22.01 — aviso de privacidad versionado
+
+- **Migración `V43`** (número provisional; se toma al integrar):
+  - `aviso_privacidad` (id, version int único ≥ 1, texto, vigente_desde, created_at). Un disparador rechaza `UPDATE` y `DELETE`: un aviso publicado nunca se edita, se publica otro.
+  - `aceptacion_aviso` (id, cuenta_app_id → `cuenta_app`, aviso_privacidad_id → `aviso_privacidad`, aceptado_en), única por (cuenta, aviso): una fila por versión aceptada.
+  - Versión 1: el aviso simplificado que la app traía en `Agencia.avisoPrivacidad`, tal cual. El texto definitivo es de la agencia: lo publica con el endpoint de abajo, sin desplegar.
+- **Vigente:** la versión mayor con `vigente_desde <= ahora`. `vigente_desde` en el futuro programa una versión sin que la app la vea antes.
+- **Endpoints de la app** (`CLIENTE_CARECAR`, contrato 2.13.0):
+  - `GET /privacidad/aviso` → `{id, version, texto, vigenteDesde, aceptado, aceptadoEn}` del vigente.
+  - `POST /privacidad/aceptaciones` `{avisoId}` → `{avisoId, version, aceptadoEn}`. Idempotente: repetir devuelve la primera aceptación. 404 si el aviso no existe; 409 `AVISO_NO_VIGENTE` si ya hay una versión más nueva.
+- **Endpoint del personal** (`GERENTE_MARKETING`, fuera del contrato de la app como los de manuales y cuentas): `POST /api/v1/avisos-privacidad` `{texto, vigenteDesde?}` → 201 con la versión nueva (mayor + 1). `vigenteDesde` omitido es ahora; no puede ser anterior al de la versión previa. 400 `DATOS_INVALIDOS` si el texto va vacío o pasa de 20 000 caracteres.
+- **Quién bloquea:** el servidor no rechaza el resto de la API por falta de aceptación (la app v1 instalada no la conoce); la puerta la pone la app. Lo que queda registrado, con fecha, es lo que cuenta ante una reclamación.
+- **Fuera de alcance:** idiomas del aviso, y un listado de versiones con conteo de aceptaciones para el CRM (congelado, R9).
+
 ### M23 · Analítica y observabilidad — H2 — módulo `shared`
 
 Detalle: [`carecar-mobile/plan/modulos/M23-analitica-y-observabilidad.md`](https://github.com/lattice-systems/carecar-mobile/blob/main/plan/modulos/M23-analitica-y-observabilidad.md)
