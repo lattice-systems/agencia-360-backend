@@ -240,6 +240,25 @@ Horas en hora de la agencia, sin zona (`yyyy-MM-ddTHH:mm:ss`), como el resto de 
 
 **Pruebas.** `TallerDominioTest`, `TallerServiceTest` (Mockito) y `TallerAppIntegrationTest`: la orden aparece en Inicio y desaparece al entregarse; etapas con hora y entrega estimada; no se regresa de etapa; inspección con semáforo, foto y video descargables por URL firmada; aprobar con firma recalcula el total y deja la auditoría en la tabla; responder dos veces, orden ajena, firma inválida u orden terminada; roles.
 
+#### Diseño técnico — V2-M04.03, V2-M04.06 y V2-M04.07 (Ricardo)
+
+**Tablas.** Una migración nueva (número al integrar): `trabajo_adicional` suma `incorporado_en` (cuándo pasó a ser renglón de la orden), con `check` de que solo un trabajo `APROBADO` se incorpora. Ninguna tabla de la ficha cambia de nombre ni pierde campos.
+
+**Reglas.**
+
+- Al pasar la orden a `LISTO_PARA_ENTREGA` (o directo a `ENTREGADO`), cada adicional aprobado y aún no incorporado se vuelve renglón de la orden: uno de mano de obra y otro de refacción si su monto no es cero, con cantidad 1 y su concepto. Así el ticket y el historial traen lo que se hizo y el total no se cuenta dos veces: `totalEstimado = total de la orden + aprobados sin incorporar`.
+- El taller carga los renglones del ticket mientras la orden siga abierta; cada renglón recalcula mano de obra, refacciones, subtotal, IVA y total de la orden.
+- El horario de entrega es el primer día desde hoy con franjas activas (`franja_horario`), de la primera hora a la última; hoy cuenta solo si aún no cierra. Se calcula en `carecarapp` y solo viaja cuando la orden está lista para entrega.
+- La orden entregada ya aparecía en el historial del vehículo (`GET /vehiculos/{id}/servicios`) con su ticket (`GET /servicios/{id}` y `/ticket`), porque es la misma `orden_servicio`.
+
+**Eventos.** `servicio.OrdenServicioCambiada(ordenId, vehiculoId, clienteId, estatus, etapa, motivo)` se publica al abrir, en cada etapa, punto o evidencia de inspección, adicional propuesto, respuesta del cliente y renglón cargado. `motivo` es `REGISTRO`, `APERTURA`, `ETAPA`, `INSPECCION`, `ADICIONAL`, `RESPUESTA` o `RENGLON`; `etapa` va nula en un servicio registrado ya hecho. `carecarapp` lo manda por `GET /eventos` con `etapa` y `motivo`, y la app vuelve a pedir la orden que muestra. El push cuando la app está cerrada (V2-M04.03) y el de «tu auto está listo» (V2-M04.06) los manda `notificaciones` (V2-M06.07) escuchando este mismo evento: `motivo = ETAPA` con `etapa = LISTO_PARA_ENTREGA` es el aviso de listo. Mientras M06.07 no se integre, solo se avisa con la app abierta.
+
+**Endpoints de la app** (contrato 2.17.0): `OrdenEnCurso` suma `totalEstimado` y `horarioEntrega` (`fecha`, `desde`, `hasta` en `HH:mm`, solo lista para entrega); `OrdenEnVivo` suma `horarioEntrega`; `AvisoOrden` suma `etapa` y `motivo`.
+
+**Endpoints del taller:** `POST /api/v1/taller/ordenes/{id}/renglones` `{tipo, concepto, cantidad, precioUnitario}` → 201 `OrdenEnVivo` (rol `SERVICIO`). 400 si un dato no es válido o el total se pasa del máximo, 404 si la orden no existe y 409 `ORDEN_CERRADA` si ya está terminada.
+
+**Pruebas.** `TallerDominioTest` (renglón recalcula montos; un adicional se incorpora una sola vez y el rechazado nunca), `TallerServiceTest` (al quedar lista se incorporan sin doble conteo; renglón en orden cerrada), `HorarioEntregaAppTest` (hoy, mañana si ya cerró, salta días sin horario), `EventosEnVivoAppIntegrationTest` (`etapa` y `motivo` en el aviso) y `TallerAppIntegrationTest` (tarjeta lista con total y horario de 09:00 a 17:00, ticket con los adicionales, historial con la orden entregada, renglones inválidos, ajenos y de orden cerrada).
+
 ### M05 · Mantenimiento inteligente — H3 — módulo `servicio`
 
 Detalle: [`carecar-mobile/plan/modulos/M05-mantenimiento-inteligente.md`](https://github.com/lattice-systems/carecar-mobile/blob/main/plan/modulos/M05-mantenimiento-inteligente.md)
@@ -906,7 +925,7 @@ Los precios siguen con IVA incluido: `mano_de_obra` y `refacciones` suman los im
 
 #### Diseño de V2-T05.08: eventos en vivo
 
-**Órdenes (SSE).** `GET /api/v1/app/eventos` (`text/event-stream`, rol `CLIENTE_CARECAR`; la cuenta desactivada responde 403 como el resto de la app). `servicio` publica `servicio.OrdenServicioCambiada(ordenId, vehiculoId, clienteId, estatus)` al registrar una orden; M04 lo publicará en cada cambio de etapa. `carecarapp` lo escucha después del commit y manda el evento `orden` con `ordenId`, `vehiculoId` y `estatus` solo a las conexiones de ese cliente. Comentario de latido cada 25 s; la conexión se cierra a los 30 min para que la app se reconecte con su token.
+**Órdenes (SSE).** `GET /api/v1/app/eventos` (`text/event-stream`, rol `CLIENTE_CARECAR`; la cuenta desactivada responde 403 como el resto de la app). `servicio` publica `servicio.OrdenServicioCambiada(ordenId, vehiculoId, clienteId, estatus, etapa, motivo)` al registrar una orden y en cada cambio de la orden en el taller (V2-M04.03). `carecarapp` lo escucha después del commit y manda el evento `orden` con `ordenId`, `vehiculoId`, `estatus`, `etapa` y `motivo` solo a las conexiones de ese cliente. Comentario de latido cada 25 s; la conexión se cierra a los 30 min para que la app se reconecte con su token.
 
 **Chat (WebSocket).** STOMP en `/ws` con broker simple (`/queue`), prefijo de aplicación `/app` y de usuario `/user`. `shared.security.AutenticacionStomp` valida el JWT del `CONNECT` (`Authorization: Bearer <token>`) y pone el usuario de la sesión; sin token o con uno inválido el `CONNECT` se rechaza. Solo se puede suscribir a `/user/queue/...` y mandar a `/app/...`. Los orígenes permitidos son los de CORS (`CORS_ALLOWED_ORIGINS`); la app móvil no manda `Origin`. Dependencia nueva: `spring-boot-starter-websocket`.
 
