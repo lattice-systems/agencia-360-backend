@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.time.Instant;
 import org.junit.jupiter.api.Test;
+import org.springframework.test.util.ReflectionTestUtils;
 
 class CuentaAppTest {
 
@@ -66,6 +67,44 @@ class CuentaAppTest {
 
 		cuenta.cambiarUsuario("ANA@NUEVO.COM");
 		assertThat(cuenta.getUsuario()).isEqualTo("ana@nuevo.com");
+	}
+
+	@Test
+	void cancelarlaLaDesactivaLeQuitaElCorreoYLaDejaConOtraContrasena() {
+		CuentaApp cuenta = CuentaApp.abrir(1L, "ana@correo.com", "hash");
+		ReflectionTestUtils.setField(cuenta, "id", 9L);
+		for (int i = 0; i < 4; i++) {
+			cuenta.registrarIntentoFallido(AHORA);
+		}
+
+		cuenta.cancelar("hash-de-un-secreto-que-nadie-guarda");
+
+		assertThat(cuenta.isActiva()).isFalse();
+		assertThat(cuenta.getUsuario()).isEqualTo("eliminada-9").doesNotContain("@");
+		assertThat(cuenta.getContrasenaHash()).isEqualTo("hash-de-un-secreto-que-nadie-guarda");
+		assertThat(cuenta.isDebeCambiarContrasena()).isFalse();
+		assertThat(cuenta.fueCancelada()).isTrue();
+		// Los intentos fallidos de antes no quedan colgando.
+		cuenta.registrarIntentoFallido(AHORA);
+		assertThat(cuenta.estaBloqueada(AHORA)).isFalse();
+	}
+
+	@Test
+	void cancelarExigeElHashDeLaContrasenaNueva() {
+		CuentaApp cuenta = CuentaApp.abrir(1L, "ana@correo.com", "hash");
+
+		assertThatThrownBy(() -> cuenta.cancelar(null)).isInstanceOf(NullPointerException.class);
+		assertThat(cuenta.isActiva()).isTrue();
+	}
+
+	@Test
+	void unaCuentaDesactivadaPorElPersonalNoCuentaComoCancelada() {
+		CuentaApp cuenta = CuentaApp.abrir(1L, "ana@correo.com", "hash");
+
+		cuenta.desactivar();
+
+		assertThat(cuenta.fueCancelada()).isFalse();
+		assertThat(cuenta.getUsuario()).isEqualTo("ana@correo.com");
 	}
 
 	@Test
