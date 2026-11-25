@@ -44,8 +44,7 @@ public class RecordatoriosMantenimientoService {
 	@Autowired
 	public RecordatoriosMantenimientoService(LecturaKmRepository lecturas, VehiculosDeClientes vehiculos,
 			MantenimientoAppService mantenimiento, RecordatorioMantenimientoRepository recordatorios,
-			ApplicationEventPublisher eventos,
-			@Value("${app.mantenimiento.recordatorio.km:1000}") int kmAntes,
+			ApplicationEventPublisher eventos, @Value("${app.mantenimiento.recordatorio.km:1000}") int kmAntes,
 			@Value("${app.mantenimiento.recordatorio.dias:14}") int diasAntes) {
 		this(lecturas, vehiculos, mantenimiento, recordatorios, eventos, Clock.systemUTC(),
 				new PoliticaRecordatorioMantenimiento(kmAntes, diasAntes));
@@ -100,8 +99,7 @@ public class RecordatoriosMantenimientoService {
 				new RecordatorioMantenimiento(vehiculoId, proximo.servicioId(), motivo.get(), reloj.instant()));
 		eventos.publishEvent(new AvisoAlCliente(clienteId, EVENTO,
 				Map.of("vehiculoId", vehiculoId, "servicioId", proximo.servicioId(), "nombre", proximo.nombre(),
-						"faltanKm", proximo.faltanKm(), "faltanDias", proximo.faltanDias(), "motivo",
-						motivo.get())));
+						"faltanKm", proximo.faltanKm(), "faltanDias", proximo.faltanDias(), "motivo", motivo.get())));
 		return true;
 	}
 }
