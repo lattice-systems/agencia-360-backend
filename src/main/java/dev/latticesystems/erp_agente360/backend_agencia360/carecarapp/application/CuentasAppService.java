@@ -106,7 +106,11 @@ public class CuentasAppService {
 	 */
 	@Transactional
 	public EstadoCuentaApp activar(Long clienteId) {
-		cuentaDe(clienteId).activar();
+		CuentaApp cuenta = cuentaDe(clienteId);
+		if (cuenta.fueCancelada()) {
+			throw new ConflictoException("La cuenta la canceló su titular y no se puede reactivar");
+		}
+		cuenta.activar();
 		return estado(clienteId);
 	}
 

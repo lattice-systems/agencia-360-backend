@@ -1,9 +1,12 @@
 package dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.web;
 
 import dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.application.ArcoService;
+import dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.application.CancelacionService;
 import dev.latticesystems.erp_agente360.backend_agencia360.shared.security.UsuarioAutenticado;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.NotBlank;
 import java.util.List;
 import org.springframework.http.CacheControl;
 import org.springframework.http.ContentDisposition;
@@ -16,6 +19,7 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -26,9 +30,18 @@ import org.springframework.web.bind.annotation.RestController;
 public class ArcoController {
 
 	private final ArcoService arco;
+	private final CancelacionService cancelacion;
 
-	public ArcoController(ArcoService arco) {
+	public ArcoController(ArcoService arco, CancelacionService cancelacion) {
 		this.arco = arco;
+		this.cancelacion = cancelacion;
+	}
+
+	/**
+	 * La contraseña actual, como confirmación de que quien pide borrar la cuenta es
+	 * su titular.
+	 */
+	public record CancelarCuentaRequest(@NotBlank String contrasena) {
 	}
 
 	@GetMapping
@@ -49,6 +62,16 @@ public class ArcoController {
 		ArcoService.Resultado resultado = arco.pedirAcceso(cliente.id());
 		return ResponseEntity.status(resultado.nueva() ? HttpStatus.ACCEPTED : HttpStatus.OK)
 				.body(resultado.solicitud());
+	}
+
+	@PostMapping("/cancelacion")
+	@PreAuthorize("hasRole('CLIENTE_CARECAR')")
+	@Operation(summary = "Borrar mi cuenta", description = "V2-M22.03 · No se puede deshacer. Pide la contraseña; "
+			+ "desactiva la cuenta y borra o anonimiza los datos personales que ninguna ley obliga a conservar. "
+			+ "400 si la contraseña falta o no es correcta; 429 tras 5 intentos fallidos.")
+	public ArcoService.SolicitudArcoApp cancelar(@Valid @RequestBody CancelarCuentaRequest request,
+			@AuthenticationPrincipal UsuarioAutenticado cliente) {
+		return cancelacion.cancelar(cliente.id(), request.contrasena());
 	}
 
 	@GetMapping("/{solicitudId}/archivo")

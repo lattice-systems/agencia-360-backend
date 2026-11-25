@@ -582,6 +582,30 @@ Detalle: [`carecar-mobile/plan/modulos/M22-seguridad-y-privacidad.md`](https://g
 - **Fuera de alcance:** rectificación y oposición (el tipo existe en la tabla; hoy se atienden en la agencia) y la cancelación, que es V2-M22.03.
 - **Exportador:** una sección por tabla con `to_jsonb` sobre las filas de la cuenta, en su propia transacción (`REQUIRES_NEW`) para que una consulta que falle no estropee la transacción que marca la solicitud como fallida. Una columna nueva entra sola al archivo. Si se agrega una tabla con datos de la persona, se agrega su sección en `ExportadorDeDatosJdbc`.
 
+#### Diseño de V2-M22.03 — cancelar mi cuenta (cancelación ARCO)
+
+- **Sin migración nueva:** usa `solicitud_arco` con tipo `CANCELACION`. Queda `RESUELTA` en la misma transacción.
+- **Endpoint** (`CLIENTE_CARECAR`, contrato 2.15.0): `POST /privacidad/arco/cancelacion` `{contrasena}` → 200 con la solicitud. La contraseña confirma que quien pide borrar la cuenta es su titular y no alguien con el teléfono desbloqueado. Contraseña equivocada o ausente → 400 `DATOS_INVALIDOS` (nunca 401: la app lo leería como sesión vencida y cerraría la sesión). Cuenta con 5 intentos fallidos → 429; el intento equivocado cuenta en el mismo contador que el login, para que un token robado no sirva para adivinar la contraseña.
+- **Todo o nada:** una sola transacción. Si algo falla, no cambia nada. No se puede deshacer.
+- **Qué pasa con cada dato:**
+
+| Dato | Qué pasa | Por qué |
+| --- | --- | --- |
+| `cliente` | nombre, correo y teléfono se reemplazan («Cliente eliminado», sin correo ni teléfono) | Identifican a la persona; la fila se conserva porque citas, traslados y órdenes la referencian |
+| `cuenta_app` | se desactiva; el usuario se anonimiza (`eliminada-<id>`) y la contraseña se invalida; sus sesiones y códigos de recuperación se borran | Ya no se puede entrar ni recuperar la cuenta; el siguiente request con un token vigente responde 403 `CUENTA_DESACTIVADA` |
+| `direccion_cliente` | los campos se vacían (calle, colonia, ciudad, pin) | Los traslados las referencian y no se pueden borrar |
+| `solicitud_asistencia` | ubicación y comentario fuera | Queda el registro del servicio, sin dónde estaba la persona |
+| `consulta_asistente` | se borran | Preguntas y respuestas libres de la persona |
+| `estimacion_toma_cuenta`, `solicitud_estreno` | se borran | No son obligatorias por ley; el prospecto del CRM no se toca |
+| `gasto_vehiculo` y `lectura_km` de la persona (y sus fotos y tickets) | se borran, también los archivos | Bitácora personal; las lecturas del taller se conservan |
+| `solicitud_arco` y `archivo_arco` | los archivos de acceso se borran; las solicitudes quedan | Una copia de datos no se guarda de más, pero el registro prueba qué se pidió |
+| `vehiculo_cliente`, `cita`, `traslado`, `orden_servicio` y sus partes (etapas, inspección, evidencias, trabajos adicionales con la firma de aprobación) | se conservan (ya sin el nombre del cliente) | Historial de servicio y garantía del vehículo; la firma es la prueba de lo que se cobró |
+| `venta`, `pago`, `factura`, `liquidacion`, `prospecto` | no se tocan | Obligación fiscal y comercial; son de otros módulos (ERP y CRM, congelados, R9) |
+| `aceptacion_aviso` | se conserva | Prueba de lo que la persona aceptó |
+
+- **No se reactiva:** `activar` (CRM) responde 409 si la cuenta se canceló por su titular. Abrir una cuenta nueva para esa persona pide un cliente nuevo.
+- **Límites:** no hay periodo de bloqueo ni confirmación por correo (llega con V2-M06); el criterio de qué se conserva es de la agencia y su revisión legal está por hacerse (ver `docs/seguridad/derechos-arco.md` en la app).
+
 ### M23 · Analítica y observabilidad — H2 — módulo `shared`
 
 Detalle: [`carecar-mobile/plan/modulos/M23-analitica-y-observabilidad.md`](https://github.com/lattice-systems/carecar-mobile/blob/main/plan/modulos/M23-analitica-y-observabilidad.md)

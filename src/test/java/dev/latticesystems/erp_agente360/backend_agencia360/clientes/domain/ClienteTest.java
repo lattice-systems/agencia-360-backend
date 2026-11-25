@@ -28,6 +28,18 @@ class ClienteTest {
 	}
 
 	@Test
+	void anonimizarQuitaNombreCorreoYTelefonoPeroNoElProspectoDelCrm() {
+		Cliente cliente = Cliente.registrar("Ana López", "ana@correo.com", "4775550101", 5L);
+
+		cliente.anonimizar();
+
+		assertThat(cliente.getNombre()).isEqualTo("Cliente eliminado");
+		assertThat(cliente.getCorreo()).isNull();
+		assertThat(cliente.getTelefono()).isNull();
+		assertThat(cliente.getProspectoId()).isEqualTo(5L);
+	}
+
+	@Test
 	void exigeElNombre() {
 		assertThatThrownBy(() -> Cliente.registrar(" ", "ana@correo.com", null, null))
 				.isInstanceOf(IllegalArgumentException.class).hasMessage("El nombre es obligatorio");
