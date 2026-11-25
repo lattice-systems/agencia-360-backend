@@ -24,6 +24,10 @@ public final class CodigosError {
 	public static final String ESTRENO_SIN_PRECIO = "ESTRENO_SIN_PRECIO";
 	/** V2-M16.01: ya hay una solicitud abierta del mismo modelo y tipo. */
 	public static final String ESTRENO_DUPLICADA = "ESTRENO_DUPLICADA";
+	/**
+	 * V2-M22.01: se quiso aceptar un aviso de privacidad que ya no es el vigente.
+	 */
+	public static final String AVISO_NO_VIGENTE = "AVISO_NO_VIGENTE";
 	public static final String ASISTENTE_NO_DISPONIBLE = "ASISTENTE_NO_DISPONIBLE";
 	public static final String SIN_PARAMETROS_DE_VALUACION = "SIN_PARAMETROS_DE_VALUACION";
 	public static final String SOLICITUD_ABIERTA = "SOLICITUD_ABIERTA";
