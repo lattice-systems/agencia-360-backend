@@ -599,7 +599,7 @@ Detalle: [`carecar-mobile/plan/modulos/M22-seguridad-y-privacidad.md`](https://g
 | `estimacion_toma_cuenta`, `solicitud_estreno` | se borran | No son obligatorias por ley; el prospecto del CRM no se toca |
 | `gasto_vehiculo` y `lectura_km` de la persona (y sus fotos y tickets) | se borran, también los archivos | Bitácora personal; las lecturas del taller se conservan |
 | `solicitud_arco` y `archivo_arco` | los archivos de acceso se borran; las solicitudes quedan | Una copia de datos no se guarda de más, pero el registro prueba qué se pidió |
-| `vehiculo_cliente`, `cita`, `traslado`, `orden_servicio` y sus partes | se conservan (ya sin el nombre del cliente) | Historial de servicio y garantía del vehículo |
+| `vehiculo_cliente`, `cita`, `traslado`, `orden_servicio` y sus partes (etapas, inspección, evidencias, trabajos adicionales con la firma de aprobación) | se conservan (ya sin el nombre del cliente) | Historial de servicio y garantía del vehículo; la firma es la prueba de lo que se cobró |
 | `venta`, `pago`, `factura`, `liquidacion`, `prospecto` | no se tocan | Obligación fiscal y comercial; son de otros módulos (ERP y CRM, congelados, R9) |
 | `aceptacion_aviso` | se conserva | Prueba de lo que la persona aceptó |
 
