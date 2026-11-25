@@ -97,9 +97,10 @@ public class RecordatoriosMantenimientoService {
 		}
 		recordatorios.saveAndFlush(
 				new RecordatorioMantenimiento(vehiculoId, proximo.servicioId(), motivo.get(), reloj.instant()));
-		eventos.publishEvent(new AvisoAlCliente(clienteId, EVENTO,
-				Map.of("vehiculoId", vehiculoId, "servicioId", proximo.servicioId(), "nombre", proximo.nombre(),
-						"faltanKm", proximo.faltanKm(), "faltanDias", proximo.faltanDias(), "motivo", motivo.get())));
+		String razon = motivo.get();
+		Map<String, Object> datos = Map.of("vehiculoId", vehiculoId, "servicioId", proximo.servicioId(), "nombre",
+				proximo.nombre(), "faltanKm", proximo.faltanKm(), "faltanDias", proximo.faltanDias(), "motivo", razon);
+		eventos.publishEvent(new AvisoAlCliente(clienteId, EVENTO, datos));
 		return true;
 	}
 }
