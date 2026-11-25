@@ -258,6 +258,47 @@ class TrasladoSeguimientoIntegrationTest extends AbstractIntegrationTest {
 		assertThat(trasladoRepository.findById(recoger).orElseThrow().getFecha()).isEqualTo(diaHabil);
 	}
 
+	@Test
+	void laListaDeCitasTraeLaRecoleccionConElEstadoActualDeCadaTraslado() throws Exception {
+		long conRecoleccion = agendarConRecoleccion();
+		long recoger = trasladoDe(conRecoleccion, "recoger");
+		cambiar(recoger, "en_camino").andExpect(status().isOk());
+		LocalDate otroDia = diaHabilDesde(diaHabil.plusDays(1));
+		String sinRecoleccion = "{\"vehiculoId\": %d, \"franjaId\": %d, \"fecha\": \"%s\"}"
+				.formatted(vehiculoDeAna, franjaDelDia(otroDia), otroDia);
+		enviar(post("/api/v1/app/citas"), tokenDeAna, sinRecoleccion).andExpect(status().isCreated());
+
+		String lista = enviar(get("/api/v1/app/citas"), tokenDeAna, null).andExpect(status().isOk()).andReturn()
+				.getResponse().getContentAsString();
+
+		String con = "$.contenido[?(@.id==" + conRecoleccion + ")]";
+		assertThat(JsonPath.<List<Object>>read(lista, "$.contenido")).hasSize(2);
+		assertThat(JsonPath.<List<Number>>read(lista, con + ".recoleccion.direccionId")).hasSize(1);
+		assertThat(JsonPath.<List<Number>>read(lista, con + ".recoleccion.direccionId").getFirst().longValue())
+				.isEqualTo(direccionDeAna);
+		assertThat(JsonPath.<List<Object>>read(lista, con + ".recoleccion.traslados[*]")).hasSize(1);
+		List<List<String>> estados = JsonPath.read(lista, con + ".recoleccion.traslados[*].estado");
+		assertThat(estados.getFirst()).containsExactlyInAnyOrder("en_camino", "programado");
+		List<Object> sin = JsonPath.read(lista, "$.contenido[?(@.id!=" + conRecoleccion + ")].recoleccion");
+		assertThat(sin).hasSize(1).containsOnlyNulls();
+	}
+
+	@Test
+	void cancelarYReprogramarDevuelvenLaRecoleccionConElEstadoNuevo() throws Exception {
+		long citaId = agendarConRecoleccion();
+		LocalDate otroDia = diaHabilDesde(diaHabil.plusDays(1));
+
+		enviar(post("/api/v1/app/citas/" + citaId + "/reprogramar"), tokenDeAna,
+				"{\"franjaId\": " + franjaDelDia(otroDia) + ", \"fecha\": \"" + otroDia + "\"}")
+				.andExpect(status().isOk()).andExpect(jsonPath("$.recoleccion.traslados.length()").value(2))
+				.andExpect(jsonPath("$.recoleccion.traslados[0].fecha").value(otroDia.toString()));
+		enviar(post("/api/v1/app/citas/" + citaId + "/cancelar"), tokenDeAna, null).andExpect(status().isOk())
+				.andExpect(jsonPath("$.recoleccion.traslados[0].estado").value("cancelado"))
+				.andExpect(jsonPath("$.recoleccion.traslados[1].estado").value("cancelado"));
+		enviar(get("/api/v1/app/citas"), tokenDeAna, null)
+				.andExpect(jsonPath("$.contenido[0].recoleccion.traslados[0].estado").value("cancelado"));
+	}
+
 	private long agendarConRecoleccion() throws Exception {
 		String cuerpo = "{\"vehiculoId\": %d, \"franjaId\": %d, \"fecha\": \"%s\", \"recoleccion\": {\"direccionId\": %d}}"
 				.formatted(vehiculoDeAna, franjaDelDia(diaHabil), diaHabil, direccionDeAna);
