@@ -1,5 +1,6 @@
 package dev.latticesystems.erp_agente360.backend_agencia360.carecarapp;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -18,6 +19,8 @@ import dev.latticesystems.erp_agente360.backend_agencia360.shared.AbstractIntegr
 import dev.latticesystems.erp_agente360.backend_agencia360.shared.security.JwtService;
 import dev.latticesystems.erp_agente360.backend_agencia360.shared.security.Role;
 import java.util.List;
+import java.util.Map;
+import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -71,30 +74,41 @@ class CatalogoIntegrationTest extends AbstractIntegrationTest {
 
 	@Test
 	void laAppSoloVeLosModelosActivos() throws Exception {
+		// El catálogo es global y otras pruebas siembran modelos en la misma base: esta
+		// prueba mira solo los de su propia marca, no el total.
+		String marca = "Marca" + UUID.randomUUID().toString().replace("-", "").substring(0, 8);
 		agregar("""
-				{"marca":"Nissan","modelo":"Kicks","anio":2026,"version":"Exclusive","precioDesde":489900,
-				"imagenUrl":"https://example.com/kicks.png","descripcion":"SUV compacta"}""")
+				{"marca":"%s","modelo":"Kicks","anio":2026,"version":"Exclusive","precioDesde":489900,
+				"imagenUrl":"https://example.com/kicks.png","descripcion":"SUV compacta"}""".formatted(marca))
 				.andExpect(status().isCreated());
 		String sentra = agregar("""
-				{"marca":"Nissan","modelo":"Sentra","anio":2026}""").andExpect(status().isCreated()).andReturn()
-				.getResponse().getContentAsString();
+				{"marca":"%s","modelo":"Sentra","anio":2026}""".formatted(marca)).andExpect(status().isCreated())
+				.andReturn().getResponse().getContentAsString();
 		agregar("""
-				{"marca":"nissan","modelo":"kicks","anio":2026,"version":"exclusive"}""")
+				{"marca":"%s","modelo":"kicks","anio":2026,"version":"exclusive"}""".formatted(marca.toLowerCase()))
 				.andExpect(status().isConflict());
 		agregar("""
-				{"marca":"Nissan","modelo":"Versa","anio":2026,"imagenUrl":"http://inseguro"}""")
+				{"marca":"%s","modelo":"Versa","anio":2026,"imagenUrl":"http://inseguro"}""".formatted(marca))
 				.andExpect(status().isBadRequest());
 
 		mockMvc.perform(post("/api/v1/catalogo/{id}/retirar", (Integer) JsonPath.read(sentra, "$.id"))
 				.header(HttpHeaders.AUTHORIZATION, "Bearer " + tokenDeGerente)).andExpect(status().isOk())
 				.andExpect(jsonPath("$.activo").value(false));
 
-		mockMvc.perform(get("/api/v1/app/catalogo").header(HttpHeaders.AUTHORIZATION, "Bearer " + tokenDeCliente))
-				.andExpect(status().isOk()).andExpect(jsonPath("$.length()").value(1))
-				.andExpect(jsonPath("$[0].modelo").value("Kicks")).andExpect(jsonPath("$[0].precioDesde").value(489900))
-				.andExpect(jsonPath("$[0].imagenUrl").value("https://example.com/kicks.png"));
-		mockMvc.perform(get("/api/v1/catalogo").header(HttpHeaders.AUTHORIZATION, "Bearer " + tokenDeGerente))
-				.andExpect(jsonPath("$.length()").value(2));
+		String delCliente = mockMvc
+				.perform(get("/api/v1/app/catalogo").header(HttpHeaders.AUTHORIZATION, "Bearer " + tokenDeCliente))
+				.andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
+		List<Map<String, Object>> visibles = JsonPath.read(delCliente, "$[?(@.marca == '" + marca + "')]");
+		assertThat(visibles).hasSize(1);
+		assertThat(visibles.get(0)).containsEntry("modelo", "Kicks").containsEntry("imagenUrl",
+				"https://example.com/kicks.png");
+		assertThat(((Number) visibles.get(0).get("precioDesde")).doubleValue()).isEqualTo(489900.0);
+
+		String delPersonal = mockMvc
+				.perform(get("/api/v1/catalogo").header(HttpHeaders.AUTHORIZATION, "Bearer " + tokenDeGerente))
+				.andReturn().getResponse().getContentAsString();
+		List<Map<String, Object>> todos = JsonPath.read(delPersonal, "$[?(@.marca == '" + marca + "')]");
+		assertThat(todos).hasSize(2);
 	}
 
 	@Test
