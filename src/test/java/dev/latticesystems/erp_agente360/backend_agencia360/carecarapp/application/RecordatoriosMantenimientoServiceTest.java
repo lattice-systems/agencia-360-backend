@@ -39,8 +39,8 @@ class RecordatoriosMantenimientoServiceTest {
 		servicio = new RecordatoriosMantenimientoService(lecturas, vehiculos, mantenimiento, recordatorios, eventos,
 				Clock.fixed(Instant.parse("2026-11-25T15:00:00Z"), ZoneOffset.UTC),
 				new PoliticaRecordatorioMantenimiento(1000, 14));
-		when(vehiculos.buscarPorId(9L)).thenReturn(Optional.of(new VehiculoDeCliente(9L, "VIN", "Nissan", "Versa",
-				2024, null, null, 19_500, null, new Propietario(3L, "Ana", null, null))));
+		when(vehiculos.buscarPorId(9L)).thenReturn(Optional.of(new VehiculoDeCliente(9L, "VIN", "Nissan", "Versa", 2024,
+				null, null, 19_500, null, new Propietario(3L, "Ana", null, null))));
 	}
 
 	private void conProximo(ProximoServicioApp proximo) {
