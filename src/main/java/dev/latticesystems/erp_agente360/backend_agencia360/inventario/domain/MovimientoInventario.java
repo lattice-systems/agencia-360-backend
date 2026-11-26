@@ -54,8 +54,12 @@ public class MovimientoInventario {
 	@Column(nullable = false)
 	private int cantidad;
 
-	@Column(name = "responsable_id", nullable = false)
+	@Column(name = "responsable_id")
 	private Long responsableId;
+
+	/** Pedido de la app que aparta o libera las piezas (V2-M14.02). */
+	@Column(name = "pedido_app_id")
+	private Long pedidoAppId;
 
 	@Column(name = "fecha_llegada", nullable = false)
 	private Instant fechaLlegada;
@@ -82,11 +86,24 @@ public class MovimientoInventario {
 		this.vehiculo = vehiculo;
 		this.refaccion = refaccion;
 		this.cantidad = cantidad;
-		this.responsableId = Objects.requireNonNull(responsableId, "responsableId");
+		this.responsableId = responsableId;
 		this.fechaLlegada = Objects.requireNonNull(fechaLlegada, "fechaLlegada");
 		this.fechaRegistro = Objects.requireNonNull(fechaRegistro, "fechaRegistro");
 		this.proveedor = proveedor;
 		this.notas = notas;
+	}
+
+	/**
+	 * Apartado o liberación de piezas de un pedido de la app. No tiene responsable
+	 * porque el cliente no es usuario del personal. Solo lo usan
+	 * {@link Refaccion#apartar} y {@link Refaccion#liberar}.
+	 */
+	static MovimientoInventario dePedido(TipoMovimiento tipo, Refaccion refaccion, int cantidad, Long pedidoAppId,
+			Instant fecha) {
+		MovimientoInventario movimiento = new MovimientoInventario(tipo, null,
+				Objects.requireNonNull(refaccion, "refaccion"), cantidad, null, fecha, fecha, null, null);
+		movimiento.pedidoAppId = Objects.requireNonNull(pedidoAppId, "pedidoAppId");
+		return movimiento;
 	}
 
 	/**
@@ -95,7 +112,7 @@ public class MovimientoInventario {
 	 */
 	public static MovimientoInventario entradaDeVehiculo(Vehiculo vehiculo, Long responsableId, Instant fechaRegistro) {
 		return new MovimientoInventario(TipoMovimiento.ENTRADA, Objects.requireNonNull(vehiculo, "vehiculo"), null, 1,
-				responsableId, fechaRegistro, fechaRegistro, null, null);
+				Objects.requireNonNull(responsableId, "responsableId"), fechaRegistro, fechaRegistro, null, null);
 	}
 
 	/**
@@ -103,7 +120,7 @@ public class MovimientoInventario {
 	 */
 	public static MovimientoInventario salidaDeVehiculo(Vehiculo vehiculo, Long responsableId, Instant fechaEntrega) {
 		return new MovimientoInventario(TipoMovimiento.SALIDA, Objects.requireNonNull(vehiculo, "vehiculo"), null, 1,
-				responsableId, fechaEntrega, fechaEntrega, null, null);
+				Objects.requireNonNull(responsableId, "responsableId"), fechaEntrega, fechaEntrega, null, null);
 	}
 
 	/**
@@ -117,6 +134,7 @@ public class MovimientoInventario {
 			Instant fechaRegistro) {
 		Objects.requireNonNull(recepcion, "recepcion");
 		Objects.requireNonNull(fechaRegistro, "fechaRegistro");
+		Objects.requireNonNull(responsableId, "responsableId");
 		String proveedor = Texto.obligatorio(recepcion.proveedor(), "El proveedor es obligatorio");
 		if (proveedor.length() > LARGO_MAXIMO_PROVEEDOR) {
 			throw new IllegalArgumentException("El proveedor admite hasta 120 caracteres");
@@ -163,6 +181,10 @@ public class MovimientoInventario {
 
 	public Instant getFechaRegistro() {
 		return fechaRegistro;
+	}
+
+	public Long getPedidoAppId() {
+		return pedidoAppId;
 	}
 
 	public String getProveedor() {

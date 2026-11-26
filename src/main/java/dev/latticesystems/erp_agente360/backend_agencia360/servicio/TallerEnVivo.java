@@ -64,7 +64,8 @@ public interface TallerEnVivo {
 	record OrdenEnVivo(Long id, Long vehiculoId, EstatusOrden estatus, EtapaTaller etapa, Instant entregaEstimada,
 			String asesor, int avance, List<PasoDeEtapa> etapas, List<PuntoRevisado> inspeccion,
 			List<Evidencia> evidencias, List<Adicional> adicionales, BigDecimal totalOrden,
-			BigDecimal totalAdicionalesAprobados, BigDecimal totalAdicionalesPendientes, BigDecimal totalEstimado) {
+			BigDecimal totalAdicionalesAprobados, BigDecimal totalAdicionalesPendientes, BigDecimal totalEstimado,
+			List<PiezasPorInstalar.PedidoPorInstalar> pedidosApp) {
 	}
 
 	/** Una etapa que ya empezó; {@code fin} es nulo mientras siga en curso. */

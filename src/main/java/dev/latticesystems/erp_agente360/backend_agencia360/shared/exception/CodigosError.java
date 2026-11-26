@@ -60,6 +60,19 @@ public final class CodigosError {
 	/** V2-M26.04: no hay una oferta que responder así. */
 	public static final String OFERTA_NO_DISPONIBLE = "OFERTA_NO_DISPONIBLE";
 
+	/** V2-M14.02: no alcanzan las piezas. */
+	public static final String SIN_EXISTENCIA = "SIN_EXISTENCIA";
+	/** V2-M14.03: la cita está cancelada o ya pasó. */
+	public static final String CITA_NO_DISPONIBLE = "CITA_NO_DISPONIBLE";
+	/** V2-M14.02: el cliente ya tiene el máximo de pedidos sin entregar. */
+	public static final String LIMITE_APARTADOS = "LIMITE_APARTADOS";
+	/** V2-M14.02: el pedido ya se entregó. */
+	public static final String PEDIDO_NO_CANCELABLE = "PEDIDO_NO_CANCELABLE";
+	/** V2-M14.03: el pedido ya se entregó o se canceló. */
+	public static final String PEDIDO_NO_MODIFICABLE = "PEDIDO_NO_MODIFICABLE";
+	/** V2-M14.03: un producto no le queda al vehículo de la cita. */
+	public static final String PRODUCTO_INCOMPATIBLE = "PRODUCTO_INCOMPATIBLE";
+
 	private CodigosError() {
 	}
 }

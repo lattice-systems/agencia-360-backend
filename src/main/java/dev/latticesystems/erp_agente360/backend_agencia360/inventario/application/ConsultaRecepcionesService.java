@@ -35,7 +35,8 @@ public class ConsultaRecepcionesService {
 			throw new RecursoNoEncontradoException("No existe la refacción " + refaccionId);
 		}
 		return movimientoRepository
-				.findByRefaccionIdAndTipoOrderByFechaRegistroDescIdDesc(refaccionId, TipoMovimiento.ENTRADA).stream()
-				.map(RecepcionVista::de).toList();
+				.findByRefaccionIdAndTipoAndPedidoAppIdIsNullOrderByFechaRegistroDescIdDesc(refaccionId,
+						TipoMovimiento.ENTRADA)
+				.stream().map(RecepcionVista::de).toList();
 	}
 }

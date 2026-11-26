@@ -97,7 +97,7 @@ class TallerServiceTest {
 	@BeforeEach
 	void setUp() {
 		service = new TallerService(ordenes, etapas, puntos, evidencias, adicionales, vehiculos, directorioUsuarios,
-				almacen, eventos, Clock.fixed(AHORA, ExpedienteService.ZONA_AGENCIA));
+				almacen, eventos, citaId -> java.util.List.of(), Clock.fixed(AHORA, ExpedienteService.ZONA_AGENCIA));
 	}
 
 	private static OrdenServicio orden(Long id) {

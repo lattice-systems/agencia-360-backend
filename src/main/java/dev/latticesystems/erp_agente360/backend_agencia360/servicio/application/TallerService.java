@@ -9,6 +9,7 @@ import dev.latticesystems.erp_agente360.backend_agencia360.servicio.EstatusOrden
 import dev.latticesystems.erp_agente360.backend_agencia360.servicio.EtapaTaller;
 import dev.latticesystems.erp_agente360.backend_agencia360.servicio.MotivoCambio;
 import dev.latticesystems.erp_agente360.backend_agencia360.servicio.OrdenServicioCambiada;
+import dev.latticesystems.erp_agente360.backend_agencia360.servicio.PiezasPorInstalar;
 import dev.latticesystems.erp_agente360.backend_agencia360.servicio.ResultadoInspeccion;
 import dev.latticesystems.erp_agente360.backend_agencia360.servicio.TallerEnVivo;
 import dev.latticesystems.erp_agente360.backend_agencia360.servicio.domain.EtapaOrden;
@@ -70,20 +71,22 @@ public class TallerService implements TallerEnVivo {
 	private final DirectorioUsuarios directorioUsuarios;
 	private final AlmacenArchivos almacen;
 	private final ApplicationEventPublisher eventos;
+	private final PiezasPorInstalar piezas;
 	private final Clock reloj;
 
 	@Autowired
 	public TallerService(OrdenServicioRepository ordenes, EtapaOrdenRepository etapas, PuntoInspeccionRepository puntos,
 			EvidenciaOrdenRepository evidencias, TrabajoAdicionalRepository adicionales, VehiculosDeClientes vehiculos,
-			DirectorioUsuarios directorioUsuarios, AlmacenArchivos almacen, ApplicationEventPublisher eventos) {
-		this(ordenes, etapas, puntos, evidencias, adicionales, vehiculos, directorioUsuarios, almacen, eventos,
+			DirectorioUsuarios directorioUsuarios, AlmacenArchivos almacen, ApplicationEventPublisher eventos,
+			PiezasPorInstalar piezas) {
+		this(ordenes, etapas, puntos, evidencias, adicionales, vehiculos, directorioUsuarios, almacen, eventos, piezas,
 				Clock.system(ExpedienteService.ZONA_AGENCIA));
 	}
 
 	TallerService(OrdenServicioRepository ordenes, EtapaOrdenRepository etapas, PuntoInspeccionRepository puntos,
 			EvidenciaOrdenRepository evidencias, TrabajoAdicionalRepository adicionales, VehiculosDeClientes vehiculos,
 			DirectorioUsuarios directorioUsuarios, AlmacenArchivos almacen, ApplicationEventPublisher eventos,
-			Clock reloj) {
+			PiezasPorInstalar piezas, Clock reloj) {
 		this.ordenes = ordenes;
 		this.etapas = etapas;
 		this.puntos = puntos;
@@ -93,6 +96,7 @@ public class TallerService implements TallerEnVivo {
 		this.directorioUsuarios = directorioUsuarios;
 		this.almacen = almacen;
 		this.eventos = eventos;
+		this.piezas = piezas;
 		this.reloj = reloj;
 	}
 
@@ -362,7 +366,7 @@ public class TallerService implements TallerEnVivo {
 				recorridas.stream().map(TallerService::paso).toList(), inspeccion,
 				evidenciasDe(todas, evidencia -> evidencia.getPuntoInspeccionId() == null),
 				propuestos.stream().map(TallerService::adicional).toList(), orden.getTotal(), aprobados, pendientes,
-				orden.getTotal().add(sinIncorporar(propuestos)));
+				orden.getTotal().add(sinIncorporar(propuestos)), piezas.deCita(orden.getCitaId()));
 	}
 
 	private PuntoRevisado revisado(PuntoInspeccion punto, List<EvidenciaOrden> todas) {
