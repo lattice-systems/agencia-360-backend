@@ -23,7 +23,6 @@ public record DatosFiscales(String rfc, String razonSocial, String regimenFiscal
 	public static final int MAX_CORREO = 254;
 
 	private static final Pattern CODIGO_POSTAL = Pattern.compile("[0-9]{5}");
-	private static final Pattern CORREO = Pattern.compile("^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$");
 
 	/**
 	 * Revisa y limpia los datos: RFC en mayúsculas, razón social en mayúsculas y
@@ -73,7 +72,7 @@ public record DatosFiscales(String rfc, String razonSocial, String regimenFiscal
 		}
 
 		String mail = correo == null || correo.isBlank() ? null : correo.strip().toLowerCase(Locale.ROOT);
-		if (mail != null && (mail.length() > MAX_CORREO || !CORREO.matcher(mail).matches())) {
+		if (mail != null && (mail.length() > MAX_CORREO || !correoValido(mail))) {
 			errores.put("correo", "Revisa el correo");
 		}
 
@@ -81,6 +80,20 @@ public record DatosFiscales(String rfc, String razonSocial, String regimenFiscal
 			throw new CamposInvalidosException(CodigosError.DATOS_FISCALES_INVALIDOS, errores);
 		}
 		return new DatosFiscales(rfcLimpio, razon, regimen, cp, uso, mail, tipo);
+	}
+
+	/**
+	 * Un correo con una sola arroba, sin espacios, con algo antes de ella y un
+	 * dominio con punto que no empieza, termina ni repite puntos. Se revisa sin
+	 * expresión regular para que una entrada armada no la haga lenta.
+	 */
+	static boolean correoValido(String correo) {
+		int arroba = correo.indexOf('@');
+		if (arroba <= 0 || arroba != correo.lastIndexOf('@') || correo.chars().anyMatch(Character::isWhitespace)) {
+			return false;
+		}
+		String dominio = correo.substring(arroba + 1);
+		return dominio.contains(".") && !dominio.startsWith(".") && !dominio.endsWith(".") && !dominio.contains("..");
 	}
 
 	private static String limpio(String clave) {

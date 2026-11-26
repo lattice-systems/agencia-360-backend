@@ -62,6 +62,33 @@ class DatosFiscalesTest {
 		assertThat(datos.correo()).isNull();
 	}
 
+	@ParameterizedTest
+	@ValueSource(strings = {"lola@correo.mx", "ana.lopez+facturas@empresa.com.mx", "x@a.b"})
+	void correoConArrobaYDominio(String correo) {
+		assertThat(DatosFiscales.correoValido(correo)).isTrue();
+	}
+
+	@ParameterizedTest
+	@ValueSource(strings = {"sin-arroba", "@correo.mx", "lola@", "lola@correo", "lola@@correo.mx", "lo la@correo.mx",
+			"lola@.correo.mx", "lola@correo.mx.", "lola@correo..mx", "a@b@c.mx"})
+	void correoQueNoSirve(String correo) {
+		assertThat(DatosFiscales.correoValido(correo)).isFalse();
+	}
+
+	@Test
+	void unCorreoArmadoParaTrabarNoTarda() {
+		String armado = "!@!." + "!.".repeat(100_000);
+
+		long inicio = System.nanoTime();
+		boolean valido = DatosFiscales.correoValido(armado);
+
+		assertThat(valido).isFalse();
+		assertThat(System.nanoTime() - inicio).isLessThan(1_000_000_000L);
+		assertThatThrownBy(() -> DatosFiscales.validar("GODE561231GR8", "Nombre", "612", "76000", "G03", armado))
+				.isInstanceOfSatisfying(CamposInvalidosException.class,
+						e -> assertThat(e.getCampos()).containsOnlyKeys("correo"));
+	}
+
 	@Test
 	void juntaTodosLosCamposQueFallan() {
 		assertThatThrownBy(() -> DatosFiscales.validar("GODE561231GR9", " ", "999", "7600", "ZZZ", "sin-arroba"))
