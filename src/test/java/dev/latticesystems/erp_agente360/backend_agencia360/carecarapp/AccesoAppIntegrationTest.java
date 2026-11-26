@@ -28,6 +28,8 @@ import dev.latticesystems.erp_agente360.backend_agencia360.shared.exception.Conf
 import dev.latticesystems.erp_agente360.backend_agencia360.shared.security.JwtService;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceContext;
+import java.time.LocalDate;
+import java.time.ZoneId;
 import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -54,6 +56,14 @@ class AccesoAppIntegrationTest extends AbstractIntegrationTest {
 	private static final String AUTH = "/api/v1/app/auth";
 	private static final String CORREO = "ana.lopez@correo.com";
 	private static final String TEMPORAL = "Temporal123";
+	private static final String TELEFONO = "4771234567";
+
+	/**
+	 * La zona en la que la agencia resuelve sus fechas. Se escribe aquí a propósito
+	 * en vez de reusar la constante de producción: así, si alguien la cambiara,
+	 * esta prueba lo diría en vez de seguirle la corriente.
+	 */
+	private static final ZoneId ZONA_AGENCIA = ZoneId.of("America/Mexico_City");
 
 	@Autowired
 	private MockMvc mockMvc;
@@ -89,7 +99,7 @@ class AccesoAppIntegrationTest extends AbstractIntegrationTest {
 
 	@BeforeEach
 	void abrirCuenta() {
-		clienteId = registroClientesService.registrar(new NuevoCliente("Ana López", CORREO, null, null)).id();
+		clienteId = registroClientesService.registrar(new NuevoCliente("Ana López", CORREO, TELEFONO, null)).id();
 		cuentasAppService.abrir(clienteId, TEMPORAL);
 	}
 
@@ -140,6 +150,34 @@ class AccesoAppIntegrationTest extends AbstractIntegrationTest {
 		mockMvc.perform(get("/api/v1/app/perfil").header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
 				.andExpect(status().isOk()).andExpect(jsonPath("$.id").value(clienteId))
 				.andExpect(jsonPath("$.nombre").value("Ana López")).andExpect(jsonPath("$.correo").value(CORREO));
+	}
+
+	@Test
+	void elPerfilTraeElTelefonoYDesdeCuandoEsCliente() throws Exception {
+		// V2-M01.06. Sin estos dos campos la pantalla del perfil no cumple su
+		// criterio; son los unicos que la historia agrego al contrato.
+		String token = accessTokenDe(login(CORREO, TEMPORAL));
+
+		mockMvc.perform(get("/api/v1/app/perfil").header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
+				.andExpect(status().isOk()).andExpect(jsonPath("$.telefono").value(TELEFONO))
+				// Es una fecha, no un instante, y se resuelve en la zona de la
+				// agencia: en UTC, un cliente dado de alta de noche en Mexico
+				// apareceria con la fecha del dia siguiente.
+				.andExpect(jsonPath("$.clienteDesde").value(LocalDate.now(ZONA_AGENCIA).toString()));
+	}
+
+	@Test
+	void unClienteSinTelefonoTienePerfilIgual() throws Exception {
+		// La agencia no siempre lo captura al dar de alta. Si el perfil fallara o
+		// lo omitiera, se quedaria sin pantalla justo quien no lo tiene.
+		Long sinTelefono = registroClientesService
+				.registrar(new NuevoCliente("Luis Pérez", "luis.perez@correo.com", null, null)).id();
+		cuentasAppService.abrir(sinTelefono, TEMPORAL);
+		String token = accessTokenDe(login("luis.perez@correo.com", TEMPORAL));
+
+		mockMvc.perform(get("/api/v1/app/perfil").header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
+				.andExpect(status().isOk()).andExpect(jsonPath("$.nombre").value("Luis Pérez"))
+				.andExpect(jsonPath("$.telefono").isEmpty()).andExpect(jsonPath("$.clienteDesde").isNotEmpty());
 	}
 
 	@Test

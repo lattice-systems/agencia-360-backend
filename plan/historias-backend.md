@@ -30,6 +30,36 @@ Detalle: [`carecar-mobile/plan/modulos/M01-acceso-y-perfil.md`](https://github.c
 | V2-M01.07 | Como cliente quiero editar mi teléfono y correo para que la agencia me contacte | Cambio se guarda tras confirmar un código enviado al nuevo dato · al cambiar correo cambia también `cuenta_app.usuario` · validación de formato | Jael |
 | V2-M01.09 | Como cliente quiero ver y cerrar mis sesiones abiertas en otros celulares para sentirme seguro | Lista con dispositivo y último uso · cerrar una o todas revoca sus tokens | Jael |
 
+#### Diseño técnico — V2-M01.06 (parte B de Jael)
+
+El criterio pide que el perfil muestre **nombre, correo, teléfono, «cliente desde» y vehículos**. Hoy `GET /perfil` devuelve tres de esos cinco: `PerfilApp` es `(id, nombre, correo)`, y el puerto `DirectorioClientes.ClienteRegistrado` tampoco lleva más. Los vehículos no hacen falta aquí: la app ya los pide a `GET /vehiculos`.
+
+**No hace falta migración.** `cliente` ya tiene `telefono varchar(20)` (nulo posible) y `created_at` desde la V7. Nada de la ficha se renombra ni se quita.
+
+**Cambios**
+
+| Pieza | Qué cambia |
+| --- | --- |
+| `DirectorioClientes.ClienteRegistrado` | Gana `telefono` (nulo posible) y `clienteDesde` (siempre viene) |
+| `DirectorioClientesService` | Los llena desde la entidad |
+| `PerfilApp` | Gana los dos campos |
+| `AccesoAppService.perfil` | Los pasa tal cual |
+| Contrato | `Perfil` gana `telefono` y `clienteDesde`; versión **2.23.0** |
+
+**`ClienteRegistrado` es un puerto compartido**, así que ensancharlo rompería a quien lo construya. Se revisó antes de proponerlo: **se construye en 4 lugares**, todos dentro de `clientes`, y se lee en cinco servicios de `carecarapp` que solo usan `id`, `nombre` y `correo`. El cambio es aditivo y mecánico.
+
+**`clienteDesde` es `date`, no `date-time`, y se calcula en la zona de la agencia.** `created_at` es un instante; convertirlo en el celular haría que un cliente registrado el 1 de marzo a las 02:00 UTC apareciera como «desde febrero» en México. Quien sabe en qué zona opera la agencia es el servidor, así que la fecha sale ya resuelta con `America/Mexico_City`.
+
+> **La zona está definida en tres lugares**: `AgendaAppService.ZONA_AGENCIA`, `ServicioApp.ZONA_AGENCIA` y una copia privada en `RecoleccionService`. Se usó la de `ServicioApp`, que es la que ya comparten dos servicios. Tres copias de la misma constante es justo como se desincronizan: **merece un lugar compartido**, y es un arreglo aparte, no de esta historia.
+
+**Dónde se convierte el instante en fecha.** El puerto entrega `registradoEn` como `Instant` y la conversión a `LocalDate` vive en `AccesoAppService`. El directorio de clientes no sabe en qué huso vive quien pregunta, y hornear ahí la zona de la agencia obligaría al módulo `clientes` a conocer una decisión de presentación de la app.
+
+**`clienteDesde` es obligatorio en el contrato** porque `cliente.created_at` es `not null` desde la V7: declararlo opcional diria que a veces falta, y no falta nunca.
+
+**`telefono` puede ser nulo** y la app tiene que mostrarlo así: la agencia no siempre lo captura al dar de alta al cliente. Declararlo obligatorio dejaría sin perfil justo a quien no lo tiene.
+
+**Lo que esta historia no toca:** editar esos datos es V2-M01.07, con su verificación por código. Aquí el perfil es de solo lectura, como dice el contrato.
+
 #### Diseño técnico — V2-M01.09 (parte B de Jael)
 
 La ficha nombra `sesion_app` con `dispositivo` y `ultimo_uso` como campos **nuevos**; hoy la tabla (`V10__crear_tablas_acceso_app.sql`) no los tiene. No se renombra ni se quita nada de la ficha.

@@ -18,6 +18,7 @@ import dev.latticesystems.erp_agente360.backend_agencia360.shared.security.JwtSe
 import dev.latticesystems.erp_agente360.backend_agencia360.shared.security.Role;
 import java.time.Clock;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -179,7 +180,11 @@ public class AccesoAppService {
 	public PerfilApp perfil(Long clienteId) {
 		ClienteRegistrado cliente = directorioClientes.buscarPorId(clienteId)
 				.orElseThrow(() -> new RecursoNoEncontradoException("No existe el cliente " + clienteId));
-		return new PerfilApp(cliente.id(), cliente.nombre(), cliente.correo());
+		// La fecha se resuelve aqui y no en el directorio: el puerto entrega el
+		// instante y quien lo muestra decide la zona. La de la agencia es la
+		// correcta porque es la agencia quien «tiene» al cliente desde esa fecha.
+		return new PerfilApp(cliente.id(), cliente.nombre(), cliente.correo(), cliente.telefono(),
+				LocalDate.ofInstant(cliente.registradoEn(), ServicioApp.ZONA_AGENCIA));
 	}
 
 	/**

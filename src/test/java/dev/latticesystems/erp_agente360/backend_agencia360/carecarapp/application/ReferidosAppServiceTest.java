@@ -84,8 +84,8 @@ class ReferidosAppServiceTest {
 
 	@Test
 	void siYaEsClienteOYaLoRefirieronEsDuplicado() {
-		when(directorio.buscarPorCorreo("ana@correo.com"))
-				.thenReturn(Optional.of(new ClienteRegistrado(5L, "Ana", "ana@correo.com")));
+		when(directorio.buscarPorCorreo("ana@correo.com")).thenReturn(Optional.of(new ClienteRegistrado(5L, "Ana",
+				"ana@correo.com", "4771234567", Instant.parse("2024-03-01T10:00:00Z"))));
 		when(referidos.existsByTelefono("4421234567")).thenReturn(true);
 
 		assertThatThrownBy(() -> servicio.referir(3L, "Ana", null, "ana@correo.com"))

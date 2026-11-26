@@ -72,6 +72,7 @@ public class DirectorioClientesService implements DirectorioClientes {
 	}
 
 	private static ClienteRegistrado registrado(Cliente cliente) {
-		return new ClienteRegistrado(cliente.getId(), cliente.getNombre(), cliente.getCorreo());
+		return new ClienteRegistrado(cliente.getId(), cliente.getNombre(), cliente.getCorreo(), cliente.getTelefono(),
+				cliente.getCreatedAt());
 	}
 }
