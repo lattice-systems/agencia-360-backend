@@ -160,7 +160,44 @@ class SesionesActivasAppIntegrationTest extends AbstractIntegrationTest {
 
 		// Es el punto de la historia: ese dispositivo ya no puede renovar.
 		refrescar(refreshAjeno).andExpect(status().isUnauthorized());
+		// Y la del cliente sigue abierta. Esta es la línea que destapó el defecto:
+		// el reintento del dispositivo cerrado llegaba con un token revocado, el
+		// servidor lo tomaba como robo y cerraba TODAS las sesiones de la cuenta,
+		// así que cerrar la sesión de una tablet sacaba al cliente de su propio
+		// celular. Ahora solo delata robo un token que consumió un refresco.
 		sesiones(token).andExpect(jsonPath("$.length()").value(1));
+	}
+
+	@Test
+	void elDispositivoCerradoPuedeReintentarVariasVecesSinTirarLaCuenta() throws Exception {
+		// Un dispositivo cerrado no reintenta una vez: reintenta cada vez que se
+		// abre la app. Ninguno de esos intentos puede cerrar nada más.
+		String token = accessTokenDe(login("Pixel 7"));
+		String refreshAjeno = refreshTokenDe(login("iPhone 14"));
+		long idDelOtro = idDeLaSesionCon(token, "iPhone 14");
+		mockMvc.perform(delete(SESIONES + "/" + idDelOtro).header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
+				.andExpect(status().isNoContent());
+
+		for (int i = 0; i < 3; i++) {
+			refrescar(refreshAjeno).andExpect(status().isUnauthorized());
+		}
+
+		assertThat(vigentes()).isEqualTo(1);
+	}
+
+	@Test
+	void reusarUnTokenGastadoPorUnRefrescoSigueCerrandoTodo() throws Exception {
+		// La protección contra robo **no se debilita**: un token que ya se cambió
+		// por otro y vuelve a aparecer sí delata que alguien tiene una copia, y
+		// ahí sí se cierra toda la cuenta. Es el único caso que la delata.
+		String gastado = refreshTokenDe(login("Pixel 7"));
+		refrescar(gastado).andExpect(status().isOk());
+		refreshTokenDe(login("iPhone 14"));
+		assertThat(vigentes()).isEqualTo(2);
+
+		refrescar(gastado).andExpect(status().isUnauthorized());
+
+		assertThat(vigentes()).isZero();
 	}
 
 	@Test

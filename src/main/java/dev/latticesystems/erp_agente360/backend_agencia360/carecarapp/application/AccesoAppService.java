@@ -1,6 +1,7 @@
 package dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.application;
 
 import dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.domain.CuentaApp;
+import dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.domain.MotivoRevocacion;
 import dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.domain.ReglasContrasena;
 import dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.domain.SesionApp;
 import dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.infrastructure.CuentaAppRepository;
@@ -121,7 +122,15 @@ public class AccesoAppService {
 		SesionApp sesion = sesionRepository.findByTokenHash(Secretos.sha256(refreshToken))
 				.orElseThrow(() -> new NoAutenticadoException(SESION_TERMINADA));
 		if (sesion.estaRevocada()) {
-			cerrarTodas(sesion.getCuentaId(), ahora);
+			// Solo se toma como robo si la consumio un refresco. Una sesion que
+			// una persona cerro a proposito -desde «mis sesiones», al cerrar
+			// sesion, al desactivar la cuenta- no delata nada: ese dispositivo
+			// todavia tiene su token y lo va a reintentar, asi que tratarlo como
+			// robo sacaria al cliente de todas sus demas sesiones por haber
+			// cerrado una. Ver MotivoRevocacion.
+			if (sesion.reusarlaDelataRobo()) {
+				cerrarTodas(sesion.getCuentaId(), ahora);
+			}
 			throw new NoAutenticadoException(SESION_TERMINADA);
 		}
 		if (!sesion.estaVigente(ahora)) {
@@ -132,7 +141,7 @@ public class AccesoAppService {
 		exigirActiva(cuenta);
 		ClienteRegistrado cliente = directorioClientes.buscarPorId(cuenta.getClienteId())
 				.orElseThrow(() -> new NoAutenticadoException(SESION_TERMINADA));
-		sesion.revocar(ahora);
+		sesion.revocar(ahora, MotivoRevocacion.REFRESCO);
 		return continuarSesion(cuenta, cliente, ahora, sesion);
 	}
 
@@ -140,7 +149,7 @@ public class AccesoAppService {
 	@Transactional
 	public void cerrarSesion(String refreshToken) {
 		sesionRepository.findByTokenHash(Secretos.sha256(refreshToken))
-				.ifPresent(sesion -> sesion.revocar(Instant.now(reloj)));
+				.ifPresent(sesion -> sesion.revocar(Instant.now(reloj), MotivoRevocacion.CIERRE));
 	}
 
 	/**
@@ -237,7 +246,7 @@ public class AccesoAppService {
 		CuentaApp cuenta = cuentaDe(clienteId);
 		SesionApp sesion = sesionRepository.findById(sesionId).filter(s -> s.getCuentaId().equals(cuenta.getId()))
 				.orElseThrow(() -> new RecursoNoEncontradoException("La sesión no existe"));
-		sesion.revocar(Instant.now(reloj));
+		sesion.revocar(Instant.now(reloj), MotivoRevocacion.CIERRE);
 	}
 
 	/**
@@ -284,7 +293,8 @@ public class AccesoAppService {
 	}
 
 	private void cerrarTodas(Long cuentaId, Instant ahora) {
-		sesionRepository.findByCuentaIdAndRevocadaEnIsNull(cuentaId).forEach(s -> s.revocar(ahora));
+		sesionRepository.findByCuentaIdAndRevocadaEnIsNull(cuentaId)
+				.forEach(s -> s.revocar(ahora, MotivoRevocacion.CIERRE));
 	}
 
 	private CuentaApp cuentaDe(Long clienteId) {

@@ -92,6 +92,27 @@ Mientras tanto, `DELETE /sesiones` se presenta en la app como «cerrar sesión e
 
 **Lo que esta historia no puede hacer:** la lista no marca «esta sesión». El JWT lleva `uid` y `roles`, no el id de la sesión, así que el servidor no sabe cuál pregunta. Exigiría un claim `sid` y tocar `JwtService`, `UsuarioAutenticado` y el filtro, que usan también el ERP y el CRM: se propone aparte.
 
+#### El defecto que destapó V2-M01.09 — `motivo_revocacion` (V53)
+
+Hasta esta historia, `revocada_en` no distinguía **por qué** se revocó una sesión, y `refrescar` trataba cualquier token revocado como posible robo: cerraba **todas** las sesiones de la cuenta.
+
+Eso vuelve «cerrar mis sesiones abiertas» una trampa, y lo encontró la prueba `cerrarUnaSesionLaRevocaYSuRefreshDejaDeServir`:
+
+| Quién hace qué | Qué pasaba |
+| --- | --- |
+| El cliente cierra la sesión de su tablet | En cuanto la tablet reintenta, **el cliente queda fuera de su propio celular** |
+| El cliente cierra la sesión de un celular robado | El ladrón, al reintentar, **saca al cliente de todas partes**: una negación de servicio regalada |
+
+No se había notado porque con `/auth/cerrar-sesion` no se alcanza: ahí el mismo dispositivo borra sus tokens y no reintenta. **Cerrar una sesión ajena sí lo alcanza**, porque ese dispositivo conserva su token y lo usa en su siguiente intento.
+
+**El arreglo guarda el motivo** (`MotivoRevocacion`) y la detección de robo se dispara **solo** con `REFRESCO`, que es el único caso en el que el token siguió existiendo después de usarse: si vuelve a aparecer, alguien tiene una copia. `CIERRE` —cerrar sesión, cerrar una desde la pantalla, cerrar todas, desactivar la cuenta, restablecer la contraseña— responde 401 y nada más.
+
+**La protección no se debilita**, y hay una prueba para eso: `reusarUnTokenGastadoPorUnRefrescoSigueCerrandoTodo`.
+
+Las filas revocadas antes de la V53 quedan con el motivo en nulo y se tratan como `REFRESCO`, que es el comportamiento de hoy: casi todas lo son y, ante la duda, conviene equivocarse del lado de cerrar sesiones y no del de dejar viva una copia robada.
+
+**Pendiente de confirmar con Ricardo**, que es quien definió la regla original.
+
 ### M02 · Mis vehículos y postventa (garaje, manuales, historial, tickets, citas) — H2 — módulo `carecarapp + servicio`
 
 Detalle: [`carecar-mobile/plan/modulos/M02-vehiculos-y-postventa.md`](https://github.com/lattice-systems/carecar-mobile/blob/main/plan/modulos/M02-vehiculos-y-postventa.md)

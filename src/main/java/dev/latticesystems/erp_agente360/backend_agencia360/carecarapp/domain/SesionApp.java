@@ -3,6 +3,8 @@ package dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.domain;
 import dev.latticesystems.erp_agente360.backend_agencia360.shared.domain.Auditable;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
@@ -35,6 +37,14 @@ public class SesionApp extends Auditable {
 
 	@Column(name = "revocada_en")
 	private Instant revocadaEn;
+
+	/**
+	 * Por qué se revocó. Nulo mientras está viva, y también en las filas revocadas
+	 * antes de que existiera la columna.
+	 */
+	@Enumerated(EnumType.STRING)
+	@Column(name = "motivo_revocacion", length = 20)
+	private MotivoRevocacion motivoRevocacion;
 
 	/**
 	 * Nombre que mandó la app al entrar, para que el cliente reconozca sus
@@ -99,10 +109,32 @@ public class SesionApp extends Auditable {
 		return revocadaEn != null;
 	}
 
-	public void revocar(Instant ahora) {
+	/**
+	 * Revoca la sesión diciendo por qué. El motivo no es adorno: decide si reusar
+	 * este token se toma como posible robo (ver {@link MotivoRevocacion}).
+	 *
+	 * <p>
+	 * No hace nada si ya estaba revocada, así que el primer motivo es el que queda:
+	 * el que de verdad la cerró.
+	 */
+	public void revocar(Instant ahora, MotivoRevocacion motivo) {
 		if (revocadaEn == null) {
 			revocadaEn = ahora;
+			motivoRevocacion = motivo;
 		}
+	}
+
+	/**
+	 * Si reusar este token tiene que tomarse como posible robo.
+	 *
+	 * <p>
+	 * El nulo cuenta como que sí: son las filas revocadas antes de que existiera la
+	 * columna, casi todas consumidas por un refresco, y ante la duda conviene
+	 * equivocarse del lado de cerrar sesiones y no del de dejar viva una copia
+	 * robada.
+	 */
+	public boolean reusarlaDelataRobo() {
+		return motivoRevocacion == null || motivoRevocacion == MotivoRevocacion.REFRESCO;
 	}
 
 	public Long getId() {
