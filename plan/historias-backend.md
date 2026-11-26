@@ -946,6 +946,41 @@ Rol `CLIENTE_CARECAR`, contrato **2.19.0**, etiqueta `Valuación`. Toda ruta res
 
 No crea tablas ni cambia la fórmula. `valor-estimado` toma las `estimacion_toma_cuenta` del cliente para ese vehículo, las agrupa por mes de la zona `America/Mexico_City` dentro de los últimos `meses` (12 por omisión, contando el actual) y de cada mes usa la más reciente. Cada punto trae `mes` (`AAAA-MM`), `estimacionTomaCuentaId`, `creadaEn`, `minimo`, `maximo`, `medio` (promedio de ambos, 2 decimales), `km` y `estado`. Van del mes más antiguo al más reciente. Un mes sin estimación **no aparece**: no se interpola ni se recalcula hacia atrás con los parámetros de hoy, porque eso mostraría valores que nadie estimó. Sin estimaciones responde 200 con la lista vacía.
 
+##### Seguridad y privacidad
+
+- El cliente sale del token. Toda consulta de la app filtra por él y lo ajeno responde 404, también las fotos (solo se llega a ellas por la URL firmada de una valuación propia).
+- Las fotos muestran placas y a veces el interior o personas. No se escriben en registros ni claves, nombres, montos o contenido.
+- **ARCO, obligatorio en este mismo cambio.** `AnonimizadorDeCuentaJdbc` borra las `estimacion_toma_cuenta` del cliente, así que sin tocarlo la llave foránea de `valuacion` haría fallar la cancelación de la cuenta. Antes de borrar las estimaciones debe borrar sus valuaciones y, al confirmar la transacción, las fotos del almacén. La cita se conserva como hoy y el prospecto no se toca. `ExportadorDeDatosJdbc` suma la sección `valuaciones` (sin las claves de `fotos` ni `ofertada_por`) y su texto en `INCLUYE`.
+
+##### Capas
+
+- `domain`: `Valuacion` (transiciones y vigencia), `EstadoValuacion`, `TomaValuacion` y `MotivoCita.VALUACION`.
+- `infrastructure`: `ValuacionRepository`, con la lectura que bloquea la fila.
+- `application`: `ValuacionService` (cliente y personal), `ValorEstimadoService`, `ValuacionApp` y `ValorEstimadoApp`. Reloj inyectado y zona de la agencia.
+- `web`: `ValuacionController` y `ValuacionPersonalController`.
+- `ventascrm.application`: el escucha de `ValuacionSolicitada`, reusando la elección de vendedor de `ProspectosDeEstrenoService`.
+- Datos de ejemplo: `scripts/cargar-datos-de-ejemplo.sh` suma una valuación de ejemplo (OB5).
+
+##### Pruebas pedidas
+
+- **Dominio (`ValuacionTest`):** cada transición permitida y cada una prohibida, vigencia el último día (válida) y al día siguiente (vencida), respuesta repetida, respuesta contraria, monto distinto al vigente, reemplazo de una toma.
+- **Servicio (Mockito):** reutiliza el prospecto abierto de M16 y no publica evento, publica `ValuacionSolicitada` cuando no hay o está terminado, devuelve la abierta del mismo vehículo, cita cancelada reabre, reagenda solo tras los días sin oferta, la foto anterior se borra después del commit y la nueva si falla, `valor-estimado` con varios registros en un mes, meses vacíos y cambio de mes por zona horaria.
+- **Integración (`ValuacionIntegrationTest`):** cada criterio y cada código de la tabla. 401 y 403 en app y personal, token de cliente rechazado en rutas del personal y rol `SERVICIO` rechazado. Recursos de otro cliente 404 en todas las rutas. `VENTAS` sin el prospecto 404. Foto con EXIF que se guarda sin él, WebP, archivo que no es imagen y más de 8 MB con 400. URL firmada descarga y alterada da 404. `POST /citas` con `valuacion` da 400. El prospecto queda con origen `APP`. El aviso `valuacion.oferta` llega solo al dueño y sin monto. La oferta de una inspección futura da 409 y la de una cita de hoy o anterior se siembra por repositorio.
+- **ARCO:** cancelar la cuenta con una valuación con fotos termina bien y no deja fila ni archivo, y la descarga incluye la sección.
+- `ModularityTests` y `ContratoCodigosDeErrorTest` en verde.
+
+##### Entrega sugerida y supuestos sobre trabajo de otras personas
+
+PR sugeridos para que cada uno sea revisable: (1) migración, solicitud, lista, prospecto y ARCO, (2) fotos, (3) inspección y oferta, (4) valor en el tiempo.
+
+- **Citas y agenda (Juan Pablo, M02):** se toca `MotivoCita` y la validación de `AgendaAppController`.
+- **Prospectos (Daniel, M16) y ARCO (Daniel, M22):** se toca el escucha en `ventascrm`, `ConsultaProspectos`, `AnonimizadorDeCuentaJdbc` y `ExportadorDeDatosJdbc`.
+- **Fotos (Daniel, M24):** `LimpiadorImagen` gana una sobrecarga sin cambiar la actual.
+- **Push (Jael, M06):** `valuacion.oferta` es un `AvisoAlCliente`, así que llegará como push sin cambiar este código.
+- **PO:** sin filas en `parametro_toma_cuenta` toda estimación responde 422 en el backend real, y sin estimación no hay valuación ni gráfica.
+
+**Mientras no se implemente.** La app trabaja contra el contrato y `mock_api` de `carecar-mobile` (dependencia simulable).
+
 ### M27 · Centro de ayuda y sucursales — H4 — módulo `carecarapp`
 
 Detalle: [`carecar-mobile/plan/modulos/M27-ayuda-y-sucursales.md`](https://github.com/lattice-systems/carecar-mobile/blob/main/plan/modulos/M27-ayuda-y-sucursales.md)
