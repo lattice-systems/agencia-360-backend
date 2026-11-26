@@ -1,5 +1,8 @@
 package dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.application;
 
+import dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.domain.MotivoPuntos;
+import dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.domain.MovimientoPuntos;
+import dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.infrastructure.MovimientoPuntosRepository;
 import dev.latticesystems.erp_agente360.backend_agencia360.clientes.VehiculosDeClientes;
 import dev.latticesystems.erp_agente360.backend_agencia360.servicio.HistorialDeServicios;
 import dev.latticesystems.erp_agente360.backend_agencia360.shared.exception.RecursoNoEncontradoException;
@@ -8,7 +11,8 @@ import org.springframework.stereotype.Service;
 
 /**
  * Historial de servicios y tickets de los vehículos del cliente (APP-3.2). Un
- * vehículo o servicio ajeno responde 404, como pide el contrato.
+ * vehículo o servicio ajeno responde 404, como pide el contrato. El ticket dice
+ * cuántos puntos de lealtad dio la orden (V2-M12.02).
  */
 @Service
 public class ServiciosAppService {
@@ -18,10 +22,13 @@ public class ServiciosAppService {
 
 	private final VehiculosDeClientes vehiculos;
 	private final HistorialDeServicios historial;
+	private final MovimientoPuntosRepository movimientos;
 
-	public ServiciosAppService(VehiculosDeClientes vehiculos, HistorialDeServicios historial) {
+	public ServiciosAppService(VehiculosDeClientes vehiculos, HistorialDeServicios historial,
+			MovimientoPuntosRepository movimientos) {
 		this.vehiculos = vehiculos;
 		this.historial = historial;
+		this.movimientos = movimientos;
 	}
 
 	/**
@@ -57,7 +64,7 @@ public class ServiciosAppService {
 	 */
 	public ServicioDetalleApp detalle(Long clienteId, Long servicioId) {
 		return historial.detalle(servicioId).filter(detalle -> esDelCliente(clienteId, detalle.vehiculoId()))
-				.map(ServicioDetalleApp::de)
+				.map(detalle -> ServicioDetalleApp.de(detalle, puntosGanados(servicioId)))
 				.orElseThrow(() -> new RecursoNoEncontradoException("No existe el servicio " + servicioId));
 	}
 
@@ -72,6 +79,11 @@ public class ServiciosAppService {
 			throw new RecursoNoEncontradoException("No existe el servicio " + servicioId);
 		}
 		return historial.ticket(servicioId);
+	}
+
+	private Integer puntosGanados(Long servicioId) {
+		return movimientos.findByMotivoAndReferenciaTipoAndReferenciaId(MotivoPuntos.SERVICIO,
+				LealtadAppService.REFERENCIA_ORDEN, servicioId).map(MovimientoPuntos::getPuntos).orElse(null);
 	}
 
 	private void exigirVehiculoDelCliente(Long clienteId, Long vehiculoId) {

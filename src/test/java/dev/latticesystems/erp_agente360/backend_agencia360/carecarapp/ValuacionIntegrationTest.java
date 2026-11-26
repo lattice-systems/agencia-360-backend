@@ -30,9 +30,9 @@ import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.sql.Date;
 import java.sql.Timestamp;
-import java.time.YearMonth;
 import java.time.DayOfWeek;
 import java.time.LocalDate;
+import java.time.YearMonth;
 import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -142,11 +142,12 @@ class ValuacionIntegrationTest extends AbstractIntegrationTest {
 		long estimacion = estimar(ana);
 
 		String creada = pedir(ana, estimacion).andExpect(status().isCreated())
-				.andExpect(jsonPath("$.estado").value("SOLICITADA")).andExpect(jsonPath("$.vehiculoId").value(ana.vehiculo()))
-				.andExpect(jsonPath("$.estimacion.id").value(estimacion)).andExpect(jsonPath("$.fotos.length()").value(0))
-				.andExpect(jsonPath("$.puedeAgendar").value(true)).andExpect(jsonPath("$.cita").isEmpty())
-				.andExpect(jsonPath("$.oferta").isEmpty()).andExpect(jsonPath("$.creadaEn").isString()).andReturn()
-				.getResponse().getContentAsString();
+				.andExpect(jsonPath("$.estado").value("SOLICITADA"))
+				.andExpect(jsonPath("$.vehiculoId").value(ana.vehiculo()))
+				.andExpect(jsonPath("$.estimacion.id").value(estimacion))
+				.andExpect(jsonPath("$.fotos.length()").value(0)).andExpect(jsonPath("$.puedeAgendar").value(true))
+				.andExpect(jsonPath("$.cita").isEmpty()).andExpect(jsonPath("$.oferta").isEmpty())
+				.andExpect(jsonPath("$.creadaEn").isString()).andReturn().getResponse().getContentAsString();
 		long id = numero(creada, "$.id");
 
 		pedir(ana, estimar(ana)).andExpect(status().isOk()).andExpect(jsonPath("$.id").value(id));
@@ -164,7 +165,8 @@ class ValuacionIntegrationTest extends AbstractIntegrationTest {
 				String.class, prospecto)).isEqualTo("APP");
 		assertThat(jdbc.queryForObject("select correo from prospecto where id = ?", String.class, prospecto))
 				.isEqualTo(ana.correo());
-		comoCliente(ana, get(RUTA + "/{id}", id)).andExpect(status().isOk()).andExpect(jsonPath("$.asesor").isNotEmpty());
+		comoCliente(ana, get(RUTA + "/{id}", id)).andExpect(status().isOk())
+				.andExpect(jsonPath("$.asesor").isNotEmpty());
 	}
 
 	@Test
@@ -173,8 +175,9 @@ class ValuacionIntegrationTest extends AbstractIntegrationTest {
 				insert into modelo_catalogo (marca, modelo, anio, version, precio_desde, activo, created_at, updated_at)
 				values ('Nissan', ?, 2026, 'Advance', 300000, true, now(), now()) returning id
 				""", Long.class, "Kicks" + unico);
-		comoCliente(ana, json(post("/api/v1/app/estreno/solicitudes"), "{\"tipo\":\"COTIZACION\",\"modeloCatalogoId\":"
-				+ modelo + ",\"enganche\":60000,\"plazoMeses\":48}")).andExpect(status().isCreated());
+		comoCliente(ana, json(post("/api/v1/app/estreno/solicitudes"),
+				"{\"tipo\":\"COTIZACION\",\"modeloCatalogoId\":" + modelo + ",\"enganche\":60000,\"plazoMeses\":48}"))
+				.andExpect(status().isCreated());
 		long delEstreno = esperar("select prospecto_id from solicitud_estreno where cliente_id = ?", ana.id());
 
 		long id = solicitada(ana);
@@ -185,8 +188,10 @@ class ValuacionIntegrationTest extends AbstractIntegrationTest {
 
 	@Test
 	void unaEstimacionSinVehiculoDa422YUnaAjena404() throws Exception {
-		String aMano = comoCliente(ana, json(post("/api/v1/app/toma-a-cuenta/estimaciones"),
-				"{\"marca\":\"" + marca + "\",\"modelo\":\"March\",\"anio\":2020,\"km\":1000,\"estado\":\"BUENO\"}"))
+		String aMano = comoCliente(ana,
+				json(post("/api/v1/app/toma-a-cuenta/estimaciones"),
+						"{\"marca\":\"" + marca
+								+ "\",\"modelo\":\"March\",\"anio\":2020,\"km\":1000,\"estado\":\"BUENO\"}"))
 				.andExpect(status().isCreated()).andReturn().getResponse().getContentAsString();
 
 		pedir(ana, numero(aMano, "$.id")).andExpect(status().isUnprocessableEntity())
@@ -348,8 +353,9 @@ class ValuacionIntegrationTest extends AbstractIntegrationTest {
 		for (int i = 0; i < capacidad; i++) {
 			// Cada lugar con un vehículo distinto: uno no puede repetir franja.
 			long otroAuto = registroClientesService.asignarVehiculo(beto.id(),
-					new VehiculoNuevo(null, ("C" + i + "VA" + unico + "000000000").substring(0, 17).toUpperCase(Locale.ROOT),
-							marca, "March", 2020, null))
+					new VehiculoNuevo(null,
+							("C" + i + "VA" + unico + "000000000").substring(0, 17).toUpperCase(Locale.ROOT), marca,
+							"March", 2020, null))
 					.vehiculos().getLast().id();
 			citaSembrada(new Cliente(beto.id(), beto.correo(), otroAuto, beto.token()), franja, dia);
 		}
@@ -368,9 +374,11 @@ class ValuacionIntegrationTest extends AbstractIntegrationTest {
 	void citasNoAceptaElMotivoValuacion() throws Exception {
 		LocalDate dia = diaHabil(42);
 
-		comoCliente(ana, json(post("/api/v1/app/citas"), "{\"vehiculoId\":" + ana.vehiculo() + ",\"franjaId\":"
-				+ franja(dia) + ",\"fecha\":\"" + dia + "\",\"motivo\":\"Valuacion\"}")).andExpect(status().isBadRequest())
-				.andExpect(jsonPath("$.codigo").value("DATOS_INVALIDOS"));
+		comoCliente(ana,
+				json(post("/api/v1/app/citas"),
+						"{\"vehiculoId\":" + ana.vehiculo() + ",\"franjaId\":" + franja(dia) + ",\"fecha\":\"" + dia
+								+ "\",\"motivo\":\"Valuacion\"}"))
+				.andExpect(status().isBadRequest()).andExpect(jsonPath("$.codigo").value("DATOS_INVALIDOS"));
 		assertThat(jdbc.queryForObject("select count(*) from cita where cliente_id = ?", Integer.class, ana.id()))
 				.isZero();
 	}
@@ -397,8 +405,7 @@ class ValuacionIntegrationTest extends AbstractIntegrationTest {
 					.andExpect(jsonPath("$.codigo").value("DATOS_INVALIDOS"));
 		}
 		ofertar(admin, id, "{\"monto\":150000,\"nota\":\"Con papeles en regla\"}").andExpect(status().isOk())
-				.andExpect(jsonPath("$.estado").value("OFERTADA"))
-				.andExpect(jsonPath("$.oferta.monto").value(150000.0))
+				.andExpect(jsonPath("$.estado").value("OFERTADA")).andExpect(jsonPath("$.oferta.monto").value(150000.0))
 				.andExpect(jsonPath("$.oferta.vigenciaHasta").value(hoy().plusDays(7).toString()));
 		// Una oferta vigente no se edita.
 		ofertar(admin, id, "{\"monto\":160000}").andExpect(status().isConflict())
@@ -412,8 +419,10 @@ class ValuacionIntegrationTest extends AbstractIntegrationTest {
 							.containsEntry("vigenciaHasta", hoy().plusDays(7).toString());
 				});
 		comoCliente(ana, get(RUTA + "/{id}", id)).andExpect(jsonPath("$.oferta.nota").value("Con papeles en regla"))
-				.andExpect(jsonPath("$.oferta.ofertadaEn").isString()).andExpect(jsonPath("$.puedeAgendar").value(false));
-		assertThat(jdbc.queryForObject("select ofertada_por is not null from valuacion where id = ?", Boolean.class, id))
+				.andExpect(jsonPath("$.oferta.ofertadaEn").isString())
+				.andExpect(jsonPath("$.puedeAgendar").value(false));
+		assertThat(
+				jdbc.queryForObject("select ofertada_por is not null from valuacion where id = ?", Boolean.class, id))
 				.isTrue();
 	}
 
@@ -626,8 +635,8 @@ class ValuacionIntegrationTest extends AbstractIntegrationTest {
 	}
 
 	private ResultActions responder(Cliente cliente, long id, boolean aceptada, String monto) throws Exception {
-		return comoCliente(cliente, json(post(RUTA + "/{id}/respuesta", id),
-				"{\"aceptada\":" + aceptada + ",\"monto\":" + monto + "}"));
+		return comoCliente(cliente,
+				json(post(RUTA + "/{id}/respuesta", id), "{\"aceptada\":" + aceptada + ",\"monto\":" + monto + "}"));
 	}
 
 	private ResultActions comoPersonal(String token, MockHttpServletRequestBuilder peticion) throws Exception {
@@ -635,8 +644,8 @@ class ValuacionIntegrationTest extends AbstractIntegrationTest {
 	}
 
 	private ResultActions agendar(Cliente cliente, long valuacion, long franja, LocalDate dia) throws Exception {
-		return comoCliente(cliente, json(post(RUTA + "/{id}/cita", valuacion),
-				"{\"franjaId\":" + franja + ",\"fecha\":\"" + dia + "\"}"));
+		return comoCliente(cliente,
+				json(post(RUTA + "/{id}/cita", valuacion), "{\"franjaId\":" + franja + ",\"fecha\":\"" + dia + "\"}"));
 	}
 
 	private long franja(LocalDate dia) {
@@ -705,8 +714,7 @@ class ValuacionIntegrationTest extends AbstractIntegrationTest {
 				.asignarVehiculo(id, new VehiculoNuevo(null, vin, marca, "March", 2020, null)).vehiculos().getFirst()
 				.id();
 		cuentasAppService.abrir(id, "Temporal123");
-		return new Cliente(id, correo, vehiculo,
-				jwtService.generateToken(id, correo, List.of(Role.CLIENTE_CARECAR)));
+		return new Cliente(id, correo, vehiculo, jwtService.generateToken(id, correo, List.of(Role.CLIENTE_CARECAR)));
 	}
 
 	private Usuario usuario(String nombreUsuario, String rol, String nombre) {
@@ -715,8 +723,9 @@ class ValuacionIntegrationTest extends AbstractIntegrationTest {
 	}
 
 	private long estimar(Cliente cliente) throws Exception {
-		return numero(comoCliente(cliente, json(post("/api/v1/app/toma-a-cuenta/estimaciones"),
-				"{\"vehiculoId\":" + cliente.vehiculo() + ",\"km\":60000,\"estado\":\"BUENO\"}"))
+		return numero(comoCliente(cliente,
+				json(post("/api/v1/app/toma-a-cuenta/estimaciones"),
+						"{\"vehiculoId\":" + cliente.vehiculo() + ",\"km\":60000,\"estado\":\"BUENO\"}"))
 				.andExpect(status().isCreated()).andReturn().getResponse().getContentAsString(), "$.id");
 	}
 

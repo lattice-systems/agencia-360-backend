@@ -10,13 +10,14 @@ import java.time.LocalTime;
 import java.util.List;
 
 /**
- * Una valuación vista por el cliente ({@code Valuacion} del contrato de la app).
+ * Una valuación vista por el cliente ({@code Valuacion} del contrato de la
+ * app).
  *
  * @param fotos
  *            solo las tomas ya subidas, en el orden de {@link TomaValuacion}
  * @param puedeAgendar
- *            si agendar la inspección se admite ahora, para que la app no repita
- *            la regla
+ *            si agendar la inspección se admite ahora, para que la app no
+ *            repita la regla
  * @param asesor
  *            nombre del vendedor del prospecto; nulo mientras no lo haya
  */

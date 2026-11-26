@@ -134,8 +134,7 @@ class ValuacionTest {
 	@Test
 	void validaElMontoLaVigenciaYLaNota() {
 		for (String monto : new String[]{"0", "-1", "100.005", "10000000000"}) {
-			assertThatThrownBy(
-					() -> Valuacion.validarOferta(new BigDecimal(monto), HOY, null, HOY, VIGENCIA_MAXIMA))
+			assertThatThrownBy(() -> Valuacion.validarOferta(new BigDecimal(monto), HOY, null, HOY, VIGENCIA_MAXIMA))
 					.as(monto).isInstanceOf(IllegalArgumentException.class);
 		}
 		assertThatThrownBy(() -> Valuacion.validarOferta(null, HOY, null, HOY, VIGENCIA_MAXIMA))

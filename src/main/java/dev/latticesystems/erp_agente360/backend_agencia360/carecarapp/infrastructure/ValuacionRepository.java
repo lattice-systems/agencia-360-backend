@@ -31,8 +31,7 @@ public interface ValuacionRepository extends JpaRepository<Valuacion, Long> {
 	Optional<Valuacion> bloquearDeCliente(@Param("id") Long id, @Param("clienteId") Long clienteId);
 
 	@Query("select v.id from Valuacion v where v.clienteId = :clienteId and v.estado in :estados order by v.id")
-	List<Long> idsDelCliente(@Param("clienteId") Long clienteId,
-			@Param("estados") Collection<EstadoValuacion> estados);
+	List<Long> idsDelCliente(@Param("clienteId") Long clienteId, @Param("estados") Collection<EstadoValuacion> estados);
 
 	/**
 	 * Las que hay que poner al día antes de mostrarlas al personal: ofertas cuya
@@ -73,7 +72,6 @@ public interface ValuacionRepository extends JpaRepository<Valuacion, Long> {
 	 * vehículo: así dos peticiones a la vez no chocan con el índice único. Usa la
 	 * forma de dos llaves para no coincidir con el bloqueo de franjas de la agenda.
 	 */
-	@Query(value = "select 1 from (select pg_advisory_xact_lock(26, cast(:vehiculoId as integer))) bloqueo",
-			nativeQuery = true)
+	@Query(value = "select 1 from (select pg_advisory_xact_lock(26, cast(:vehiculoId as integer))) bloqueo", nativeQuery = true)
 	int bloquearVehiculo(@Param("vehiculoId") Long vehiculoId);
 }

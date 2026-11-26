@@ -15,10 +15,9 @@ import org.springframework.transaction.support.TransactionSynchronizationManager
  *
  * <p>
  * Los archivos que subió la persona (fotos del tablero y de sus valuaciones,
- * tickets) se borran del
- * almacén solo cuando la transacción se confirma: si algo falla y todo
- * revierte, las filas siguen ahí y no pueden quedarse apuntando a un archivo
- * que ya no está.
+ * tickets) se borran del almacén solo cuando la transacción se confirma: si
+ * algo falla y todo revierte, las filas siguen ahí y no pueden quedarse
+ * apuntando a un archivo que ya no está.
  */
 @Repository
 public class AnonimizadorDeCuentaJdbc implements AnonimizadorDeCuenta {

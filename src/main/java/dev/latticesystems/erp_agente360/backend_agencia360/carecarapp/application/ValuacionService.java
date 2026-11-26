@@ -111,11 +111,11 @@ public class ValuacionService {
 				Clock.system(AgendaAppService.ZONA_AGENCIA));
 	}
 
-	ValuacionService(ValuacionRepository valuaciones, EstimacionTomaCuentaRepository estimaciones,
-			CitaRepository citas, VehiculosDeClientes vehiculos, SolicitudesEstreno solicitudesEstreno,
-			ConsultaProspectos prospectos, ConsultaVendedores vendedores, DirectorioClientes clientes,
-			TomaCuentaService tomaCuenta, AgendaAppService agenda, AlmacenArchivos archivos,
-			ApplicationEventPublisher eventos, Plazos plazos, Clock reloj) {
+	ValuacionService(ValuacionRepository valuaciones, EstimacionTomaCuentaRepository estimaciones, CitaRepository citas,
+			VehiculosDeClientes vehiculos, SolicitudesEstreno solicitudesEstreno, ConsultaProspectos prospectos,
+			ConsultaVendedores vendedores, DirectorioClientes clientes, TomaCuentaService tomaCuenta,
+			AgendaAppService agenda, AlmacenArchivos archivos, ApplicationEventPublisher eventos, Plazos plazos,
+			Clock reloj) {
 		this.valuaciones = valuaciones;
 		this.estimaciones = estimaciones;
 		this.citas = citas;
@@ -193,8 +193,8 @@ public class ValuacionService {
 	}
 
 	/**
-	 * Guarda o reemplaza la foto de una toma, sin EXIF ni ubicación (V2-M26.02).
-	 * La reemplazada se borra del almacén cuando la transacción se confirma, y la
+	 * Guarda o reemplaza la foto de una toma, sin EXIF ni ubicación (V2-M26.02). La
+	 * reemplazada se borra del almacén cuando la transacción se confirma, y la
 	 * nueva si se revierte.
 	 *
 	 * @throws RecursoNoEncontradoException
@@ -202,8 +202,8 @@ public class ValuacionService {
 	 * @throws ConflictoException
 	 *             con {@code VALUACION_CERRADA} (409)
 	 * @throws IllegalArgumentException
-	 *             si falta la foto, pasa de 8 MB o 40 megapíxeles o no es un JPEG
-	 *             o PNG legible (400)
+	 *             si falta la foto, pasa de 8 MB o 40 megapíxeles o no es un JPEG o
+	 *             PNG legible (400)
 	 */
 	@Transactional
 	public ValuacionApp subirFoto(Long clienteId, Long valuacionId, TomaValuacion toma, byte[] imagen) {
@@ -293,9 +293,10 @@ public class ValuacionService {
 		valuaciones.idsAtrasadas(hoy()).forEach(id -> valuaciones.bloquear(id).ifPresent(this::sincronizar));
 		valuaciones.flush();
 		Set<EstadoValuacion> estados = estado == null ? EnumSet.allOf(EstadoValuacion.class) : EnumSet.of(estado);
-		return Pagina.de(actor.tieneRol(Role.ADMINISTRADOR)
-				? valuaciones.porAtender(estados, pedida)
-				: valuaciones.porAtenderDeProspectos(estados, prospectos.delVendedor(actor.id()), pedida),
+		return Pagina.de(
+				actor.tieneRol(Role.ADMINISTRADOR)
+						? valuaciones.porAtender(estados, pedida)
+						: valuaciones.porAtenderDeProspectos(estados, prospectos.delVendedor(actor.id()), pedida),
 				this::comoPersonal);
 	}
 
@@ -334,9 +335,9 @@ public class ValuacionService {
 		boolean inspeccionHecha = citaDe(valuacion)
 				.map(cita -> cita.getEstado() == EstadoCita.CONFIRMADA && !cita.getFecha().isAfter(hoy)).orElse(false);
 		valuacion.ofertar(monto, vigencia, nota, actor.id(), reloj.instant(), inspeccionHecha);
-		eventos.publishEvent(new AvisoAlCliente(valuacion.getClienteId(), EVENTO_OFERTA,
-				Map.of("valuacionId", valuacion.getId(), "vehiculoId", valuacion.getVehiculoClienteId(),
-						"vigenciaHasta", vigencia.toString())));
+		eventos.publishEvent(
+				new AvisoAlCliente(valuacion.getClienteId(), EVENTO_OFERTA, Map.of("valuacionId", valuacion.getId(),
+						"vehiculoId", valuacion.getVehiculoClienteId(), "vigenciaHasta", vigencia.toString())));
 		return comoPersonal(valuacion);
 	}
 
@@ -399,8 +400,8 @@ public class ValuacionService {
 	}
 
 	private void sincronizar(Valuacion valuacion) {
-		if (valuacion.getEstado() == EstadoValuacion.CITA_AGENDADA && citaDe(valuacion)
-				.map(cita -> cita.getEstado() == EstadoCita.CANCELADA).orElse(true)) {
+		if (valuacion.getEstado() == EstadoValuacion.CITA_AGENDADA
+				&& citaDe(valuacion).map(cita -> cita.getEstado() == EstadoCita.CANCELADA).orElse(true)) {
 			valuacion.reabrirSinCita();
 		}
 		valuacion.vencerSiPaso(hoy());

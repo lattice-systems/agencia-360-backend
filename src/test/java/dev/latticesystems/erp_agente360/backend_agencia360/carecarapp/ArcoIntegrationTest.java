@@ -129,18 +129,19 @@ class ArcoIntegrationTest extends AbstractIntegrationTest {
 				values (?, ?, 'Nissan', 'Kicks', 2023, 12000, 'BUENO', 100000, 120000, ?, '{}', now(), now())
 				returning id
 				""", Long.class, clienteId, vehiculo, parametro);
-		jdbc.update("""
-				insert into valuacion (estimacion_toma_cuenta_id, cliente_id, vehiculo_cliente_id, fotos, estado, oferta,
-				  vigencia_hasta, oferta_nota, ofertada_por, ofertada_en, created_at, updated_at)
-				values (?, ?, ?, ?, 'OFERTADA', 111000, current_date + 5, 'Con papeles', 987654, now(), now(), now())
-				""", estimacion, clienteId, vehiculo,
+		jdbc.update(
+				"""
+						insert into valuacion (estimacion_toma_cuenta_id, cliente_id, vehiculo_cliente_id, fotos, estado, oferta,
+						  vigencia_hasta, oferta_nota, ofertada_por, ofertada_en, created_at, updated_at)
+						values (?, ?, ?, ?, 'OFERTADA', 111000, current_date + 5, 'Con papeles', 987654, now(), now(), now())
+						""",
+				estimacion, clienteId, vehiculo,
 				"{\"FRENTE\":{\"clave\":\"valuacion-fotos/clave-secreta\",\"subidaEn\":\"2026-11-25T10:00:00Z\"}}");
 
 		long id = pedirYEsperar(token);
-		String texto = mockMvc
-				.perform(get("/api/v1/app/privacidad/arco/" + id + "/archivo").header(HttpHeaders.AUTHORIZATION,
-						"Bearer " + token))
-				.andExpect(status().isOk()).andReturn().getResponse().getContentAsString();
+		String texto = mockMvc.perform(get("/api/v1/app/privacidad/arco/" + id + "/archivo")
+				.header(HttpHeaders.AUTHORIZATION, "Bearer " + token)).andExpect(status().isOk()).andReturn()
+				.getResponse().getContentAsString();
 		JsonNode archivo = json.readTree(texto);
 
 		assertThat(archivo.at("/valuaciones")).hasSize(1);

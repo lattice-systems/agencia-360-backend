@@ -134,8 +134,8 @@ public class Valuacion extends Auditable {
 	}
 
 	/**
-	 * Si se puede agendar la inspección: recién solicitada, o con una cita que
-	 * pasó hace más de {@code diasSinOferta} días sin que hubiera oferta.
+	 * Si se puede agendar la inspección: recién solicitada, o con una cita que pasó
+	 * hace más de {@code diasSinOferta} días sin que hubiera oferta.
 	 *
 	 * @param fechaDeLaCita
 	 *            el día de la cita vigente; nulo si no tiene
@@ -242,8 +242,8 @@ public class Valuacion extends Auditable {
 	}
 
 	/**
-	 * El cliente acepta o rechaza la oferta que vio. Repetir la misma respuesta
-	 * con el mismo monto no cambia nada, para que se pueda reintentar.
+	 * El cliente acepta o rechaza la oferta que vio. Repetir la misma respuesta con
+	 * el mismo monto no cambia nada, para que se pueda reintentar.
 	 *
 	 * @param monto
 	 *            el que el cliente vio en pantalla

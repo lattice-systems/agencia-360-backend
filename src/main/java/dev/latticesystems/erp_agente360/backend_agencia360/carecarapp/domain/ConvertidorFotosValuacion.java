@@ -35,9 +35,10 @@ public class ConvertidorFotosValuacion implements AttributeConverter<Map<TomaVal
 		Map<TomaValuacion, FotoGuardada> fotos = new EnumMap<>(TomaValuacion.class);
 		try {
 			JsonNode raiz = JSON.readTree(texto);
-			raiz.fields().forEachRemaining(campo -> fotos.put(TomaValuacion.valueOf(campo.getKey()),
-					new FotoGuardada(campo.getValue().get("clave").asText(),
-							Instant.parse(campo.getValue().get("subidaEn").asText()))));
+			raiz.fields()
+					.forEachRemaining(campo -> fotos.put(TomaValuacion.valueOf(campo.getKey()),
+							new FotoGuardada(campo.getValue().get("clave").asText(),
+									Instant.parse(campo.getValue().get("subidaEn").asText()))));
 		} catch (JsonProcessingException ex) {
 			throw new IllegalStateException("Las fotos de la valuación no son JSON", ex);
 		}

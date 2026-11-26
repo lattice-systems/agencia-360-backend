@@ -18,7 +18,6 @@ import dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.domain.Est
 import dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.domain.EstadoValuacion;
 import dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.domain.EstimacionTomaCuenta;
 import dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.domain.MotivoCita;
-import dev.latticesystems.erp_agente360.backend_agencia360.shared.exception.ConflictoException;
 import dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.domain.TomaValuacion;
 import dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.domain.Valuacion;
 import dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.infrastructure.CitaRepository;
@@ -29,6 +28,7 @@ import dev.latticesystems.erp_agente360.backend_agencia360.clientes.DirectorioCl
 import dev.latticesystems.erp_agente360.backend_agencia360.clientes.VehiculosDeClientes;
 import dev.latticesystems.erp_agente360.backend_agencia360.clientes.VehiculosDeClientes.VehiculoDeCliente;
 import dev.latticesystems.erp_agente360.backend_agencia360.shared.eventos.ValuacionSolicitada;
+import dev.latticesystems.erp_agente360.backend_agencia360.shared.exception.ConflictoException;
 import dev.latticesystems.erp_agente360.backend_agencia360.ventascrm.ConsultaProspectos;
 import dev.latticesystems.erp_agente360.backend_agencia360.ventascrm.ConsultaProspectos.EstadoProspecto;
 import java.awt.image.BufferedImage;
@@ -285,8 +285,7 @@ class ValuacionServiceTest {
 	}
 
 	private void abierto(long prospecto) {
-		lenient().when(prospectos.estado(prospecto))
-				.thenReturn(Optional.of(new EstadoProspecto("VISITA", false, 5L)));
+		lenient().when(prospectos.estado(prospecto)).thenReturn(Optional.of(new EstadoProspecto("VISITA", false, 5L)));
 	}
 
 	private void terminado(long prospecto) {

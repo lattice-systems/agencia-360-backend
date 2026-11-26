@@ -2,7 +2,9 @@ package dev.latticesystems.erp_agente360.backend_agencia360.ventascrm.applicatio
 
 import dev.latticesystems.erp_agente360.backend_agencia360.acceso.ConsultaVendedores;
 import dev.latticesystems.erp_agente360.backend_agencia360.shared.eventos.ProspectoDeEstrenoCreado;
+import dev.latticesystems.erp_agente360.backend_agencia360.shared.eventos.ProspectoDeReferidoCreado;
 import dev.latticesystems.erp_agente360.backend_agencia360.shared.eventos.ProspectoDeValuacionCreado;
+import dev.latticesystems.erp_agente360.backend_agencia360.shared.eventos.ReferidoRegistrado;
 import dev.latticesystems.erp_agente360.backend_agencia360.shared.eventos.SolicitudEstrenoCreada;
 import dev.latticesystems.erp_agente360.backend_agencia360.shared.eventos.ValuacionSolicitada;
 import dev.latticesystems.erp_agente360.backend_agencia360.ventascrm.ConsultaProspectos;
@@ -23,9 +25,10 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * Prospectos que nacen de la app (V2-M16.01 y V2-M26.01): al llegar una
- * solicitud de estreno o de valuación crea el prospecto con origen APP y lo asigna al vendedor activo con
- * menos prospectos abiertos (empate: el de menor id). También responde el
+ * Prospectos que nacen de la app: al llegar una solicitud de estreno
+ * (V2-M16.01), un amigo referido (V2-M12.04) o una solicitud de valuación
+ * (V2-M26.01) crea el prospecto con origen APP y lo asigna al vendedor activo
+ * con menos prospectos abiertos (empate: el de menor id). También responde el
  * estado de un prospecto para la app (V2-M16.04).
  */
 @Service
@@ -69,8 +72,15 @@ class ProspectosDeEstrenoService implements ConsultaProspectos {
 			LOG.warn("{} sin vendedor activo", origen);
 			throw new IllegalStateException("No hay vendedores activos");
 		}
-		return prospectos.save(
-				Prospecto.registrarDesdeApp(nombre, telefono, correo, vendedor.get(), Instant.now(reloj)));
+		return prospectos
+				.save(Prospecto.registrarDesdeApp(nombre, telefono, correo, vendedor.get(), Instant.now(reloj)));
+	}
+
+	@ApplicationModuleListener
+	void alRegistrarseReferido(ReferidoRegistrado referido) {
+		Prospecto prospecto = crearDesdeApp(referido.nombre(), referido.telefono(), referido.correo(),
+				"Referido " + referido.referidoId());
+		eventos.publishEvent(new ProspectoDeReferidoCreado(referido.referidoId(), prospecto.getId()));
 	}
 
 	private Optional<Long> vendedorConMenosCarga() {
