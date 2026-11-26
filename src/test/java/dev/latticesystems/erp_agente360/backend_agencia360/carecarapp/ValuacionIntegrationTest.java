@@ -190,8 +190,8 @@ class ValuacionIntegrationTest extends AbstractIntegrationTest {
 	void unaEstimacionSinVehiculoDa422YUnaAjena404() throws Exception {
 		String aMano = comoCliente(ana,
 				json(post("/api/v1/app/toma-a-cuenta/estimaciones"),
-						"{\"marca\":\"" + marca
-								+ "\",\"modelo\":\"March\",\"anio\":2020,\"km\":1000,\"estado\":\"BUENO\"}"))
+						"{\"marca\":\"" + marca + "\",\"modelo\":\"March\",\"anio\":2020,"
+								+ "\"km\":1000,\"estado\":\"BUENO\"}"))
 				.andExpect(status().isCreated()).andReturn().getResponse().getContentAsString();
 
 		pedir(ana, numero(aMano, "$.id")).andExpect(status().isUnprocessableEntity())
@@ -352,11 +352,9 @@ class ValuacionIntegrationTest extends AbstractIntegrationTest {
 		int capacidad = jdbc.queryForObject("select capacidad from franja_horario where id = ?", Integer.class, franja);
 		for (int i = 0; i < capacidad; i++) {
 			// Cada lugar con un vehículo distinto: uno no puede repetir franja.
-			long otroAuto = registroClientesService.asignarVehiculo(beto.id(),
-					new VehiculoNuevo(null,
-							("C" + i + "VA" + unico + "000000000").substring(0, 17).toUpperCase(Locale.ROOT), marca,
-							"March", 2020, null))
-					.vehiculos().getLast().id();
+			String vin = ("C" + i + "VA" + unico + "000000000").substring(0, 17).toUpperCase(Locale.ROOT);
+			VehiculoNuevo auto = new VehiculoNuevo(null, vin, marca, "March", 2020, null);
+			long otroAuto = registroClientesService.asignarVehiculo(beto.id(), auto).vehiculos().getLast().id();
 			citaSembrada(new Cliente(beto.id(), beto.correo(), otroAuto, beto.token()), franja, dia);
 		}
 		agendar(ana, id, franja, dia).andExpect(status().isConflict())

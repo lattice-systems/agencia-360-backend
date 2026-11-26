@@ -171,13 +171,12 @@ class CancelacionIntegrationTest extends AbstractIntegrationTest {
 
 		// Una valuación con su foto: referencia a la estimación (V2-M26).
 		String fotoValuacion = archivos.guardar("valuacion-fotos", "image/jpeg", new byte[]{1, 1, 1}).clave();
-		jdbc.update(
-				"""
-						insert into valuacion (estimacion_toma_cuenta_id, cliente_id, vehiculo_cliente_id, fotos, cita_id, estado,
-						  created_at, updated_at)
-						values (?, ?, ?, ?, ?, 'CITA_AGENDADA', now(), now())
-						""",
-				estimacion, id, vehiculo,
+		jdbc.update("""
+				insert into valuacion (estimacion_toma_cuenta_id, cliente_id, vehiculo_cliente_id,
+				  fotos, cita_id, estado,
+				  created_at, updated_at)
+				values (?, ?, ?, ?, ?, 'CITA_AGENDADA', now(), now())
+				""", estimacion, id, vehiculo,
 				"{\"FRENTE\":{\"clave\":\"" + fotoValuacion + "\",\"subidaEn\":\"2026-11-25T10:00:00Z\"}}", cita);
 
 		String foto = archivos.guardar("tablero", "image/png", new byte[]{1, 2, 3}).clave();
