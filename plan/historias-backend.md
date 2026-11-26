@@ -921,6 +921,31 @@ No se hace pantalla web. Igual que en las campañas (M10), los traslados (M17) y
 - Se puede ofertar con una cita confirmada cuya fecha es hoy o anterior (la inspección ya ocurrió), o para renovar una `VENCIDA` si no hay otra abierta de ese cliente y vehículo. Cualquier otro caso es 409 `TRANSICION_INVALIDA`.
 - **Una oferta vigente no se edita.** Mientras está `OFERTADA` no se puede capturar otra.
 
+##### Endpoints de la app
+
+Rol `CLIENTE_CARECAR`, contrato **2.19.0**, etiqueta `Valuación`. Toda ruta responde además 401 y 403 `CUENTA_DESACTIVADA`. Lo ajeno responde 404.
+
+| Método y ruta | Historia | Éxito | Errores propios |
+| --- | --- | --- | --- |
+| `POST /valuaciones` `{estimacionTomaCuentaId}` | M26.01 | 201 `Valuacion`, o 200 con la abierta de ese vehículo | 400, 404 (estimación ajena o inexistente, o su vehículo ya no es del cliente), 422 `VALUACION_SIN_VEHICULO` |
+| `GET /valuaciones?pagina=&tamano=` | M26.01 | 200 `PaginaValuaciones`, la más reciente primero | 400 |
+| `GET /valuaciones/{valuacionId}` | M26.01 | 200 `Valuacion` | 404 |
+| `POST /valuaciones/{valuacionId}/fotos/{toma}` multipart `imagen` | M26.02 | 200 `Valuacion` | 400 (toma, tipo, tamaño o imagen ilegible), 404, 409 `VALUACION_CERRADA` si no está `SOLICITADA` ni `CITA_AGENDADA` |
+| `POST /valuaciones/{valuacionId}/cita` `{franjaId, fecha}` | M26.03 | 201 `Cita` con `motivo` `valuacion` | 400, 404, 409 `VALUACION_NO_AGENDABLE`, `FRANJA_SIN_CUPO` o `CITA_DUPLICADA` |
+| `POST /valuaciones/{valuacionId}/respuesta` `{aceptada, monto}` | M26.04 | 200 `Valuacion` | 400, 404, 409 `OFERTA_VENCIDA` u `OFERTA_NO_DISPONIBLE` |
+| `GET /vehiculos/{vehiculoId}/valor-estimado?meses=` | M26.05 | 200 `ValorEstimado` | 400 si `meses` no está entre 1 y 36, 404 |
+
+- La foto va por `POST` y no por `PUT` para reusar el envío multipart que la app ya tiene.
+- `respuesta` pide el `monto` que el cliente vio. Si no es el de la oferta actual (se venció y se renovó con la pantalla abierta), responde 409 `OFERTA_NO_DISPONIBLE` y nadie acepta una cifra que no leyó. Repetir la misma decisión con el mismo monto responde 200 sin cambiar nada, por los reintentos. La decisión contraria, o responder sin oferta, es 409 `OFERTA_NO_DISPONIBLE`. `OFERTA_VENCIDA` es para la oferta cuya vigencia pasó.
+- `asesor` es el nombre del vendedor del prospecto (`ConsultaVendedores.nombreDe`), nulo mientras no haya.
+- `GET /eventos` documenta `valuacion.oferta` (`AvisoValuacionOferta`).
+
+**Códigos nuevos y el contrato.** `VALUACION_SIN_VEHICULO` (422), `VALUACION_CERRADA`, `VALUACION_NO_AGENDABLE`, `OFERTA_VENCIDA` y `OFERTA_NO_DISPONIBLE` (409). El contrato 2.19.0 los nombra en las descripciones y **todavía no los agrega al enum de `Problema.codigo`**: `ContratoCodigosDeErrorTest` y la prueba de contrato de la app exigen que ese enum sea igual al código que existe, y este diseño no trae código. El implementador del backend los agrega a `CodigosError` y al enum **en el mismo commit** y sube el contrato a 2.19.1 (como pasó entre 2.10.0 y 2.12.1). El implementador de la app copia esa versión junto con sus valores de `CodigoProblema`. Si otra historia integra antes una 2.19.0, se toma la siguiente menor libre.
+
+##### Valor en el tiempo (V2-M26.05)
+
+No crea tablas ni cambia la fórmula. `valor-estimado` toma las `estimacion_toma_cuenta` del cliente para ese vehículo, las agrupa por mes de la zona `America/Mexico_City` dentro de los últimos `meses` (12 por omisión, contando el actual) y de cada mes usa la más reciente. Cada punto trae `mes` (`AAAA-MM`), `estimacionTomaCuentaId`, `creadaEn`, `minimo`, `maximo`, `medio` (promedio de ambos, 2 decimales), `km` y `estado`. Van del mes más antiguo al más reciente. Un mes sin estimación **no aparece**: no se interpola ni se recalcula hacia atrás con los parámetros de hoy, porque eso mostraría valores que nadie estimó. Sin estimaciones responde 200 con la lista vacía.
+
 ### M27 · Centro de ayuda y sucursales — H4 — módulo `carecarapp`
 
 Detalle: [`carecar-mobile/plan/modulos/M27-ayuda-y-sucursales.md`](https://github.com/lattice-systems/carecar-mobile/blob/main/plan/modulos/M27-ayuda-y-sucursales.md)
