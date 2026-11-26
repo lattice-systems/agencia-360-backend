@@ -885,7 +885,7 @@ Tomas fijas, en este orden, en el enum `TomaValuacion`: `FRENTE`, `TRASERA`, `LA
 
 ##### Inspección (V2-M26.03)
 
-`ValuacionService.agendar` usa `AgendaAppService.agendar(..., MotivoCita.VALUACION)` en la misma transacción, como `CampanasAppService`. Se puede agendar en `SOLICITADA`, y en `CITA_AGENDADA` solo si la cita ya pasó hace más de `app.valuacion.dias-sin-oferta` días (7) sin oferta, que es el caso de quien no llegó. En cualquier otro caso responde 409 `VALUACION_NO_AGENDABLE`.
+`ValuacionService.agendar` usa `AgendaAppService.agendar(..., MotivoCita.VALUACION)` en la misma transacción, como `CampanasAppService`. Se puede agendar en `SOLICITADA`, y en `CITA_AGENDADA` solo si la cita ya pasó hace más de `app.valuacion.dias-sin-oferta` días (7) sin oferta, que es el caso de quien no llegó. En cualquier otro caso responde 409 `VALUACION_NO_AGENDABLE`. `Valuacion` expone esta regla en `puedeAgendar`, calculado en el servidor, para que la app no repita el plazo.
 
 `POST /citas` con `motivo` `valuacion` responde 400 `DATOS_INVALIDOS`: esa cita solo nace desde la valuación, para que no haya inspecciones sin solicitud.
 
@@ -940,7 +940,7 @@ Rol `CLIENTE_CARECAR`, contrato **2.19.0**, etiqueta `Valuación`. Toda ruta res
 - `asesor` es el nombre del vendedor del prospecto (`ConsultaVendedores.nombreDe`), nulo mientras no haya.
 - `GET /eventos` documenta `valuacion.oferta` (`AvisoValuacionOferta`).
 
-**Códigos nuevos y el contrato.** `VALUACION_SIN_VEHICULO` (422), `VALUACION_CERRADA`, `VALUACION_NO_AGENDABLE`, `OFERTA_VENCIDA` y `OFERTA_NO_DISPONIBLE` (409). El contrato 2.19.0 los nombra en las descripciones y **todavía no los agrega al enum de `Problema.codigo`**: `ContratoCodigosDeErrorTest` y la prueba de contrato de la app exigen que ese enum sea igual al código que existe, y este diseño no trae código. El implementador del backend los agrega a `CodigosError` y al enum **en el mismo commit** y sube el contrato a 2.19.1 (como pasó entre 2.10.0 y 2.12.1). El implementador de la app copia esa versión junto con sus valores de `CodigoProblema`. Si otra historia integra antes una 2.19.0, se toma la siguiente menor libre.
+**Códigos nuevos y el contrato.** `VALUACION_SIN_VEHICULO` (422), `VALUACION_CERRADA`, `VALUACION_NO_AGENDABLE`, `OFERTA_VENCIDA` y `OFERTA_NO_DISPONIBLE` (409). El contrato 2.19.0 los nombra en las descripciones y **todavía no los agrega al enum de `Problema.codigo`**: `ContratoCodigosDeErrorTest` y la prueba de contrato de la app exigen que ese enum sea igual al código que existe, y este diseño no trae código. El implementador del backend los agrega a `CodigosError` y al enum **en el mismo commit, que es el primero de código**, para que la app pueda copiarlo pronto, y sube el contrato a 2.19.1 (como pasó entre 2.10.0 y 2.12.1). El implementador de la app copia esa versión junto con sus valores de `CodigoProblema`. Si otra historia integra antes una 2.19.0, se toma la siguiente menor libre.
 
 ##### Valor en el tiempo (V2-M26.05)
 
