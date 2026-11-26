@@ -44,10 +44,12 @@ import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.atomic.AtomicLong;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.test.util.ReflectionTestUtils;
 
 /**
  * Reglas del cobro simulado (V2-M08.02 y V2-M08.04) con el procesador simulado
@@ -69,6 +71,7 @@ class PagosAppServiceTest {
 	private final VehiculosDeClientes vehiculos = mock(VehiculosDeClientes.class);
 	private final ApplicationEventPublisher eventos = mock(ApplicationEventPublisher.class);
 	private final List<Object> publicados = new ArrayList<>();
+	private final AtomicLong ids = new AtomicLong(100);
 
 	private PagosAppService servicio;
 
@@ -76,8 +79,8 @@ class PagosAppServiceTest {
 	void preparar() {
 		servicio = new PagosAppService(pagos, metodos, perfiles, new ProcesadorSimulado(), historial, taller, vehiculos,
 				eventos, Clock.fixed(AHORA, ZoneOffset.UTC), ZONA);
-		when(pagos.saveAndFlush(any(PagoApp.class))).thenAnswer(invocacion -> invocacion.getArgument(0));
-		when(metodos.saveAndFlush(any(MetodoPago.class))).thenAnswer(invocacion -> invocacion.getArgument(0));
+		when(pagos.saveAndFlush(any(PagoApp.class))).thenAnswer(invocacion -> conId(invocacion.getArgument(0)));
+		when(metodos.saveAndFlush(any(MetodoPago.class))).thenAnswer(invocacion -> conId(invocacion.getArgument(0)));
 		when(vehiculos.buscarPorId(VEHICULO)).thenReturn(Optional.of(new VehiculoDeCliente(VEHICULO, "VIN", "Nissan",
 				"March", 2026, null, null, null, null, new Propietario(CLIENTE, "Paula", null, null))));
 		when(historial.detalle(ORDEN)).thenReturn(Optional.of(detalle(EstatusOrden.TERMINADO, "1650.00")));
@@ -230,5 +233,13 @@ class PagosAppServiceTest {
 		return new OrdenEnVivo(ORDEN, VEHICULO, EstatusOrden.TERMINADO, EtapaTaller.LISTO_PARA_ENTREGA, null, null, 86,
 				etapas, List.of(), List.of(), List.of(), BigDecimal.TEN, BigDecimal.ZERO, BigDecimal.ZERO,
 				BigDecimal.TEN, List.of());
+	}
+
+	/** Como la base: guardar le da id a lo que aún no lo tiene. */
+	private <T> T conId(T entidad) {
+		if (ReflectionTestUtils.getField(entidad, "id") == null) {
+			ReflectionTestUtils.setField(entidad, "id", ids.incrementAndGet());
+		}
+		return entidad;
 	}
 }
