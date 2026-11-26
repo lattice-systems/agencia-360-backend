@@ -39,6 +39,16 @@ public final class CodigosError {
 	public static final String KM_INVALIDO = "KM_INVALIDO";
 	public static final String TRANSICION_INVALIDA = "TRANSICION_INVALIDA";
 	public static final String CAMPANA_NO_AGENDABLE = "CAMPANA_NO_AGENDABLE";
+	/** V2-M12.03: el saldo de puntos no alcanza para la recompensa. */
+	public static final String SALDO_INSUFICIENTE = "SALDO_INSUFICIENTE";
+	/** V2-M12.03: la recompensa ya no tiene existencia. */
+	public static final String RECOMPENSA_AGOTADA = "RECOMPENSA_AGOTADA";
+	/** V2-M12.03: el canje ya se usó o ya venció. */
+	public static final String CANJE_NO_VIGENTE = "CANJE_NO_VIGENTE";
+	/** V2-M12.04: el amigo ya es cliente o ya lo refirieron. */
+	public static final String REFERIDO_DUPLICADO = "REFERIDO_DUPLICADO";
+	/** V2-M12.04: el cliente ya tiene el máximo de referidos abiertos. */
+	public static final String LIMITE_REFERIDOS = "LIMITE_REFERIDOS";
 
 	private CodigosError() {
 	}

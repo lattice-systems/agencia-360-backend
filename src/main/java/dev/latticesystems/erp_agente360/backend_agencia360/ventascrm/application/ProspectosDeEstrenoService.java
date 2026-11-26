@@ -2,6 +2,8 @@ package dev.latticesystems.erp_agente360.backend_agencia360.ventascrm.applicatio
 
 import dev.latticesystems.erp_agente360.backend_agencia360.acceso.ConsultaVendedores;
 import dev.latticesystems.erp_agente360.backend_agencia360.shared.eventos.ProspectoDeEstrenoCreado;
+import dev.latticesystems.erp_agente360.backend_agencia360.shared.eventos.ProspectoDeReferidoCreado;
+import dev.latticesystems.erp_agente360.backend_agencia360.shared.eventos.ReferidoRegistrado;
 import dev.latticesystems.erp_agente360.backend_agencia360.shared.eventos.SolicitudEstrenoCreada;
 import dev.latticesystems.erp_agente360.backend_agencia360.ventascrm.ConsultaProspectos;
 import dev.latticesystems.erp_agente360.backend_agencia360.ventascrm.domain.Etapa;
@@ -21,10 +23,11 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * Prospectos que nacen de la app (V2-M16.01): al llegar una solicitud de
- * estreno crea el prospecto con origen APP y lo asigna al vendedor activo con
- * menos prospectos abiertos (empate: el de menor id). También responde el
- * estado de un prospecto para la app (V2-M16.04).
+ * Prospectos que nacen de la app: al llegar una solicitud de estreno
+ * (V2-M16.01) o un amigo referido (V2-M12.04) crea el prospecto con origen APP
+ * y lo asigna al vendedor activo con menos prospectos abiertos (empate: el de
+ * menor id). También responde el estado de un prospecto para la app
+ * (V2-M16.04).
  */
 @Service
 class ProspectosDeEstrenoService implements ConsultaProspectos {
@@ -56,6 +59,19 @@ class ProspectosDeEstrenoService implements ConsultaProspectos {
 		Prospecto prospecto = prospectos.save(Prospecto.registrarDesdeApp(solicitud.nombre(), solicitud.telefono(),
 				solicitud.correo(), vendedor.get(), Instant.now(reloj)));
 		eventos.publishEvent(new ProspectoDeEstrenoCreado(solicitud.solicitudId(), prospecto.getId()));
+	}
+
+	@ApplicationModuleListener
+	void alRegistrarseReferido(ReferidoRegistrado referido) {
+		Long vendedor = vendedorConMenosCarga().orElseThrow(() -> {
+			// Igual que con estreno: Modulith reintenta la publicación pendiente al
+			// reiniciar.
+			LOG.warn("Referido {} sin vendedor activo", referido.referidoId());
+			return new IllegalStateException("No hay vendedores activos");
+		});
+		Prospecto prospecto = prospectos.save(Prospecto.registrarDesdeApp(referido.nombre(), referido.telefono(),
+				referido.correo(), vendedor, Instant.now(reloj)));
+		eventos.publishEvent(new ProspectoDeReferidoCreado(referido.referidoId(), prospecto.getId()));
 	}
 
 	private Optional<Long> vendedorConMenosCarga() {

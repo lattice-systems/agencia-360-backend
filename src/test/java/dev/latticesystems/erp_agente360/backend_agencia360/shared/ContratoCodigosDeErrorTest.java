@@ -31,7 +31,9 @@ class ContratoCodigosDeErrorTest {
 	 */
 	private static final Set<String> SOLO_DEL_PERSONAL = Set.of(
 			// POST /api/v1/taller/ordenes: el vehículo ya tiene una orden sin entregar.
-			"ORDEN_ABIERTA");
+			"ORDEN_ABIERTA",
+			// POST /api/v1/lealtad/canjes/{codigo}/usar: el canje ya se usó o venció.
+			"CANJE_NO_VIGENTE");
 
 	@Test
 	void cadaCodigoDelBackendEstaEnElContratoYAlReves() throws Exception {
