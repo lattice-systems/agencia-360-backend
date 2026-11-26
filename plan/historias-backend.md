@@ -438,7 +438,7 @@ Decisión del procesador y del timbrado (V2-M08.01, aceptada por el SM Daniel Oj
 
 **Predeterminado:** el primero lo es siempre; otro lo toma con `predeterminado: true` (en `false` o sin él no cambia cuál es); al borrar el predeterminado lo toma el más viejo que quede. Los cambios de un cliente se serializan con `pg_advisory_xact_lock` y el anterior se escribe antes del nuevo para no chocar con el índice.
 
-**Endpoints** (`/api/v1/app`, rol `CLIENTE_CARECAR`): `GET /catalogos-fiscales`; `GET` y `POST /perfiles-fiscales`; `GET`, `PUT` y `DELETE /perfiles-fiscales/{id}` (uno ajeno responde 404). Contrato 2.22.0, tag «Pagos y facturas».
+**Endpoints** (`/api/v1/app`, rol `CLIENTE_CARECAR`): `GET /catalogos-fiscales`; `GET` y `POST /perfiles-fiscales`; `GET`, `PUT` y `DELETE /perfiles-fiscales/{id}` (uno ajeno responde 404). Contrato 2.23.0, tag «Pagos y facturas».
 
 **Derechos ARCO:** la copia de mis datos (V2-M22.02) incluye `perfilesFiscales` y cancelar la cuenta (V2-M22.03) los borra. Las facturas de V2-M08.06 guardarán su propia copia del receptor, que sí se conserva por ley.
 
