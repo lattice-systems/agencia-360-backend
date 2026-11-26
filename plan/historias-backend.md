@@ -811,17 +811,23 @@ El pase de Wallet de una cita cancelada o reprogramada deja de servir. **Google 
 - **Google tampoco se probó contra Google**: solo con un transporte falso. Probar con una cuenta de servicio real antes de entregar.
 - Los pases guardados antes de reprogramar no se actualizan si el cliente no los tenía guardados (404, se ignora).
 
-### M26 · Valuación y toma a cuenta avanzada — H5 — módulo `ventascrm`
+### M26 · Valuación y toma a cuenta avanzada — H5 — módulo `carecarapp`
 
 Detalle: [`carecar-mobile/plan/modulos/M26-valuacion.md`](https://github.com/lattice-systems/carecar-mobile/blob/main/plan/modulos/M26-valuacion.md)
 
 | ID | Historia | Criterios de aceptación | Dueño |
 | --- | --- | --- | --- |
-| V2-M26.01 | Como cliente quiero pedir una valuación formal desde mi estimación | Crea solicitud ligada a `estimacion_toma_cuenta` | Cristian |
-| V2-M26.02 | Como cliente quiero subir fotos guiadas de mi auto | 8 tomas guiadas (frente, laterales, interior, tablero con km…) con silueta | Cristian |
-| V2-M26.03 | Como cliente quiero agendar la inspección física | Reusa agenda con motivo "Valuación" | Cristian |
-| V2-M26.04 | Como cliente quiero recibir la oferta y aceptarla o rechazarla | Oferta con vigencia · se liga al prospecto de M16 | Cristian |
-| V2-M26.05 | Como cliente quiero ver cómo cambia el valor de mi auto con el tiempo | Gráfica de valor estimado por mes | Cristian |
+| V2-M26.01 | Como cliente quiero pedir una valuación formal desde mi estimación | `POST /valuaciones` con una estimación propia hecha con un vehículo registrado: 201 en `SOLICITADA`, o 200 con la que ya está abierta para ese vehículo. Estimación sin vehículo: 422 `VALUACION_SIN_VEHICULO`. Estimación ajena: 404 | Cristian |
+| V2-M26.02 | Como cliente quiero subir fotos guiadas de mi auto | 8 tomas fijas, una por petición, sin EXIF, reemplazables mientras la valuación admite cambios. Ya cerrada: 409 `VALUACION_CERRADA` | Cristian |
+| V2-M26.03 | Como cliente quiero agendar la inspección física | Reusa la agenda con motivo `valuacion` y sus reglas de cupo y cita duplicada. Una cita cancelada regresa la valuación a `SOLICITADA` | Cristian |
+| V2-M26.04 | Como cliente quiero recibir la oferta y aceptarla o rechazarla | El personal captura la oferta con vigencia, el cliente recibe el aviso `valuacion.oferta` y responde una sola vez. La valuación queda ligada a un prospecto de `ventascrm`, reutilizando el de M16 si sigue abierto | Cristian |
+| V2-M26.05 | Como cliente quiero ver cómo cambia el valor de mi auto con el tiempo | `GET /vehiculos/{vehiculoId}/valor-estimado` da un punto por mes con la última estimación guardada de ese mes, sin inventar los meses sin dato | Cristian |
+
+#### Diseño de V2-M26.01 a V2-M26.05: valuación formal
+
+**Dónde vive.** En `carecarapp`, como `solicitud_estreno` (M16) y las campañas (M10). La valuación necesita `estimacion_toma_cuenta`, la agenda de citas y el canal en vivo, que están ahí, y `carecarapp` ya depende de `ventascrm`. Ponerla en `ventascrm` formaría un ciclo que `ModularityTests` rechaza. De `ventascrm` solo se usa su API pública `ConsultaProspectos` y los eventos.
+
+**La ficha** (sección 22) pide `valuacion`, `estimacion_toma_cuenta` y `cita`. Las dos últimas ya existen y no cambian de columnas. `valuacion` se crea con ese nombre y con todos los campos del plan (`id`, `estimacion_toma_cuenta_id`, `cliente_id`, `fotos`, `cita_id`, `oferta`, `vigencia_hasta`, `estado`) más campos agregados.
 
 ### M27 · Centro de ayuda y sucursales — H4 — módulo `carecarapp`
 
