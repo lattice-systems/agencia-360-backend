@@ -91,6 +91,11 @@ public class AnonimizadorDeCuentaJdbc implements AnonimizadorDeCuenta {
 		// facturas guardan su propia copia del receptor, que sí se conserva por ley.
 		jdbc.update("delete from perfil_fiscal where cliente_id = ?", clienteId);
 
+		// Tarjetas guardadas (V2-M08.04): se borran. Los pagos son dinero y se
+		// conservan, sin el token de la tarjeta.
+		jdbc.update("update pago_app set token_procesador = null where cliente_id = ?", clienteId);
+		jdbc.update("delete from metodo_pago where cliente_id = ?", clienteId);
+
 		// Ya no se entra ni se recupera la cuenta.
 		jdbc.update("delete from sesion_app where cuenta_id in " + DE_SU_CUENTA, clienteId);
 		jdbc.update("delete from token_recuperacion where cuenta_app_id in " + DE_SU_CUENTA, clienteId);
