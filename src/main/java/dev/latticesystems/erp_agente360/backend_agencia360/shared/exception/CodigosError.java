@@ -38,6 +38,7 @@ public final class CodigosError {
 	public static final String ADICIONAL_YA_RESPONDIDO = "ADICIONAL_YA_RESPONDIDO";
 	public static final String KM_INVALIDO = "KM_INVALIDO";
 	public static final String TRANSICION_INVALIDA = "TRANSICION_INVALIDA";
+	public static final String CAMPANA_NO_AGENDABLE = "CAMPANA_NO_AGENDABLE";
 
 	private CodigosError() {
 	}
