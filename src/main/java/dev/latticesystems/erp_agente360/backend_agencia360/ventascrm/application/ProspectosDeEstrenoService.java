@@ -82,6 +82,12 @@ class ProspectosDeEstrenoService implements ConsultaProspectos {
 
 	@Override
 	@Transactional(readOnly = true)
+	public List<Long> delVendedor(Long vendedorId) {
+		return prospectos.idsDelVendedor(vendedorId);
+	}
+
+	@Override
+	@Transactional(readOnly = true)
 	public Optional<EstadoProspecto> estado(Long prospectoId) {
 		return prospectos.findById(prospectoId).map(
 				p -> new EstadoProspecto(p.getEtapa().name(), TERMINADAS.contains(p.getEtapa()), p.getVendedorId()));

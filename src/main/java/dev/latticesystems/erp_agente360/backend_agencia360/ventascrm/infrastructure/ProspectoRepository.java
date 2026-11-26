@@ -5,6 +5,8 @@ import dev.latticesystems.erp_agente360.backend_agencia360.ventascrm.domain.Pros
 import java.util.List;
 import java.util.Optional;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 
 /** Las listas van de la más reciente a la más antigua. */
 public interface ProspectoRepository extends JpaRepository<Prospecto, Long> {
@@ -23,6 +25,10 @@ public interface ProspectoRepository extends JpaRepository<Prospecto, Long> {
 	List<Prospecto> findByVendedorIdAndEtapaOrderByCreatedAtDescIdDesc(Long vendedorId, Etapa etapa);
 
 	Optional<Prospecto> findByIdAndVendedorId(Long id, Long vendedorId);
+
+	/** Solo los ids de los prospectos de un vendedor (V2-M26.04). */
+	@Query("select p.id from Prospecto p where p.vendedorId = :vendedorId")
+	List<Long> idsDelVendedor(@Param("vendedorId") Long vendedorId);
 
 	/** Prospectos de un vendedor que aún no terminan (V2-M16.01). */
 	long countByVendedorIdAndEtapaNotIn(Long vendedorId, java.util.Collection<Etapa> etapas);

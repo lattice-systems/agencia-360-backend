@@ -12,6 +12,12 @@ public interface ConsultaProspectos {
 	Optional<EstadoProspecto> estado(Long prospectoId);
 
 	/**
+	 * Ids de los prospectos que atiende un vendedor, para que otro módulo le
+	 * muestre solo lo suyo (V2-M26.04).
+	 */
+	java.util.List<Long> delVendedor(Long vendedorId);
+
+	/**
 	 * @param terminado
 	 *            {@code true} si está Finalizado o Cerrado
 	 */
