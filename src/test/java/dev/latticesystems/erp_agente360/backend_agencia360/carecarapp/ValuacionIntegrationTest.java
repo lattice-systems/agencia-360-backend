@@ -14,6 +14,7 @@ import dev.latticesystems.erp_agente360.backend_agencia360.acceso.infrastructure
 import dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.application.CuentasAppService;
 import dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.application.EnvioCorreos;
 import dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.domain.ParametroTomaCuenta;
+import dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.infrastructure.FranjaHorarioRepository;
 import dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.infrastructure.ParametroTomaCuentaRepository;
 import dev.latticesystems.erp_agente360.backend_agencia360.clientes.application.NuevoCliente;
 import dev.latticesystems.erp_agente360.backend_agencia360.clientes.application.RegistroClientesService;
@@ -26,6 +27,10 @@ import java.io.ByteArrayOutputStream;
 import java.math.BigDecimal;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
+import java.sql.Date;
+import java.time.DayOfWeek;
+import java.time.LocalDate;
+import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -80,6 +85,11 @@ class ValuacionIntegrationTest extends AbstractIntegrationTest {
 
 	@Autowired
 	private JdbcTemplate jdbc;
+
+	@Autowired
+	private FranjaHorarioRepository franjas;
+
+	private static final ZoneId ZONA_AGENCIA = ZoneId.of("America/Mexico_City");
 
 	@MockitoBean
 	private EnvioCorreos envioCorreos;
@@ -260,6 +270,131 @@ class ValuacionIntegrationTest extends AbstractIntegrationTest {
 
 		subir(ana, id, "FRENTE", imagen("jpg")).andExpect(status().isConflict())
 				.andExpect(jsonPath("$.codigo").value("VALUACION_CERRADA"));
+	}
+
+	@Test
+	void laInspeccionUsaLaAgendaConMotivoValuacionYAlCancelarlaVuelveASolicitada() throws Exception {
+		long id = solicitada(ana);
+		LocalDate dia = diaHabil(40);
+
+		String cita = agendar(ana, id, franja(dia), dia).andExpect(status().isCreated())
+				.andExpect(jsonPath("$.motivo").value("valuacion"))
+				.andExpect(jsonPath("$.vehiculoId").value(ana.vehiculo())).andReturn().getResponse()
+				.getContentAsString();
+		long citaId = numero(cita, "$.id");
+
+		comoCliente(ana, get(RUTA + "/{id}", id)).andExpect(jsonPath("$.estado").value("CITA_AGENDADA"))
+				.andExpect(jsonPath("$.puedeAgendar").value(false)).andExpect(jsonPath("$.cita.citaId").value(citaId))
+				.andExpect(jsonPath("$.cita.fecha").value(dia.toString()))
+				.andExpect(jsonPath("$.cita.horaInicio").value(org.hamcrest.Matchers.matchesPattern("\\d{2}:\\d{2}")));
+		LocalDate otro = diaHabil(45);
+		agendar(ana, id, franja(otro), otro).andExpect(status().isConflict())
+				.andExpect(jsonPath("$.codigo").value("VALUACION_NO_AGENDABLE"));
+		// Reprogramar conserva el id de la cita: la valuación no cambia.
+		comoCliente(ana, json(post("/api/v1/app/citas/{id}/reprogramar", citaId),
+				"{\"franjaId\":" + franja(otro) + ",\"fecha\":\"" + otro + "\"}")).andExpect(status().isOk());
+		comoCliente(ana, get(RUTA + "/{id}", id)).andExpect(jsonPath("$.cita.citaId").value(citaId))
+				.andExpect(jsonPath("$.cita.fecha").value(otro.toString()));
+
+		comoCliente(ana, post("/api/v1/app/citas/{id}/cancelar", citaId)).andExpect(status().isOk());
+
+		comoCliente(ana, get(RUTA)).andExpect(jsonPath("$.contenido[0].estado").value("SOLICITADA"))
+				.andExpect(jsonPath("$.contenido[0].cita").isEmpty())
+				.andExpect(jsonPath("$.contenido[0].puedeAgendar").value(true));
+		assertThat(jdbc.queryForObject("select cita_id from valuacion where id = ?", Long.class, id)).isNull();
+		agendar(ana, id, franja(dia), dia).andExpect(status().isCreated());
+	}
+
+	@Test
+	void siLaCitaPasoHaceMasDeSieteDiasSinOfertaSePuedeAgendarOtra() throws Exception {
+		long id = solicitada(ana);
+		inspeccionSembrada(ana, id, hoy().minusDays(8));
+		LocalDate dia = diaHabil(40);
+
+		comoCliente(ana, get(RUTA + "/{id}", id)).andExpect(jsonPath("$.puedeAgendar").value(true));
+		agendar(ana, id, franja(dia), dia).andExpect(status().isCreated());
+		comoCliente(ana, get(RUTA + "/{id}", id)).andExpect(jsonPath("$.cita.fecha").value(dia.toString()))
+				.andExpect(jsonPath("$.puedeAgendar").value(false));
+	}
+
+	@Test
+	void agendarRespetaElCupoLaCitaDuplicadaYElDueno() throws Exception {
+		long id = solicitada(ana);
+		LocalDate dia = diaHabil(41);
+		long franja = franja(dia);
+
+		agendar(beto, id, franja, dia).andExpect(status().isNotFound());
+		comoCliente(ana, json(post(RUTA + "/{id}/cita", id), "{}")).andExpect(status().isBadRequest())
+				.andExpect(jsonPath("$.codigo").value("DATOS_INVALIDOS"));
+		agendar(ana, id, 999_999L, dia).andExpect(status().isBadRequest());
+		mockMvc.perform(json(post(RUTA + "/{id}/cita", id), "{}")).andExpect(status().isUnauthorized());
+
+		int capacidad = jdbc.queryForObject("select capacidad from franja_horario where id = ?", Integer.class, franja);
+		for (int i = 0; i < capacidad; i++) {
+			// Cada lugar con un vehículo distinto: uno no puede repetir franja.
+			long otroAuto = registroClientesService.asignarVehiculo(beto.id(),
+					new VehiculoNuevo(null, ("C" + i + "VA" + unico + "000000000").substring(0, 17).toUpperCase(Locale.ROOT),
+							marca, "March", 2020, null))
+					.vehiculos().getLast().id();
+			citaSembrada(new Cliente(beto.id(), beto.correo(), otroAuto, beto.token()), franja, dia);
+		}
+		agendar(ana, id, franja, dia).andExpect(status().isConflict())
+				.andExpect(jsonPath("$.codigo").value("FRANJA_SIN_CUPO"));
+
+		LocalDate otro = diaHabil(47);
+		citaSembrada(ana, franja(otro), otro);
+		agendar(ana, id, franja(otro), otro).andExpect(status().isConflict())
+				.andExpect(jsonPath("$.codigo").value("CITA_DUPLICADA"));
+		// Nada de lo rechazado dejó la valuación a medias.
+		comoCliente(ana, get(RUTA + "/{id}", id)).andExpect(jsonPath("$.estado").value("SOLICITADA"));
+	}
+
+	@Test
+	void citasNoAceptaElMotivoValuacion() throws Exception {
+		LocalDate dia = diaHabil(42);
+
+		comoCliente(ana, json(post("/api/v1/app/citas"), "{\"vehiculoId\":" + ana.vehiculo() + ",\"franjaId\":"
+				+ franja(dia) + ",\"fecha\":\"" + dia + "\",\"motivo\":\"Valuacion\"}")).andExpect(status().isBadRequest())
+				.andExpect(jsonPath("$.codigo").value("DATOS_INVALIDOS"));
+		assertThat(jdbc.queryForObject("select count(*) from cita where cliente_id = ?", Integer.class, ana.id()))
+				.isZero();
+	}
+
+	private ResultActions agendar(Cliente cliente, long valuacion, long franja, LocalDate dia) throws Exception {
+		return comoCliente(cliente, json(post(RUTA + "/{id}/cita", valuacion),
+				"{\"franjaId\":" + franja + ",\"fecha\":\"" + dia + "\"}"));
+	}
+
+	private long franja(LocalDate dia) {
+		return franjas.findByActivaTrueOrderByDiaSemanaAscHoraInicioAsc().stream().filter(franja -> franja.esDe(dia))
+				.findFirst().orElseThrow().getId();
+	}
+
+	private static LocalDate hoy() {
+		return LocalDate.now(ZONA_AGENCIA);
+	}
+
+	private static LocalDate diaHabil(int enDias) {
+		LocalDate dia = hoy().plusDays(enDias);
+		return dia.getDayOfWeek() == DayOfWeek.SUNDAY ? dia.plusDays(1) : dia;
+	}
+
+	private long citaSembrada(Cliente cliente, long franja, LocalDate dia) {
+		return jdbc.queryForObject("""
+				insert into cita (cliente_id, vehiculo_cliente_id, fecha, franja_id, hora_inicio, hora_fin, estado,
+				  created_at, updated_at)
+				values (?, ?, ?, ?, time '10:00', time '11:00', 'CONFIRMADA', now(), now()) returning id
+				""", Long.class, cliente.id(), cliente.vehiculo(), Date.valueOf(dia), franja);
+	}
+
+	/**
+	 * Una inspección en una fecha que la agenda ya no deja pedir, para probar lo
+	 * que pasa después de ella.
+	 */
+	private long inspeccionSembrada(Cliente cliente, long valuacion, LocalDate dia) {
+		long cita = citaSembrada(cliente, franja(diaHabil(3)), dia);
+		jdbc.update("update valuacion set estado = 'CITA_AGENDADA', cita_id = ? where id = ?", cita, valuacion);
+		return cita;
 	}
 
 	private ResultActions subir(Cliente cliente, long valuacion, String toma, byte[] imagen) throws Exception {

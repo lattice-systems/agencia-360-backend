@@ -6,6 +6,7 @@ import dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.domain.Cit
 import dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.domain.EstadoCita;
 import dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.domain.EstadoValuacion;
 import dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.domain.EstimacionTomaCuenta;
+import dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.domain.MotivoCita;
 import dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.domain.TomaValuacion;
 import dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.domain.Valuacion;
 import dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.infrastructure.CitaRepository;
@@ -231,6 +232,27 @@ public class ValuacionService {
 				}
 			}
 		});
+	}
+
+	/**
+	 * Agenda la inspección física con la agenda de citas, en la misma transacción
+	 * (V2-M26.03).
+	 *
+	 * @throws RecursoNoEncontradoException
+	 *             si la valuación o su vehículo no son del cliente (404)
+	 * @throws ConflictoException
+	 *             con {@code VALUACION_NO_AGENDABLE}, o los de la agenda (409)
+	 * @throws IllegalArgumentException
+	 *             si la franja o la fecha no son válidas (400)
+	 */
+	@Transactional
+	public CitaApp agendar(Long clienteId, Long valuacionId, Long franjaId, LocalDate fecha) {
+		Valuacion valuacion = propia(clienteId, valuacionId);
+		valuacion.exigirAgendable(citaDe(valuacion).map(Cita::getFecha).orElse(null), hoy(), plazos.diasSinOferta());
+		CitaApp cita = agenda.agendar(clienteId, valuacion.getVehiculoClienteId(), franjaId, fecha,
+				MotivoCita.VALUACION);
+		valuacion.inspeccionAgendada(cita.id());
+		return cita;
 	}
 
 	@ApplicationModuleListener

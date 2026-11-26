@@ -1,5 +1,6 @@
 package dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.web;
 
+import dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.application.CitaApp;
 import dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.application.Pagina;
 import dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.application.ValuacionApp;
 import dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.application.ValuacionService;
@@ -20,6 +21,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -62,6 +64,15 @@ public class ValuacionController {
 	@Operation(summary = "Ver una valuación", description = "Con fotos, cita, oferta y asesor.")
 	public ValuacionApp ver(@PathVariable Long valuacionId, @AuthenticationPrincipal UsuarioAutenticado cliente) {
 		return valuaciones.ver(cliente.id(), valuacionId);
+	}
+
+	@PostMapping("/valuaciones/{valuacionId}/cita")
+	@ResponseStatus(HttpStatus.CREATED)
+	@Operation(summary = "Agendar la inspección física", description = "Misma agenda que POST /citas, con motivo "
+			+ "valuacion. 409 VALUACION_NO_AGENDABLE, FRANJA_SIN_CUPO o CITA_DUPLICADA.")
+	public CitaApp agendar(@PathVariable Long valuacionId, @Valid @RequestBody AgendarInspeccionRequest request,
+			@AuthenticationPrincipal UsuarioAutenticado cliente) {
+		return valuaciones.agendar(cliente.id(), valuacionId, request.franjaId(), request.fecha());
 	}
 
 	@PostMapping(path = "/valuaciones/{valuacionId}/fotos/{toma}", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)

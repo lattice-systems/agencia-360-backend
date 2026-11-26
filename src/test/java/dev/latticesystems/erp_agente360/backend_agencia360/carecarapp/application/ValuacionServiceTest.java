@@ -1,12 +1,14 @@
 package dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.application;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import dev.latticesystems.erp_agente360.backend_agencia360.acceso.ConsultaVendedores;
@@ -15,6 +17,8 @@ import dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.domain.Cit
 import dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.domain.EstadoCita;
 import dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.domain.EstadoValuacion;
 import dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.domain.EstimacionTomaCuenta;
+import dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.domain.MotivoCita;
+import dev.latticesystems.erp_agente360.backend_agencia360.shared.exception.ConflictoException;
 import dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.domain.TomaValuacion;
 import dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.domain.Valuacion;
 import dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.infrastructure.CitaRepository;
@@ -213,6 +217,25 @@ class ValuacionServiceTest {
 		} finally {
 			TransactionSynchronizationManager.clearSynchronization();
 		}
+	}
+
+	@Test
+	void seReagendaSoloCuandoPasaronLosDiasSinOferta() {
+		Valuacion valuacion = existente();
+		valuacion.inspeccionAgendada(50L);
+		when(valuaciones.bloquearDeCliente(10L, CLIENTE)).thenReturn(Optional.of(valuacion));
+		cita(50L, EstadoCita.CONFIRMADA, HOY.minusDays(7));
+
+		assertThatThrownBy(() -> servicio.agendar(CLIENTE, 10L, 4L, HOY.plusDays(1)))
+				.isInstanceOf(ConflictoException.class).extracting("codigo").isEqualTo("VALUACION_NO_AGENDABLE");
+		verifyNoInteractions(agenda);
+
+		cita(50L, EstadoCita.CONFIRMADA, HOY.minusDays(8));
+		CitaApp nueva = mock(CitaApp.class);
+		when(agenda.agendar(CLIENTE, VEHICULO, 4L, HOY.plusDays(1), MotivoCita.VALUACION)).thenReturn(nueva);
+
+		assertThat(servicio.agendar(CLIENTE, 10L, 4L, HOY.plusDays(1))).isSameAs(nueva);
+		assertThat(valuacion.getCitaId()).isEqualTo(nueva.id());
 	}
 
 	private Valuacion conUnaFoto() {
