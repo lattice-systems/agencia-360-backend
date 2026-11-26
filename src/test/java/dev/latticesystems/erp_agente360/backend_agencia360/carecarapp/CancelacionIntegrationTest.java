@@ -90,7 +90,7 @@ class CancelacionIntegrationTest extends AbstractIntegrationTest {
 
 	/** Lo que se sembró de un cliente, para buscarlo después. */
 	private record Cliente(long id, String correo, String token, String fotoClave, String ticketClave,
-			String archivoArcoClave) {
+			String valuacionFotoClave) {
 	}
 
 	private String unico;
@@ -169,6 +169,15 @@ class CancelacionIntegrationTest extends AbstractIntegrationTest {
 				values (?, ?, 'COTIZACION', ?)
 				""", id, modeloCatalogo, estimacion);
 
+		// Una valuación con su foto: referencia a la estimación (V2-M26).
+		String fotoValuacion = archivos.guardar("valuacion-fotos", "image/jpeg", new byte[]{1, 1, 1}).clave();
+		jdbc.update("""
+				insert into valuacion (estimacion_toma_cuenta_id, cliente_id, vehiculo_cliente_id, fotos, cita_id, estado,
+				  created_at, updated_at)
+				values (?, ?, ?, ?, ?, 'CITA_AGENDADA', now(), now())
+				""", estimacion, id, vehiculo,
+				"{\"FRENTE\":{\"clave\":\"" + fotoValuacion + "\",\"subidaEn\":\"2026-11-25T10:00:00Z\"}}", cita);
+
 		String foto = archivos.guardar("tablero", "image/png", new byte[]{1, 2, 3}).clave();
 		String ticket = archivos.guardar("tickets", "image/png", new byte[]{4, 5, 6}).clave();
 		long lectura = jdbc.queryForObject("""
@@ -211,7 +220,7 @@ class CancelacionIntegrationTest extends AbstractIntegrationTest {
 				  mano_de_obra, refacciones, estatus, created_at, updated_at)
 				values (?, current_date, 12000, ?, 100, 16, 116, 100, 16, 'RECIBIDO', now(), now())
 				""", vehiculo, personal);
-		return new Cliente(id, correo, token, foto, ticket, null);
+		return new Cliente(id, correo, token, foto, ticket, fotoValuacion);
 	}
 
 	@Test
@@ -263,6 +272,8 @@ class CancelacionIntegrationTest extends AbstractIntegrationTest {
 
 		// Lo que no es obligatorio: fuera.
 		assertThat(contar("consulta_asistente", "cliente_id", ana.id())).isZero();
+		assertThat(contar("valuacion", "cliente_id", ana.id())).isZero();
+		assertThat(archivos.leer(ana.valuacionFotoClave())).isEmpty();
 		assertThat(contar("estimacion_toma_cuenta", "cliente_id", ana.id())).isZero();
 		assertThat(contar("solicitud_estreno", "cliente_id", ana.id())).isZero();
 		assertThat(jdbc.queryForObject("""
@@ -313,6 +324,7 @@ class CancelacionIntegrationTest extends AbstractIntegrationTest {
 				beto.id())).isEqualTo("Calle Secreta 123");
 		assertThat(archivos.leer(beto.fotoClave())).isPresent();
 		assertThat(archivos.leer(beto.ticketClave())).isPresent();
+		assertThat(archivos.leer(beto.valuacionFotoClave())).isPresent();
 	}
 
 	@Test
@@ -417,8 +429,10 @@ class CancelacionIntegrationTest extends AbstractIntegrationTest {
 
 		verify(archivos).borrar(ana.fotoClave());
 		verify(archivos).borrar(ana.ticketClave());
+		verify(archivos).borrar(ana.valuacionFotoClave());
 		assertThat(archivos.leer(ana.fotoClave())).isEmpty();
 		assertThat(archivos.leer(ana.ticketClave())).isEmpty();
+		assertThat(archivos.leer(ana.valuacionFotoClave())).isEmpty();
 	}
 
 	@Test
@@ -453,6 +467,7 @@ class CancelacionIntegrationTest extends AbstractIntegrationTest {
 				Map.entry("consultas", n("select count(*) from consulta_asistente where cliente_id = " + cliente)),
 				Map.entry("estimaciones",
 						n("select count(*) from estimacion_toma_cuenta where cliente_id = " + cliente)),
+				Map.entry("valuaciones", n("select count(*) from valuacion where cliente_id = " + cliente)),
 				Map.entry("estrenos", n("select count(*) from solicitud_estreno where cliente_id = " + cliente)),
 				Map.entry("lecturas",
 						n("select count(*) from lectura_km where vehiculo_cliente_id in " + deSusVehiculos)),

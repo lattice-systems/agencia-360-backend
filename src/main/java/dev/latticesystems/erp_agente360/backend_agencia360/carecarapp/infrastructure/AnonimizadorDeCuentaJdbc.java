@@ -2,6 +2,7 @@ package dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.infrastru
 
 import dev.latticesystems.erp_agente360.backend_agencia360.archivos.AlmacenArchivos;
 import dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.application.AnonimizadorDeCuenta;
+import java.util.ArrayList;
 import java.util.List;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;
@@ -13,7 +14,8 @@ import org.springframework.transaction.support.TransactionSynchronizationManager
  * canceló (V2-M22.03). Cada consulta va acotada al cliente y dice por qué.
  *
  * <p>
- * Los archivos que subió la persona (fotos del tablero, tickets) se borran del
+ * Los archivos que subió la persona (fotos del tablero y de sus valuaciones,
+ * tickets) se borran del
  * almacén solo cuando la transacción se confirma: si algo falla y todo
  * revierte, las filas siguen ahí y no pueden quedarse apuntando a un archivo
  * que ya no está.
@@ -51,6 +53,7 @@ public class AnonimizadorDeCuentaJdbc implements AnonimizadorDeCuenta {
 				select g.ticket_url from gasto_vehiculo g
 				where g.ticket_url is not null and g.vehiculo_cliente_id in
 				""" + DE_SUS_VEHICULOS, String.class, clienteId, clienteId);
+		List<String> aBorrar = new ArrayList<>(archivosPropios);
 		jdbc.update("delete from gasto_vehiculo where vehiculo_cliente_id in " + DE_SUS_VEHICULOS, clienteId);
 		jdbc.update("delete from lectura_km where fuente = 'CLIENTE' and vehiculo_cliente_id in " + DE_SUS_VEHICULOS,
 				clienteId);
@@ -62,6 +65,14 @@ public class AnonimizadorDeCuentaJdbc implements AnonimizadorDeCuenta {
 		// no se toca (es de otro módulo y puede ser fiscal).
 		jdbc.update("update solicitud_estreno set estimacion_toma_cuenta_id = null where cliente_id = ?", clienteId);
 		jdbc.update("delete from solicitud_estreno where cliente_id = ?", clienteId);
+		// Las valuaciones van antes que las estimaciones: las referencian. Sus fotos
+		// muestran placas y a veces personas, así que también se borran. La cita de
+		// inspección se conserva como las demás y el prospecto no se toca.
+		aBorrar.addAll(jdbc.queryForList("""
+				select foto.value ->> 'clave' from valuacion v, jsonb_each(v.fotos::jsonb) foto
+				where v.cliente_id = ?
+				""", String.class, clienteId));
+		jdbc.update("delete from valuacion where cliente_id = ?", clienteId);
 		jdbc.update("delete from estimacion_toma_cuenta where cliente_id = ?", clienteId);
 
 		// Asistencia en carretera: queda el registro del servicio, sin dónde estaba
@@ -81,7 +92,7 @@ public class AnonimizadorDeCuentaJdbc implements AnonimizadorDeCuenta {
 		jdbc.update("delete from sesion_app where cuenta_id in " + DE_SU_CUENTA, clienteId);
 		jdbc.update("delete from token_recuperacion where cuenta_app_id in " + DE_SU_CUENTA, clienteId);
 
-		borrarAlConfirmar(archivosPropios);
+		borrarAlConfirmar(aBorrar);
 	}
 
 	private void borrarAlConfirmar(List<String> claves) {
