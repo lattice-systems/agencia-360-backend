@@ -58,6 +58,7 @@ public class ExportadorDeDatosJdbc implements ExportadorDeDatos {
 					join traslado t on t.id = h.traslado_id join cita c on c.id = t.cita_id
 					where c.cliente_id = :c
 					"""), Seccion.lista("direcciones", "select * from direccion_cliente where cliente_id = :c"),
+			Seccion.lista("perfilesFiscales", "select * from perfil_fiscal where cliente_id = :c"),
 			Seccion.lista("servicios", """
 					select o.* from orden_servicio o
 					join vehiculo_cliente v on v.id = o.vehiculo_cliente_id where v.cliente_id = :c
@@ -87,7 +88,8 @@ public class ExportadorDeDatosJdbc implements ExportadorDeDatos {
 					"select id, tipo, estado, creada_en, resuelta_en from solicitud_arco where cliente_id = :c"));
 
 	private static final List<String> INCLUYE = List.of("Tus datos de contacto", "Tu cuenta de la app (sin contraseña)",
-			"Tus vehículos, citas, traslados y direcciones", "El historial de servicios de tus vehículos",
+			"Tus vehículos, citas, traslados y direcciones", "Tus datos fiscales para facturar",
+			"El historial de servicios de tus vehículos",
 			"Tus estimaciones de toma a cuenta, tus valuaciones formales y tus solicitudes de prueba de manejo o "
 					+ "cotización",
 			"Tus solicitudes de asistencia y tus preguntas al asistente",
