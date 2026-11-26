@@ -12,7 +12,8 @@ import org.springframework.stereotype.Service;
 /**
  * Historial de servicios y tickets de los vehículos del cliente (APP-3.2). Un
  * vehículo o servicio ajeno responde 404, como pide el contrato. El ticket dice
- * cuántos puntos de lealtad dio la orden (V2-M12.02).
+ * cuántos puntos de lealtad dio la orden (V2-M12.02) y cómo va su cobro: con
+ * qué se pagó o si se puede pagar en la app (V2-M08.02).
  */
 @Service
 public class ServiciosAppService {
@@ -23,12 +24,14 @@ public class ServiciosAppService {
 	private final VehiculosDeClientes vehiculos;
 	private final HistorialDeServicios historial;
 	private final MovimientoPuntosRepository movimientos;
+	private final PagosAppService pagos;
 
 	public ServiciosAppService(VehiculosDeClientes vehiculos, HistorialDeServicios historial,
-			MovimientoPuntosRepository movimientos) {
+			MovimientoPuntosRepository movimientos, PagosAppService pagos) {
 		this.vehiculos = vehiculos;
 		this.historial = historial;
 		this.movimientos = movimientos;
+		this.pagos = pagos;
 	}
 
 	/**
@@ -64,7 +67,7 @@ public class ServiciosAppService {
 	 */
 	public ServicioDetalleApp detalle(Long clienteId, Long servicioId) {
 		return historial.detalle(servicioId).filter(detalle -> esDelCliente(clienteId, detalle.vehiculoId()))
-				.map(detalle -> ServicioDetalleApp.de(detalle, puntosGanados(servicioId)))
+				.map(detalle -> ServicioDetalleApp.de(detalle, puntosGanados(servicioId), pagos.cobroDe(detalle)))
 				.orElseThrow(() -> new RecursoNoEncontradoException("No existe el servicio " + servicioId));
 	}
 

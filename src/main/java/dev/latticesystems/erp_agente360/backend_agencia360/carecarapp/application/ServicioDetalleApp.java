@@ -11,7 +11,7 @@ import java.util.List;
 public record ServicioDetalleApp(Long id, Long vehiculoId, LocalDate fecha, int kilometraje, EstatusServicio estatus,
 		@JsonFormat(pattern = ServicioApp.FORMATO_FECHA_HORA) LocalDateTime fechaCierre, List<RenglonApp> manoDeObra,
 		List<RenglonApp> refacciones, BigDecimal totalManoDeObra, BigDecimal totalRefacciones, BigDecimal subtotal,
-		BigDecimal iva, BigDecimal total, Integer puntosGanados) {
+		BigDecimal iva, BigDecimal total, Integer puntosGanados, PagoVista pago, boolean pagable) {
 
 	public record RenglonApp(String concepto, int cantidad, BigDecimal precio, BigDecimal importe) {
 
@@ -24,12 +24,16 @@ public record ServicioDetalleApp(Long id, Long vehiculoId, LocalDate fecha, int 
 	 * @param puntosGanados
 	 *            los puntos de lealtad que dio la orden (V2-M12.02); {@code null}
 	 *            si no dio
+	 * @param cobro
+	 *            el pago con que quedó pagada y si se puede pagar en la app
+	 *            (V2-M08.02)
 	 */
-	static ServicioDetalleApp de(DetalleDelServicio detalle, Integer puntosGanados) {
+	static ServicioDetalleApp de(DetalleDelServicio detalle, Integer puntosGanados, CobroDeOrden cobro) {
 		return new ServicioDetalleApp(detalle.id(), detalle.vehiculoId(), detalle.fecha(), detalle.kilometraje(),
 				EstatusServicio.valueOf(detalle.estatus().name()), ServicioApp.enLaAgencia(detalle.fechaCierre()),
 				detalle.manoDeObra().stream().map(RenglonApp::de).toList(),
 				detalle.refacciones().stream().map(RenglonApp::de).toList(), detalle.totalManoDeObra(),
-				detalle.totalRefacciones(), detalle.subtotal(), detalle.iva(), detalle.total(), puntosGanados);
+				detalle.totalRefacciones(), detalle.subtotal(), detalle.iva(), detalle.total(), puntosGanados,
+				cobro.pago(), cobro.pagable());
 	}
 }
