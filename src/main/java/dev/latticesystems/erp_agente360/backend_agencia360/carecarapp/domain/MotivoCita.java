@@ -10,7 +10,7 @@ import java.util.Locale;
  */
 public enum MotivoCita {
 
-	MANTENIMIENTO, REPARACION, REVISION, GARANTIA, CAMPANA, OTRO;
+	MANTENIMIENTO, REPARACION, REVISION, GARANTIA, CAMPANA, VALUACION, OTRO;
 
 	@JsonValue
 	public String valor() {
