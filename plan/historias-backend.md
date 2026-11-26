@@ -889,6 +889,38 @@ Tomas fijas, en este orden, en el enum `TomaValuacion`: `FRENTE`, `TRASERA`, `LA
 
 `POST /citas` con `motivo` `valuacion` responde 400 `DATOS_INVALIDOS`: esa cita solo nace desde la valuación, para que no haya inspecciones sin solicitud.
 
+##### Prospecto (V2-M26.01 y V2-M26.04)
+
+La valuación se liga al prospecto desde que se pide, porque es el momento en que ventas debe enterarse.
+
+1. Si el cliente ya tiene un prospecto abierto (`ConsultaProspectos`, no terminado), se reutiliza. Orden de búsqueda: el de la `solicitud_estreno` con la misma estimación, el de su `solicitud_estreno` más reciente (el prospecto de M16) y el de su valuación más reciente.
+2. Si no hay, `carecarapp` publica `ValuacionSolicitada` y `ventascrm` crea el prospecto con `Prospecto.registrarDesdeApp` (origen `APP`, etapa `PRIMER_CONTACTO`) con la misma asignación de vendedor de M16. Publica `ProspectoDeValuacionCreado` y `carecarapp` guarda `prospecto_id`.
+
+La oferta y la respuesta del cliente **no mueven la etapa** del prospecto: el vendedor la cambia en el CRM, igual que en M16, para no saltar sus reglas.
+
+| Evento (`shared/eventos`) | Publica | Escucha |
+| --- | --- | --- |
+| `ValuacionSolicitada(valuacionId, nombre, correo, telefono)` | `carecarapp`, solo si no hay prospecto que reutilizar | `ventascrm` con `@ApplicationModuleListener` |
+| `ProspectoDeValuacionCreado(valuacionId, prospectoId)` | `ventascrm` | `carecarapp` |
+| `AvisoAlCliente` con `valuacion.oferta` (`valuacionId`, `vehiculoId`, `vigenciaHasta`) | `carecarapp` al capturar la oferta | Avisos en vivo (SSE) y, cuando exista, el push de V2-M06.07 |
+
+El aviso **no lleva el monto**, para que no aparezca en la pantalla bloqueada cuando llegue como push. No hay evento al responder porque hoy nadie lo escucharía.
+
+##### Cómo se captura la oferta (ERP y CRM congelados)
+
+No se hace pantalla web. Igual que en las campañas (M10), los traslados (M17) y el canje de M12, el personal usa **endpoints protegidos** bajo `/api/v1/valuaciones`. Se operan con Swagger UI en local y con un cliente HTTP donde Swagger está apagado. Van documentados en OpenAPI del servicio (`/v3/api-docs`) y en el README, **no** en el contrato de la app.
+
+| Método y ruta | Rol | Respuesta y errores |
+| --- | --- | --- |
+| `GET /api/v1/valuaciones?estado=&pagina=&tamano=` | `VENTAS`, `ADMINISTRADOR` | 200 paginado, más antiguas primero. 400, 401, 403 |
+| `GET /api/v1/valuaciones/{id}` | `VENTAS`, `ADMINISTRADOR` | 200 con cliente (nombre), auto, rango estimado, cita y fotos con URL firmada. 404 |
+| `POST /api/v1/valuaciones/{id}/oferta` `{monto, vigenciaHasta?, nota?}` | `VENTAS`, `ADMINISTRADOR` | 200. 400 si el monto no es mayor a cero, tiene más de 2 decimales, la vigencia no está entre hoy y `app.valuacion.vigencia-maxima-dias` (30) o la nota pasa de 500. 404. 409 `TRANSICION_INVALIDA` |
+
+- `VENTAS` ve y oferta **solo** las valuaciones cuyo prospecto tiene asignado. Las demás, y las que aún no tienen prospecto, responden 404. `ADMINISTRADOR` ve todas. Para listar sin leer tablas ajenas, `ConsultaProspectos` suma `delVendedor(vendedorId)` con los ids de sus prospectos.
+- Sin `vigenciaHasta` se usa hoy más `app.valuacion.vigencia-dias` (7). Los tres valores de configuración son **propuestas pendientes del PO**.
+- Se puede ofertar con una cita confirmada cuya fecha es hoy o anterior (la inspección ya ocurrió), o para renovar una `VENCIDA` si no hay otra abierta de ese cliente y vehículo. Cualquier otro caso es 409 `TRANSICION_INVALIDA`.
+- **Una oferta vigente no se edita.** Mientras está `OFERTADA` no se puede capturar otra.
+
 ### M27 · Centro de ayuda y sucursales — H4 — módulo `carecarapp`
 
 Detalle: [`carecar-mobile/plan/modulos/M27-ayuda-y-sucursales.md`](https://github.com/lattice-systems/carecar-mobile/blob/main/plan/modulos/M27-ayuda-y-sucursales.md)
