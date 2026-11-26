@@ -3130,8 +3130,10 @@ components:
       description: |
         V2-M02.08 · Opcional. Se acepta sin importar mayúsculas y siempre se devuelve en
         minúsculas. V2-M10.03 · `campana` es el de las citas que atienden una campaña de
-        seguridad; se agendan desde la campaña.
-      enum: [mantenimiento, reparacion, revision, garantia, campana, otro]
+        seguridad; se agendan desde la campaña. V2-M26.03 · `valuacion` es el de las inspecciones
+        de una valuación formal. Solo se crea con `POST /valuaciones/{valuacionId}/cita`:
+        `POST /citas` con ese motivo responde 400 `DATOS_INVALIDOS`.
+      enum: [mantenimiento, reparacion, revision, garantia, campana, valuacion, otro]
 
     ReprogramarCita:
       type: object
