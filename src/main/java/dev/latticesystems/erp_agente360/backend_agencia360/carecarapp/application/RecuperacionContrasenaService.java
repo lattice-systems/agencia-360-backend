@@ -1,6 +1,7 @@
 package dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.application;
 
 import dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.domain.CuentaApp;
+import dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.domain.MotivoRevocacion;
 import dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.domain.TokenRecuperacion;
 import dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.infrastructure.CuentaAppRepository;
 import dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.infrastructure.SesionAppRepository;
@@ -128,7 +129,8 @@ public class RecuperacionContrasenaService {
 	private void cambiar(CuentaApp cuenta, TokenRecuperacion token, String contrasenaNueva, Instant ahora) {
 		token.cerrar(ahora);
 		cuenta.cambiarContrasena(passwordEncoder.encode(contrasenaNueva));
-		sesionRepository.findByCuentaIdAndRevocadaEnIsNull(cuenta.getId()).forEach(s -> s.revocar(ahora));
+		sesionRepository.findByCuentaIdAndRevocadaEnIsNull(cuenta.getId())
+				.forEach(s -> s.revocar(ahora, MotivoRevocacion.CIERRE));
 	}
 
 	private Optional<CuentaApp> cuentaActiva(String correo) {

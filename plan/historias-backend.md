@@ -30,6 +30,89 @@ Detalle: [`carecar-mobile/plan/modulos/M01-acceso-y-perfil.md`](https://github.c
 | V2-M01.07 | Como cliente quiero editar mi teléfono y correo para que la agencia me contacte | Cambio se guarda tras confirmar un código enviado al nuevo dato · al cambiar correo cambia también `cuenta_app.usuario` · validación de formato | Jael |
 | V2-M01.09 | Como cliente quiero ver y cerrar mis sesiones abiertas en otros celulares para sentirme seguro | Lista con dispositivo y último uso · cerrar una o todas revoca sus tokens | Jael |
 
+#### Diseño técnico — V2-M01.09 (parte B de Jael)
+
+La ficha nombra `sesion_app` con `dispositivo` y `ultimo_uso` como campos **nuevos**; hoy la tabla (`V10__crear_tablas_acceso_app.sql`) no los tiene. No se renombra ni se quita nada de la ficha.
+
+**Migración** `V52__agregar_dispositivo_y_ultimo_uso_a_sesion_app.sql` — el número se tomó al rebasar, cuando `main` ya iba en la V51:
+
+```sql
+alter table sesion_app add column dispositivo varchar(80);
+alter table sesion_app add column ultimo_uso  timestamp(6) with time zone;
+alter table sesion_app add column iniciada_en timestamp(6) with time zone;
+```
+
+Las tres nulas: las sesiones que ya existen quedan sin nombre, sin último uso y sin inicio, y la app muestra un texto genérico en su lugar.
+
+**Por qué hace falta `iniciada_en` y no basta `created_at`.** El refresco **revoca la fila y crea otra** (`refrescar` → `sesion.revocar` → `emitirSesion`), así que `created_at` es el momento del último refresco: una sesión abierta hace 20 días se vería «iniciada hace 1 hora» y el dato sería inservible. `iniciada_en` se copia de una fila a la siguiente en cada refresco y así sí dice cuándo empezó la sesión de verdad.
+
+**Y por qué el diseño de fila-por-token se queda tal cual.** Es tentador rotar el hash en la misma fila para que el `id` no cambie, pero eso **perdería la detección de robo**: hoy la fila revocada se queda, así que reusar un token gastado lo encuentra revocado y dispara `cerrarTodas` (`AccesoAppService.refrescar`). Sobrescribiendo el hash, el token viejo simplemente no se encontraría y no habría de qué sospechar. Consecuencia aceptada: el `id` de una sesión cambia en cada refresco, así que un `DELETE /sesiones/{id}` puede llegar tarde y responder 404; la app vuelve a leer la lista.
+
+**`POST /auth/login` acepta `dispositivo` opcional** (≤ 80). Es el nombre que arma la app («Pixel 7 · Android 14»). Aditivo: un cliente que no lo mande sigue funcionando igual, y por eso no sube la versión mayor del contrato.
+
+**⚠️ El refresco tiene que arrastrar el nombre.** `emitirSesion` **crea una fila nueva** en cada refresco (revoca la vieja y guarda otra, porque el refresh es de un solo uso). Si no se copia `dispositivo` al par nuevo, el nombre del dispositivo se pierde en el primer refresco —a la hora de haber entrado— y la lista queda inservible. `POST /auth/refrescar` además pone `ultimo_uso` en la sesión que emite.
+
+**Endpoints nuevos**, los tres privados (access token):
+
+| Método | Ruta | Responde |
+| --- | --- | --- |
+| GET | `/api/v1/app/sesiones` | 200 con las sesiones **vigentes** de la cuenta: `[{id, dispositivo, ultimoUso, iniciadaEn, expiraEn}]`, ordenadas por `ultimoUso` descendente y las nulas al final. `iniciadaEn` viene de `iniciada_en`, no de `created_at`; `expiraEn` son 30 días **desde el último refresco** |
+| DELETE | `/api/v1/app/sesiones/{id}` | 204. Revoca esa sesión. **404 si no existe o es de otra cuenta**, nunca 403: es la regla del contrato para un recurso ajeno |
+| DELETE | `/api/v1/app/sesiones` | 204. Revoca **todas** las de la cuenta, incluida la de quien llama |
+
+Errores comunes: 401 sin token o con token inválido, 403 `CUENTA_DESACTIVADA`. Nunca se devuelve `token_hash` ni nada derivado del refresh token.
+
+**Lo que esta historia NO puede hacer, y por qué**
+
+La lista **no puede marcar «este dispositivo»**. El JWT lleva `uid` y `roles` pero no el id de la sesión (`shared/security/JwtService`), así que el backend no sabe cuál de las sesiones está usando quien pregunta. Marcarla exigiría un claim `sid` y tocar `JwtService`, `UsuarioAutenticado` y el filtro, que usan también el ERP y el CRM: es un cambio de `shared` con alcance mucho mayor que esta historia, y **se propone aparte**.
+
+Mientras tanto, `DELETE /sesiones` se presenta en la app como «cerrar sesión en todos los dispositivos», que incluye el propio. Es lo que dice el documento del módulo («cerrar sesión en todos») y es la lectura segura: quien usa esa opción quiere exactamente eso.
+
+#### Qué quedó — V2-M01.09
+
+| Pieza | Archivo |
+| --- | --- |
+| Migración | `V52__agregar_dispositivo_y_ultimo_uso_a_sesion_app.sql`, las tres columnas nulas |
+| Entidad | `SesionApp.iniciar(..., dispositivo)` y `SesionApp.continuar(previa, ...)` |
+| Consulta | `SesionAppRepository.vigentesDe(cuentaId, ahora)`, ordenada y sin vencidas |
+| Servicio | `sesionesDe`, `cerrarSesion(clienteId, sesionId)` y `cerrarTodasLasSesiones` en `AccesoAppService` |
+| DTO | `SesionActivaApp`, que no expone nada derivado del refresh token |
+| Endpoints | los tres en `AccesoAppController`, con `@PreAuthorize("hasRole('CLIENTE_CARECAR')")` |
+| Login | `LoginAppRequest.dispositivo`, opcional y con `@Size(max = 80)` |
+| Pruebas | `SesionesActivasAppIntegrationTest`, 14 de integración |
+
+**Las dos decisiones que más importan, y por qué:**
+
+1. **`SesionApp.continuar` arrastra `dispositivo` e `iniciada_en`.** Es lo más fácil de romper de la historia: refrescar revoca la fila y guarda otra, así que sin arrastrarlos el nombre se perdería en el primer refresco —a la hora de haber entrado— y la lista quedaría inservible. Hay una prueba por cada uno.
+2. **`vigentesDe` excluye las vencidas, no solo las revocadas.** Una sesión vencida tiene `revocada_en` en nulo, así que filtrar solo por eso dejaría en la lista un dispositivo que ya no puede entrar.
+
+**Nulos explícitos, no campos ausentes.** `SesionActivaApp` no usa `@JsonInclude(NON_NULL)` a propósito, aunque otros DTO del módulo sí: `mock_api` responde con nulos explícitos y conviene que la app vea la misma forma contra las dos.
+
+**El `dispositivo` demasiado largo responde 400** y no se corta en silencio. La app ya recorta a 80 antes de mandar, así que no debería pasar; si pasa, es mejor un error claro que un nombre mutilado por la base de datos.
+
+**Lo que esta historia no puede hacer:** la lista no marca «esta sesión». El JWT lleva `uid` y `roles`, no el id de la sesión, así que el servidor no sabe cuál pregunta. Exigiría un claim `sid` y tocar `JwtService`, `UsuarioAutenticado` y el filtro, que usan también el ERP y el CRM: se propone aparte.
+
+#### El defecto que destapó V2-M01.09 — `motivo_revocacion` (V53)
+
+Hasta esta historia, `revocada_en` no distinguía **por qué** se revocó una sesión, y `refrescar` trataba cualquier token revocado como posible robo: cerraba **todas** las sesiones de la cuenta.
+
+Eso vuelve «cerrar mis sesiones abiertas» una trampa, y lo encontró la prueba `cerrarUnaSesionLaRevocaYSuRefreshDejaDeServir`:
+
+| Quién hace qué | Qué pasaba |
+| --- | --- |
+| El cliente cierra la sesión de su tablet | En cuanto la tablet reintenta, **el cliente queda fuera de su propio celular** |
+| El cliente cierra la sesión de un celular robado | El ladrón, al reintentar, **saca al cliente de todas partes**: una negación de servicio regalada |
+
+No se había notado porque con `/auth/cerrar-sesion` no se alcanza: ahí el mismo dispositivo borra sus tokens y no reintenta. **Cerrar una sesión ajena sí lo alcanza**, porque ese dispositivo conserva su token y lo usa en su siguiente intento.
+
+**El arreglo guarda el motivo** (`MotivoRevocacion`) y la detección de robo se dispara **solo** con `REFRESCO`, que es el único caso en el que el token siguió existiendo después de usarse: si vuelve a aparecer, alguien tiene una copia. `CIERRE` —cerrar sesión, cerrar una desde la pantalla, cerrar todas, desactivar la cuenta, restablecer la contraseña— responde 401 y nada más.
+
+**La protección no se debilita**, y hay una prueba para eso: `reusarUnTokenGastadoPorUnRefrescoSigueCerrandoTodo`.
+
+Las filas revocadas antes de la V53 quedan con el motivo en nulo y se tratan como `REFRESCO`, que es el comportamiento de hoy: casi todas lo son y, ante la duda, conviene equivocarse del lado de cerrar sesiones y no del de dejar viva una copia robada.
+
+**Pendiente de confirmar con Ricardo**, que es quien definió la regla original.
+
 ### M02 · Mis vehículos y postventa (garaje, manuales, historial, tickets, citas) — H2 — módulo `carecarapp + servicio`
 
 Detalle: [`carecar-mobile/plan/modulos/M02-vehiculos-y-postventa.md`](https://github.com/lattice-systems/carecar-mobile/blob/main/plan/modulos/M02-vehiculos-y-postventa.md)
