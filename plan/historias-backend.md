@@ -506,6 +506,50 @@ Detalle: [`carecar-mobile/plan/modulos/M14-tienda.md`](https://github.com/lattic
 | V2-M14.04 | Como cliente quiero pagar mi pedido en la app | Reusa M08 | Cristian |
 | V2-M14.05 | Como cliente quiero seguir mis pedidos | Estados con push | Cristian |
 
+#### Diseño de M14 (V2-M14.01, V2-M14.02, V2-M14.03 y V2-M14.05)
+
+V2-M14.04 (pagar en la app) queda fuera: reusa el cobro de V2-M08.02, que no está integrado. Mientras tanto el pedido se paga en caja.
+
+**Reparto entre módulos.** El catálogo publicado y las existencias viven en `inventario`, que ya es dueño de `refaccion` y de `movimiento_inventario`. Los pedidos viven en `carecarapp`, junto con las citas. `carecarapp` usa dos interfaces públicas de `inventario` (`CatalogoDeTienda` y `ApartadoDeRefacciones`). Para que el taller vea el pedido en la orden, `servicio` declara la interfaz `PiezasPorInstalar` y `carecarapp` la implementa, así `servicio` no depende de la app.
+
+**Migración** (número al integrar):
+
+| Tabla | Cambio |
+| --- | --- |
+| `refaccion` | `publicada_en_app` (falso por omisión), `categoria_app` (`ACCESORIO`, `REFACCION`, `CUIDADO`), `descripcion_app`, `foto_url`, `universal_app` |
+| `compatibilidad_refaccion` (nueva) | `refaccion_id`, `modelo`, `anio_desde`, `anio_hasta` |
+| `pedido_app` (nueva) | `cliente_id`, `estado` (`APARTADO`, `LISTO`, `ENTREGADO`, `CANCELADO`), `entrega` (`MOSTRADOR`, `CITA`), `cita_id`, `total`, `vence_en`, `llave_idempotencia` única por cliente, `listo_en`, `entregado_en`, `cancelado_en`, `motivo_cancelacion` (`CLIENTE`, `VENCIDO`, `AGENCIA`) |
+| `pedido_app_renglon` (nueva) | `pedido_app_id`, `refaccion_id`, `cantidad`, `precio` |
+| `movimiento_inventario` | columna `pedido_app_id`. `responsable_id` deja de ser obligatorio solo cuando el movimiento es de un pedido, porque el cliente de la app no es usuario del personal. La entrada que libera piezas no exige proveedor |
+
+**Inventario por movimientos.** Apartar registra una `SALIDA` y baja la existencia. Cancelar o vencer registra una `ENTRADA` con el mismo `pedido_app_id` y la devuelve. Entregar no mueve nada, porque las piezas ya salieron. Cada fila de `refaccion` se bloquea (`select ... for update`) en orden de id para no cruzar bloqueos. El historial de recepciones del ERP excluye los movimientos de pedidos.
+
+**Reglas.**
+
+- Vigencia del apartado: `app.tienda.apartado.vigencia` (48 horas). Con instalación en cita, hasta el final del día siguiente a la cita. Al marcarlo `LISTO` quedan al menos 48 horas para recogerlo.
+- Un proceso programado (`app.tienda.apartado.vencer-cada`, 5 minutos) cancela los vencidos. Además, toda consulta o cambio de un pedido vencido lo cancela antes de responder.
+- Límites contra el acaparamiento: 3 pedidos sin entregar por cliente, 10 renglones por pedido y 10 piezas por renglón. El pedido se crea bajo un bloqueo por cliente para que dos peticiones a la vez no pasen el límite.
+- `Idempotency-Key` obligatoria al apartar.
+- El precio es `refaccion.precio`, tomado al apartar y mostrado como precio final. El PO debe confirmar que incluye IVA.
+- Al cancelar la cita, el pedido vuelve a mostrador con 48 horas. Al reprogramarla, la vigencia se mueve con ella.
+
+**API de la app:** ver el contrato 2.21.0, etiqueta `Tienda`. Errores propios: `SIN_EXISTENCIA`, `CITA_NO_DISPONIBLE`, `LIMITE_APARTADOS`, `PEDIDO_NO_CANCELABLE`, `PEDIDO_NO_MODIFICABLE` (409) y `PRODUCTO_INCOMPATIBLE` (422). Lo ajeno responde 404.
+
+**API del personal** (el ERP sigue congelado):
+
+| Método y ruta | Rol | Qué hace |
+| --- | --- | --- |
+| `GET /api/v1/tienda/productos/{refaccionId}` | `REFACCIONES`, `INVENTARIO`, `ADMINISTRADOR` | Cómo está publicada |
+| `PUT /api/v1/tienda/productos/{refaccionId}` | los mismos | Publicar o retirar: categoría, descripción, foto y compatibilidad |
+| `GET /api/v1/tienda/pedidos?estado=` | `REFACCIONES`, `ADMINISTRADOR` | Pedidos por surtir, los más antiguos primero |
+| `POST /api/v1/tienda/pedidos/{id}/listo` | los mismos | `APARTADO` a `LISTO` |
+| `POST /api/v1/tienda/pedidos/{id}/entregado` | los mismos | `LISTO` a `ENTREGADO` |
+| `POST /api/v1/tienda/pedidos/{id}/cancelar` | los mismos | Cancela y libera, motivo `AGENCIA` |
+
+**El taller lo ve en la orden:** `GET /api/v1/taller/ordenes/{id}` agrega `pedidosApp`, con los pedidos no cancelados ligados a la cita de la orden.
+
+**Aviso.** Cada cambio de estado publica `AvisoAlCliente` con `pedido.estado` (`pedidoId`, `estado`). Llega en vivo por SSE. El push con la app cerrada (V2-M14.05) llegará cuando exista V2-M06.07, sin cambiar este código.
+
 ### M15 · Encuestas y NPS — H4 — módulo `encuestas (nuevo)`
 
 Detalle: [`carecar-mobile/plan/modulos/M15-encuestas-nps.md`](https://github.com/lattice-systems/carecar-mobile/blob/main/plan/modulos/M15-encuestas-nps.md)
