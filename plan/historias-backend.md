@@ -333,12 +333,14 @@ Detalle: [`carecar-mobile/plan/modulos/M08-pagos-y-facturas.md`](https://github.
 
 | ID | Historia | Criterios de aceptación | Dueño |
 | --- | --- | --- | --- |
-| V2-M08.02 | Como cliente quiero pagar mi orden con tarjeta desde la app | 3-D Secure · idempotencia · estado pendiente/pagado/fallido · el ticket marca "pagado" | Ricardo |
-| V2-M08.03 | Como cliente quiero pagar con Apple Pay o Google Pay | Botón nativo según plataforma | Ricardo |
-| V2-M08.04 | Como cliente quiero guardar mis tarjetas | Tokenizadas · borrar · predeterminada | Ricardo |
-| V2-M08.05 | Como cliente quiero capturar mis datos fiscales | Validación de RFC y CP · varios perfiles | Ricardo |
-| V2-M08.06 | Como cliente quiero descargar mi factura PDF y XML | Disponible al timbrar · compartir/guardar | Ricardo |
-| V2-M08.07 | Como cliente quiero ver todos mis pagos | Lista paginada con estado y referencia | Ricardo |
+| V2-M08.02 | Como cliente quiero pagar mi orden con tarjeta desde la app | PaymentIntent con `Idempotency-Key` (un reintento no cobra dos veces) · `pendiente` hasta el webhook firmado, luego `pagado` o `fallido` con motivo · 3-D Secure en la hoja de pago · 409 `ORDEN_NO_PAGABLE` y `PAGO_EN_CURSO` · el ticket marca «Pagado» · evento `pago.confirmado` | Ricardo |
+| V2-M08.03 | Como cliente quiero pagar con Apple Pay o Google Pay | El mismo PaymentIntent acepta las billeteras · `pago_app.metodo` guarda `apple_pay` o `google_pay` | Ricardo |
+| V2-M08.04 | Como cliente quiero guardar mis tarjetas | Customer del procesador por cliente · `metodo_pago` con token, marca, últimos 4 y vencimiento, sin PAN · predeterminada · borrar también en el procesador · solo las propias | Ricardo |
+| V2-M08.05 | Como cliente quiero capturar mis datos fiscales | `perfil_fiscal` con RFC (formato y dígito verificador), CP, régimen y uso de CFDI de los catálogos de CFDI 4.0 · varios perfiles, uno predeterminado · 400 `DATOS_FISCALES_INVALIDOS` por campo | Ricardo |
+| V2-M08.06 | Como cliente quiero descargar mi factura PDF y XML | Timbrado con Facturama (sandbox) al confirmarse el pago o desde «Facturar» · `factura` con `tipo` `SERVICIO` y las columnas nuevas (sin quitar ninguna) · PDF y XML en `archivos` con URL firmada · 409 `YA_FACTURADO` · 422 `TIMBRADO_RECHAZADO` · evento `factura.timbrada` | Ricardo |
+| V2-M08.07 | Como cliente quiero ver todos mis pagos | `GET /pagos` paginado (20, del más nuevo) con estado y referencia · solo los propios | Ricardo |
+
+Decisión del procesador y del PAC (V2-M08.01): [ADR 0009](https://github.com/lattice-systems/carecar-mobile/blob/main/docs/decisiones/0009-procesador-de-pagos-y-timbrado.md) (Stripe y Facturama en modo de pruebas). Llaves solo por entorno: `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `FACTURAMA_USUARIO`, `FACTURAMA_CONTRASENA`; pruebas automáticas con `ProcesadorPagosFalso` y `TimbradorFalso`.
 
 ### M09 · Documentos y vencimientos — H3 — módulo `documentos (nuevo)`
 
@@ -351,7 +353,7 @@ Detalle: [`carecar-mobile/plan/modulos/M09-documentos-y-vencimientos.md`](https:
 | V2-M09.03 | Como cliente quiero ver los documentos que me dio la agencia | Factura de compra y póliza de garantía cargadas por la agencia aparecen solas | Haziel |
 | V2-M09.04 | Como cliente quiero alertas antes de que venza un documento | Push 30, 7 y 1 día antes · configurable | Haziel |
 
-### M10 · Garantía y campañas de seguridad — H3 — módulo `servicio`
+### M10 · Garantía y campañas de seguridad — H3 — módulo `carecarapp`
 
 Detalle: [`carecar-mobile/plan/modulos/M10-garantia-y-campanas.md`](https://github.com/lattice-systems/carecar-mobile/blob/main/plan/modulos/M10-garantia-y-campanas.md)
 
@@ -444,11 +446,13 @@ Detalle: [`carecar-mobile/plan/modulos/M12-lealtad.md`](https://github.com/latti
 
 | ID | Historia | Criterios de aceptación | Dueño |
 | --- | --- | --- | --- |
-| V2-M12.01 | Como cliente quiero ver mis puntos y nivel | Saldo por suma de movimientos · nivel por reglas del backend | Ricardo |
-| V2-M12.02 | Como cliente quiero ganar puntos al pagar un servicio | Evento de orden cerrada/pagada suma puntos | Ricardo |
-| V2-M12.03 | Como cliente quiero canjear recompensas | Canje descuenta puntos y genera código QR · sin saldo negativo (bloqueo de fila) | Ricardo |
-| V2-M12.04 | Como cliente quiero referir a un amigo | Enlace con código · el referido entra como prospecto en el backend · recompensa al cerrar venta | Ricardo |
-| V2-M12.05 | Como cliente quiero ver mis movimientos de puntos | Paginado, con motivo | Ricardo |
+| V2-M12.01 | Como cliente quiero ver mis puntos y nivel | Saldo = suma de `movimiento_puntos` · nivel por puntos ganados en 12 meses con `app.lealtad.*` · puntos al siguiente nivel | Ricardo |
+| V2-M12.02 | Como cliente quiero ganar puntos al pagar un servicio | Escucha `OrdenServicioCambiada` a `ENTREGADA` (y `pago.confirmado` cuando exista M08.02, sin sumar dos veces) · único por motivo y referencia · evento `puntos.movidos` | Ricardo |
+| V2-M12.03 | Como cliente quiero canjear recompensas | Canje con bloqueo de fila del cliente (sin saldo negativo) y de la recompensa con existencia · código y QR vigentes 30 días · 409 `SALDO_INSUFICIENTE` y `RECOMPENSA_AGOTADA` · endpoint del personal para marcar usado (409 `CANJE_NO_VIGENTE`) · job que devuelve los puntos de canjes vencidos | Ricardo |
+| V2-M12.04 | Como cliente quiero referir a un amigo | `referido` con consentimiento · evento que `ventascrm` escucha para crear el prospecto con origen `REFERIDO` (como Estreno) · 409 `REFERIDO_DUPLICADO` y `LIMITE_REFERIDOS` · `ProspectoFinalizado` da 500 puntos una sola vez | Ricardo |
+| V2-M12.05 | Como cliente quiero ver mis movimientos de puntos | `GET /lealtad/movimientos` paginado con motivo y referencia | Ricardo |
+
+Reglas propuestas (pendientes del PO) en [`M12-lealtad.md`](https://github.com/lattice-systems/carecar-mobile/blob/main/plan/modulos/M12-lealtad.md#reglas-propuestas-pendientes-del-po).
 
 ### M13 · Promociones y novedades — H4 — módulo `promociones (nuevo)`
 
