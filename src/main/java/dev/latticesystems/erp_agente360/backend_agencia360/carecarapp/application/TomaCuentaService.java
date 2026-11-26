@@ -103,7 +103,7 @@ public class TomaCuentaService {
 				marcaGuardada, modelo, anio, solicitud.km(), solicitud.estado(), parametro.getId(), resultado,
 				comoJson(supuestos), nombreDestino, precioDestino);
 		EstimacionTomaCuenta guardada = estimacionRepository.save(nueva);
-		return convertir(guardada);
+		return comoApp(guardada);
 	}
 
 	/**
@@ -116,7 +116,7 @@ public class TomaCuentaService {
 	public Pagina<EstimacionTomaCuentaApp> listar(Long clienteId, Integer pagina, Integer tamano) {
 		Pageable pedida = Pagina.pedir(pagina, tamano);
 		return Pagina.de(estimacionRepository.findByClienteIdOrderByCreatedAtDescIdDesc(clienteId, pedida),
-				this::convertir);
+				this::comoApp);
 	}
 
 	private void validarDatos(SolicitudEstimacion solicitud, int anioActual) {
@@ -187,7 +187,8 @@ public class TomaCuentaService {
 		}
 	}
 
-	private EstimacionTomaCuentaApp convertir(EstimacionTomaCuenta estimacion) {
+	/** La estimación como la ve la app, con los supuestos de ese día. */
+	EstimacionTomaCuentaApp comoApp(EstimacionTomaCuenta estimacion) {
 		try {
 			return new EstimacionTomaCuentaApp(estimacion.getId(), estimacion.getCreatedAt(),
 					estimacion.getVehiculoClienteId(), estimacion.getMarca(), estimacion.getModelo(),
