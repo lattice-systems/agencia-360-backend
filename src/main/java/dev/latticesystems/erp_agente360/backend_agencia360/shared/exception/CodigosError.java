@@ -72,6 +72,11 @@ public final class CodigosError {
 	public static final String PEDIDO_NO_MODIFICABLE = "PEDIDO_NO_MODIFICABLE";
 	/** V2-M14.03: un producto no le queda al vehículo de la cita. */
 	public static final String PRODUCTO_INCOMPATIBLE = "PRODUCTO_INCOMPATIBLE";
+	/**
+	 * V2-M08.05: un dato del perfil fiscal no cumple las reglas del SAT; el error
+	 * trae {@code campos} con qué corregir en cada uno.
+	 */
+	public static final String DATOS_FISCALES_INVALIDOS = "DATOS_FISCALES_INVALIDOS";
 
 	private CodigosError() {
 	}
