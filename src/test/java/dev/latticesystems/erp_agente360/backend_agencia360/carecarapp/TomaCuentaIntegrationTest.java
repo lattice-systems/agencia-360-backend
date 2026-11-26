@@ -27,6 +27,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
+import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
@@ -97,6 +98,14 @@ class TomaCuentaIntegrationTest extends AbstractIntegrationTest {
 				new BigDecimal("200000"), new BigDecimal("0.10"), new BigDecimal("0.05"), new BigDecimal("0.10")));
 	}
 
+	/**
+	 * Solo las suyas: la base la comparten otras pruebas que sí confirman filas.
+	 */
+	private long estimacionesDeAna() {
+		return estimacionRepository.findByClienteIdOrderByCreatedAtDescIdDesc(anaId, Pageable.ofSize(1))
+				.getTotalElements();
+	}
+
 	private ResultActions estimar(String token, String cuerpo) throws Exception {
 		return mockMvc.perform(post(RUTA).header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
 				.contentType(MediaType.APPLICATION_JSON).content(cuerpo));
@@ -131,7 +140,7 @@ class TomaCuentaIntegrationTest extends AbstractIntegrationTest {
 				.andExpect(jsonPath("$.supuestos.kmEsperado").value((anioActual - 2020) * 15_000))
 				.andExpect(jsonPath("$.supuestos.margen").value(0.08));
 
-		assertThat(estimacionRepository.count()).isEqualTo(1);
+		assertThat(estimacionesDeAna()).isEqualTo(1);
 	}
 
 	@Test
@@ -206,7 +215,7 @@ class TomaCuentaIntegrationTest extends AbstractIntegrationTest {
 			estimar(tokenDeAna, cuerpo).andExpect(status().isBadRequest())
 					.andExpect(jsonPath("$.codigo").value("DATOS_INVALIDOS"));
 		}
-		assertThat(estimacionRepository.count()).isZero();
+		assertThat(estimacionesDeAna()).isZero();
 	}
 
 	@Test
@@ -236,7 +245,7 @@ class TomaCuentaIntegrationTest extends AbstractIntegrationTest {
 		parametroRepository.flush();
 		estimar(tokenDeAna, conVehiculo(marchDeAnaId, 1000, "BUENO")).andExpect(status().isUnprocessableEntity())
 				.andExpect(jsonPath("$.codigo").value("SIN_PARAMETROS_DE_VALUACION"));
-		assertThat(estimacionRepository.count()).isZero();
+		assertThat(estimacionesDeAna()).isZero();
 	}
 
 	@Test

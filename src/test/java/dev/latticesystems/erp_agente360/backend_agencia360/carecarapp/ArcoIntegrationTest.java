@@ -113,6 +113,46 @@ class ArcoIntegrationTest extends AbstractIntegrationTest {
 	}
 
 	@Test
+	void elArchivoTraeLasValuacionesSinLasClavesDeSusFotosNiQuienOferto() throws Exception {
+		long vehiculo = jdbc.queryForObject("select id from vehiculo_cliente where cliente_id = ?", Long.class,
+				clienteId);
+		long parametro = jdbc.queryForObject("""
+				insert into parametro_toma_cuenta
+				  (marca, modelo, anio, valor_base, depreciacion_anual, factor_km, factor_estado, activo,
+				   created_at, updated_at)
+				values (?, 'Kicks', 2023, 200000, 0.1, 0.05, 0.1, true, now(), now()) returning id
+				""", Long.class, "Arco" + unico);
+		long estimacion = jdbc.queryForObject("""
+				insert into estimacion_toma_cuenta
+				  (cliente_id, vehiculo_cliente_id, marca, modelo, anio, km, estado, minimo, maximo,
+				   parametro_toma_cuenta_id, supuestos, created_at, updated_at)
+				values (?, ?, 'Nissan', 'Kicks', 2023, 12000, 'BUENO', 100000, 120000, ?, '{}', now(), now())
+				returning id
+				""", Long.class, clienteId, vehiculo, parametro);
+		jdbc.update("""
+				insert into valuacion (estimacion_toma_cuenta_id, cliente_id, vehiculo_cliente_id,
+				  fotos, estado, oferta,
+				  vigencia_hasta, oferta_nota, ofertada_por, ofertada_en, created_at, updated_at)
+				values (?, ?, ?, ?, 'OFERTADA', 111000, current_date + 5, 'Con papeles',
+				  987654, now(), now(), now())
+				""", estimacion, clienteId, vehiculo,
+				"{\"FRENTE\":{\"clave\":\"valuacion-fotos/clave-secreta\",\"subidaEn\":\"2026-11-25T10:00:00Z\"}}");
+
+		long id = pedirYEsperar(token);
+		String texto = mockMvc.perform(get("/api/v1/app/privacidad/arco/" + id + "/archivo")
+				.header(HttpHeaders.AUTHORIZATION, "Bearer " + token)).andExpect(status().isOk()).andReturn()
+				.getResponse().getContentAsString();
+		JsonNode archivo = json.readTree(texto);
+
+		assertThat(archivo.at("/valuaciones")).hasSize(1);
+		assertThat(archivo.at("/valuaciones/0/estado").asText()).isEqualTo("OFERTADA");
+		assertThat(archivo.at("/valuaciones/0/oferta").asInt()).isEqualTo(111_000);
+		assertThat(archivo.at("/valuaciones/0/oferta_nota").asText()).isEqualTo("Con papeles");
+		assertThat(archivo.at("/alcance/incluye").toString()).contains("valuaciones");
+		assertThat(texto).doesNotContain("clave-secreta").doesNotContain("ofertada_por").doesNotContain("987654");
+	}
+
+	@Test
 	void elArchivoTrae_LosDatosDeLaCuentaYNoLaContrasena() throws Exception {
 		long id = pedirYEsperar(token);
 
@@ -145,7 +185,7 @@ class ArcoIntegrationTest extends AbstractIntegrationTest {
 
 		// Las secciones sin datos existen y van vacías: el archivo dice qué no hay.
 		for (String vacia : List.of("citas", "traslados", "checklistsDeTraslado", "servicios", "estimacionesTomaCuenta",
-				"solicitudesEstreno", "solicitudesAsistencia", "avisosAceptados")) {
+				"valuaciones", "solicitudesEstreno", "solicitudesAsistencia", "avisosAceptados")) {
 			assertThat(archivo.has(vacia)).as(vacia).isTrue();
 			assertThat(archivo.get(vacia).isArray()).as(vacia).isTrue();
 		}

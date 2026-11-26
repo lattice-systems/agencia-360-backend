@@ -49,6 +49,16 @@ public final class CodigosError {
 	public static final String REFERIDO_DUPLICADO = "REFERIDO_DUPLICADO";
 	/** V2-M12.04: el cliente ya tiene el máximo de referidos abiertos. */
 	public static final String LIMITE_REFERIDOS = "LIMITE_REFERIDOS";
+	/** V2-M26.01: la estimación se hizo sin un vehículo registrado. */
+	public static final String VALUACION_SIN_VEHICULO = "VALUACION_SIN_VEHICULO";
+	/** V2-M26.02: la valuación ya no admite fotos. */
+	public static final String VALUACION_CERRADA = "VALUACION_CERRADA";
+	/** V2-M26.03: la valuación ya tiene cita o ya no se puede agendar. */
+	public static final String VALUACION_NO_AGENDABLE = "VALUACION_NO_AGENDABLE";
+	/** V2-M26.04: la vigencia de la oferta ya pasó. */
+	public static final String OFERTA_VENCIDA = "OFERTA_VENCIDA";
+	/** V2-M26.04: no hay una oferta que responder así. */
+	public static final String OFERTA_NO_DISPONIBLE = "OFERTA_NO_DISPONIBLE";
 
 	private CodigosError() {
 	}

@@ -63,7 +63,12 @@ public class ExportadorDeDatosJdbc implements ExportadorDeDatos {
 					join vehiculo_cliente v on v.id = o.vehiculo_cliente_id where v.cliente_id = :c
 					"""),
 			Seccion.lista("estimacionesTomaCuenta", "select * from estimacion_toma_cuenta where cliente_id = :c"),
-			Seccion.lista("solicitudesEstreno", "select * from solicitud_estreno where cliente_id = :c"),
+			// Sin las claves de las fotos ni quién del personal capturó la oferta.
+			Seccion.lista("valuaciones", """
+					select id, estimacion_toma_cuenta_id, vehiculo_cliente_id, cita_id, estado, oferta, oferta_nota,
+					  vigencia_hasta, ofertada_en, respondida_en, created_at, updated_at
+					from valuacion where cliente_id = :c
+					"""), Seccion.lista("solicitudesEstreno", "select * from solicitud_estreno where cliente_id = :c"),
 			Seccion.lista("solicitudesAsistencia", "select * from solicitud_asistencia where cliente_id = :c"),
 			Seccion.lista("consultasAsistente", "select * from consulta_asistente where cliente_id = :c"),
 			Seccion.lista("lecturasKm", """
@@ -83,7 +88,8 @@ public class ExportadorDeDatosJdbc implements ExportadorDeDatos {
 
 	private static final List<String> INCLUYE = List.of("Tus datos de contacto", "Tu cuenta de la app (sin contraseña)",
 			"Tus vehículos, citas, traslados y direcciones", "El historial de servicios de tus vehículos",
-			"Tus estimaciones de toma a cuenta y tus solicitudes de prueba de manejo o cotización",
+			"Tus estimaciones de toma a cuenta, tus valuaciones formales y tus solicitudes de prueba de manejo o "
+					+ "cotización",
 			"Tus solicitudes de asistencia y tus preguntas al asistente",
 			"Tu bitácora: lecturas de kilometraje y gastos", "Los avisos de privacidad que aceptaste",
 			"Tus solicitudes de derechos ARCO");

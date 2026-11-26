@@ -9,6 +9,7 @@ import dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.applicatio
 import dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.application.PaseWalletService;
 import dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.application.PlataformaWallet;
 import dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.domain.EstadoCita;
+import dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.domain.MotivoCita;
 import dev.latticesystems.erp_agente360.backend_agencia360.shared.security.UsuarioAutenticado;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -73,6 +74,11 @@ public class AgendaAppController {
 			+ "en la zona.")
 	public CitaApp agendar(@Valid @RequestBody NuevaCitaRequest request,
 			@AuthenticationPrincipal UsuarioAutenticado cliente) {
+		// La inspección solo nace desde su valuación (V2-M26.03): así no hay
+		// inspecciones sin solicitud.
+		if (request.motivo() == MotivoCita.VALUACION) {
+			throw new IllegalArgumentException("La inspección se agenda desde la valuación");
+		}
 		return agendaAppService.agendar(cliente.id(), request.vehiculoId(), request.franjaId(), request.fecha(),
 				request.motivo(), request.recoleccion() == null ? null : request.recoleccion().direccionId());
 	}

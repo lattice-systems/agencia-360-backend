@@ -114,6 +114,14 @@ Qué se puede probar:
 - Catálogo de la app: 22 modelos Nissan 2026, todos distintos, con versión, precio desde (MXN) y descripción, sin imagen (las fotos van en la app): March, Versa, Kicks, Sentra, X-Trail, Frontier PRO-4X, Leaf e+, Ariya Evolve+, Z Performance, GT-R Premium, Altima Platinum, Pathfinder Platinum, Murano Platinum, Armada Platinum Reserve, Titan Pro-4X, Urvan Panel, Maxima SR, Juke Exclusive, Qashqai Exclusive, Patrol Platinum, Tiida Advance, Note e-Power (`GET /api/v1/app/catalogo`).
 - Citas de Laura (por la API de la app, con `LAURA_CONTRASENA`, por defecto `CareCar2026!`): una CONFIRMADA del March a los 3+ días y una CANCELADA del Sentra (`GET /api/v1/app/citas`). Si Laura ya tiene citas no agrega más; si no inicia sesión, omite este paso.
 
+## Valuación formal
+
+El script pide con la cuenta de Laura una valuación del March a partir de una estimación (V2-M26.01). Si la base no tiene filas en `parametro_toma_cuenta` para ese auto, la estimación responde 422 y el paso se omite: esos parámetros los entrega el PO y todavía no se cargan por la API. Si Laura ya tiene una valuación no agrega otra.
+
+Qué se puede probar:
+- En la app: las fotos guiadas y la inspección desde la valuación.
+- Con `vendedor1`, `vendedor2` o `admin`, desde Swagger UI: `GET /api/v1/valuaciones` y, ya con la cita de hoy o anterior, `POST /api/v1/valuaciones/{id}/oferta`. Ventas solo ve las valuaciones de sus prospectos.
+
 ## Lo que no incluye todavía
 
 Ventas, pagos, facturas, clientes y órdenes de servicio: llegan en S2 a S4. Las citas ya existen, pero el script no las crea: solo el cliente puede agendarlas con su token, y su contraseña temporal solo está en Mailpit. El criterio de TEC-3 los pide, pero se agregan al script cuando existan sus endpoints.

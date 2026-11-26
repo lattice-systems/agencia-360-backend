@@ -36,6 +36,40 @@ class LimpiadorImagenTest {
 				.isInstanceOf(IllegalArgumentException.class);
 	}
 
+	@Test
+	void conOtroLadoMaximoEscalaAEseTamano() throws Exception {
+		BufferedImage leida = ImageIO.read(new ByteArrayInputStream(LimpiadorImagen.limpiar(png(3200, 1600), 1600)));
+
+		assertThat(leida.getWidth()).isEqualTo(1600);
+		assertThat(leida.getHeight()).isEqualTo(800);
+	}
+
+	@Test
+	void conLadoMaximoSoloAceptaJpegYPng() throws Exception {
+		ByteArrayOutputStream gif = new ByteArrayOutputStream();
+		ImageIO.write(new BufferedImage(4, 4, BufferedImage.TYPE_INT_RGB), "gif", gif);
+		byte[] webp = "RIFF0000WEBPVP8 ".getBytes(java.nio.charset.StandardCharsets.US_ASCII);
+
+		for (byte[] otro : new byte[][]{gif.toByteArray(), webp, "hola".getBytes(), new byte[0]}) {
+			assertThatThrownBy(() -> LimpiadorImagen.limpiar(otro, 1600)).isInstanceOf(IllegalArgumentException.class);
+		}
+	}
+
+	@Test
+	void rechazaPorElEncabezadoMasDeCuarentaMegapixelesSinDecodificar() throws Exception {
+		// Un PNG que solo trae el encabezado: si se intentara decodificar fallaría
+		// por otra causa.
+		byte[] enorme = png(10, 10);
+		java.nio.ByteBuffer encabezado = java.nio.ByteBuffer.wrap(enorme);
+		encabezado.putInt(16, 10_000).putInt(20, 4_001);
+		java.util.zip.CRC32 crc = new java.util.zip.CRC32();
+		crc.update(enorme, 12, 17);
+		encabezado.putInt(29, (int) crc.getValue());
+
+		assertThatThrownBy(() -> LimpiadorImagen.limpiar(enorme, 1600)).isInstanceOf(IllegalArgumentException.class)
+				.hasMessageContaining("megapíxeles");
+	}
+
 	private static byte[] png(int ancho, int alto) throws Exception {
 		ByteArrayOutputStream salida = new ByteArrayOutputStream();
 		ImageIO.write(new BufferedImage(ancho, alto, BufferedImage.TYPE_INT_RGB), "png", salida);

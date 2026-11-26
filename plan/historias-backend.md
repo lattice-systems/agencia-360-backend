@@ -840,17 +840,188 @@ El pase de Wallet de una cita cancelada o reprogramada deja de servir. **Google 
 - **Google tampoco se probó contra Google**: solo con un transporte falso. Probar con una cuenta de servicio real antes de entregar.
 - Los pases guardados antes de reprogramar no se actualizan si el cliente no los tenía guardados (404, se ignora).
 
-### M26 · Valuación y toma a cuenta avanzada — H5 — módulo `ventascrm`
+### M26 · Valuación y toma a cuenta avanzada — H5 — módulo `carecarapp`
 
 Detalle: [`carecar-mobile/plan/modulos/M26-valuacion.md`](https://github.com/lattice-systems/carecar-mobile/blob/main/plan/modulos/M26-valuacion.md)
 
 | ID | Historia | Criterios de aceptación | Dueño |
 | --- | --- | --- | --- |
-| V2-M26.01 | Como cliente quiero pedir una valuación formal desde mi estimación | Crea solicitud ligada a `estimacion_toma_cuenta` | Cristian |
-| V2-M26.02 | Como cliente quiero subir fotos guiadas de mi auto | 8 tomas guiadas (frente, laterales, interior, tablero con km…) con silueta | Cristian |
-| V2-M26.03 | Como cliente quiero agendar la inspección física | Reusa agenda con motivo "Valuación" | Cristian |
-| V2-M26.04 | Como cliente quiero recibir la oferta y aceptarla o rechazarla | Oferta con vigencia · se liga al prospecto de M16 | Cristian |
-| V2-M26.05 | Como cliente quiero ver cómo cambia el valor de mi auto con el tiempo | Gráfica de valor estimado por mes | Cristian |
+| V2-M26.01 | Como cliente quiero pedir una valuación formal desde mi estimación | `POST /valuaciones` con una estimación propia hecha con un vehículo registrado: 201 en `SOLICITADA`, o 200 con la que ya está abierta para ese vehículo. Estimación sin vehículo: 422 `VALUACION_SIN_VEHICULO`. Estimación ajena: 404 | Cristian |
+| V2-M26.02 | Como cliente quiero subir fotos guiadas de mi auto | 8 tomas fijas, una por petición, sin EXIF, reemplazables mientras la valuación admite cambios. Ya cerrada: 409 `VALUACION_CERRADA` | Cristian |
+| V2-M26.03 | Como cliente quiero agendar la inspección física | Reusa la agenda con motivo `valuacion` y sus reglas de cupo y cita duplicada. Una cita cancelada regresa la valuación a `SOLICITADA` | Cristian |
+| V2-M26.04 | Como cliente quiero recibir la oferta y aceptarla o rechazarla | El personal captura la oferta con vigencia, el cliente recibe el aviso `valuacion.oferta` y responde una sola vez. La valuación queda ligada a un prospecto de `ventascrm`, reutilizando el de M16 si sigue abierto | Cristian |
+| V2-M26.05 | Como cliente quiero ver cómo cambia el valor de mi auto con el tiempo | `GET /vehiculos/{vehiculoId}/valor-estimado` da un punto por mes con la última estimación guardada de ese mes, sin inventar los meses sin dato | Cristian |
+
+#### Diseño de V2-M26.01 a V2-M26.05: valuación formal
+
+**Dónde vive.** En `carecarapp`, como `solicitud_estreno` (M16) y las campañas (M10). La valuación necesita `estimacion_toma_cuenta`, la agenda de citas y el canal en vivo, que están ahí, y `carecarapp` ya depende de `ventascrm`. Ponerla en `ventascrm` formaría un ciclo que `ModularityTests` rechaza. De `ventascrm` solo se usa su API pública `ConsultaProspectos` y los eventos.
+
+**La ficha** (sección 22) pide `valuacion`, `estimacion_toma_cuenta` y `cita`. Las dos últimas ya existen y no cambian de columnas. `valuacion` se crea con ese nombre y con todos los campos del plan (`id`, `estimacion_toma_cuenta_id`, `cliente_id`, `fotos`, `cita_id`, `oferta`, `vigencia_hasta`, `estado`) más campos agregados.
+
+##### Tablas y migración
+
+Una migración, `V50__crear_valuacion.sql`. Al diseñar iba como `V49`, pero la lealtad (M12) se integró antes con ese número. Si otra historia integra antes una `V50`, se renombra con el siguiente número libre (el mayor de `main` más 1).
+
+| Columna de `valuacion` | Tipo | Notas |
+| --- | --- | --- |
+| `id` | bigint identidad | Ficha |
+| `estimacion_toma_cuenta_id` | bigint, obligatoria, FK | Ficha. De ahí salen los datos del auto y el rango estimado |
+| `cliente_id` | bigint, obligatoria, FK a `cliente` | Ficha |
+| `fotos` | text, obligatoria, `'{}'` por omisión | Ficha. Objeto JSON de toma a `{"clave", "subidaEn"}`, como texto igual que `estimacion_toma_cuenta.supuestos` |
+| `cita_id` | bigint, FK a `cita` | Ficha. La cita de inspección vigente |
+| `oferta` | numeric(12,2) | Ficha. Pesos con IVA |
+| `vigencia_hasta` | date | Ficha. Último día válido, hora de la agencia, inclusive |
+| `estado` | varchar(15), obligatoria | Ficha. `SOLICITADA`, `CITA_AGENDADA`, `OFERTADA`, `ACEPTADA`, `RECHAZADA`, `VENCIDA` |
+| `vehiculo_cliente_id` | bigint, obligatoria, FK | Agregada. Se copia de la estimación para la cita y el índice |
+| `prospecto_id` | bigint, FK a `prospecto` | Agregada. Nula hasta que hay prospecto |
+| `oferta_nota` | varchar(500) | Agregada. Condiciones que el vendedor quiere que el cliente lea |
+| `ofertada_por` | bigint | Agregada. Id del usuario del personal que capturó la oferta, para auditar |
+| `ofertada_en`, `respondida_en` | timestamptz | Agregadas |
+| `created_at`, `updated_at` | timestamptz | `Auditable` |
+
+Checks: `estado` en los seis valores, `oferta` mayor a cero, `oferta` y `vigencia_hasta` van juntas, los estados `OFERTADA`, `ACEPTADA`, `RECHAZADA` y `VENCIDA` exigen `oferta`, y `CITA_AGENDADA` exige `cita_id`. Índices: `(cliente_id, created_at desc)` y el único parcial `uq_valuacion_abierta` sobre `(cliente_id, vehiculo_cliente_id) where estado in ('SOLICITADA', 'CITA_AGENDADA', 'OFERTADA')`. Incluye `cliente_id` para que un vehículo que cambia de dueño no quede bloqueado por la valuación del anterior.
+
+La misma migración rehace `ck_cita_motivo` para sumar `VALUACION` (cabe en el `varchar(15)` actual).
+
+##### Estados
+
+| Estado | Entra cuando | Sale a |
+| --- | --- | --- |
+| `SOLICITADA` | Se pide la valuación, o su cita de inspección se cancela | `CITA_AGENDADA` |
+| `CITA_AGENDADA` | El cliente agenda la inspección | `OFERTADA`, o `SOLICITADA` si la cita se cancela |
+| `OFERTADA` | El personal captura la oferta | `ACEPTADA`, `RECHAZADA` o `VENCIDA` |
+| `VENCIDA` | Pasa `vigencia_hasta` sin respuesta | `OFERTADA` si el personal la renueva |
+| `ACEPTADA`, `RECHAZADA` | El cliente responde | Final |
+
+Las fotos no son un estado: se cuentan. Se puede agendar sin las 8 fotos y la oferta no las exige, porque la oferta formal sale de la inspección física.
+
+**Sincronización al leer**, como en las campañas de M10, sin job nuevo: una `CITA_AGENDADA` cuya cita está `CANCELADA` vuelve a `SOLICITADA` con `cita_id` nulo, y una `OFERTADA` cuya vigencia pasó se muestra y se guarda como `VENCIDA`. Antes de crear o de renovar se persisten las vencidas para que no choquen con el índice único. Un método que responde con error revierte la transacción, así que ninguna regla depende de guardar un estado y lanzar la excepción en la misma transacción: se decide con el estado calculado.
+
+Reprogramar la cita con `POST /citas/{citaId}/reprogramar` conserva su id, así que la valuación no cambia.
+
+Agendar, subir una foto, ofertar y responder bloquean la fila de `valuacion` (`PESSIMISTIC_WRITE`). Sin el bloqueo, dos fotos subidas a la vez pisan la una a la otra dentro del JSON de `fotos`.
+
+##### Fotos (V2-M26.02)
+
+Tomas fijas, en este orden, en el enum `TomaValuacion`: `FRENTE`, `TRASERA`, `LATERAL_IZQUIERDO`, `LATERAL_DERECHO`, `INTERIOR_DELANTERO`, `INTERIOR_TRASERO`, `TABLERO_KM` y `CAJUELA`.
+
+- Una foto por petición y por toma. Volver a subir una toma la reemplaza, así que reintentar tras un corte de red es seguro.
+- JPEG o PNG de hasta 8 MB. No se acepta WebP porque `LimpiadorImagen` no lo decodifica.
+- Se guarda siempre la versión reescrita por `LimpiadorImagen`, que quita EXIF y ubicación GPS. Se agrega `limpiar(bytes, ladoMaximo)` y aquí se usa 1600 px. `limpiar(bytes)` sigue en 1024 para el asistente (M24).
+- Antes de decodificar se leen las dimensiones del encabezado y se rechaza con 400 lo que pase de 40 megapíxeles, para que un archivo chico no agote la memoria.
+- Se guardan con `AlmacenArchivos` en la carpeta `valuacion-fotos`. La foto reemplazada se borra del almacén solo después del commit, y la nueva se borra si la transacción falla.
+- Se entregan con `urlTemporal` (HMAC, 15 minutos). La clave del archivo nunca sale en la API.
+
+##### Inspección (V2-M26.03)
+
+`ValuacionService.agendar` usa `AgendaAppService.agendar(..., MotivoCita.VALUACION)` en la misma transacción, como `CampanasAppService`. Se puede agendar en `SOLICITADA`, y en `CITA_AGENDADA` solo si la cita ya pasó hace más de `app.valuacion.dias-sin-oferta` días (7) sin oferta, que es el caso de quien no llegó. En cualquier otro caso responde 409 `VALUACION_NO_AGENDABLE`. `Valuacion` expone esta regla en `puedeAgendar`, calculado en el servidor, para que la app no repita el plazo.
+
+`POST /citas` con `motivo` `valuacion` responde 400 `DATOS_INVALIDOS`: esa cita solo nace desde la valuación, para que no haya inspecciones sin solicitud.
+
+##### Prospecto (V2-M26.01 y V2-M26.04)
+
+La valuación se liga al prospecto desde que se pide, porque es el momento en que ventas debe enterarse.
+
+1. Si el cliente ya tiene un prospecto abierto (`ConsultaProspectos`, no terminado), se reutiliza. Orden de búsqueda: el de la `solicitud_estreno` con la misma estimación, el de su `solicitud_estreno` más reciente (el prospecto de M16) y el de su valuación más reciente.
+2. Si no hay, `carecarapp` publica `ValuacionSolicitada` y `ventascrm` crea el prospecto con `Prospecto.registrarDesdeApp` (origen `APP`, etapa `PRIMER_CONTACTO`) con la misma asignación de vendedor de M16. Publica `ProspectoDeValuacionCreado` y `carecarapp` guarda `prospecto_id`.
+
+La oferta y la respuesta del cliente **no mueven la etapa** del prospecto: el vendedor la cambia en el CRM, igual que en M16, para no saltar sus reglas.
+
+| Evento (`shared/eventos`) | Publica | Escucha |
+| --- | --- | --- |
+| `ValuacionSolicitada(valuacionId, nombre, correo, telefono)` | `carecarapp`, solo si no hay prospecto que reutilizar | `ventascrm` con `@ApplicationModuleListener` |
+| `ProspectoDeValuacionCreado(valuacionId, prospectoId)` | `ventascrm` | `carecarapp` |
+| `AvisoAlCliente` con `valuacion.oferta` (`valuacionId`, `vehiculoId`, `vigenciaHasta`) | `carecarapp` al capturar la oferta | Avisos en vivo (SSE) y, cuando exista, el push de V2-M06.07 |
+
+El aviso **no lleva el monto**, para que no aparezca en la pantalla bloqueada cuando llegue como push. No hay evento al responder porque hoy nadie lo escucharía.
+
+##### Cómo se captura la oferta (ERP y CRM congelados)
+
+No se hace pantalla web. Igual que en las campañas (M10), los traslados (M17) y el canje de M12, el personal usa **endpoints protegidos** bajo `/api/v1/valuaciones`. Se operan con Swagger UI en local y con un cliente HTTP donde Swagger está apagado. Van documentados en OpenAPI del servicio (`/v3/api-docs`) y en el README, **no** en el contrato de la app.
+
+| Método y ruta | Rol | Respuesta y errores |
+| --- | --- | --- |
+| `GET /api/v1/valuaciones?estado=&pagina=&tamano=` | `VENTAS`, `ADMINISTRADOR` | 200 paginado, más antiguas primero. 400, 401, 403 |
+| `GET /api/v1/valuaciones/{id}` | `VENTAS`, `ADMINISTRADOR` | 200 con cliente (nombre), auto, rango estimado, cita y fotos con URL firmada. 404 |
+| `POST /api/v1/valuaciones/{id}/oferta` `{monto, vigenciaHasta?, nota?}` | `VENTAS`, `ADMINISTRADOR` | 200. 400 si el monto no es mayor a cero, tiene más de 2 decimales, la vigencia no está entre hoy y `app.valuacion.vigencia-maxima-dias` (30) o la nota pasa de 500. 404. 409 `TRANSICION_INVALIDA` |
+
+- `VENTAS` ve y oferta **solo** las valuaciones cuyo prospecto tiene asignado. Las demás, y las que aún no tienen prospecto, responden 404. `ADMINISTRADOR` ve todas. Para listar sin leer tablas ajenas, `ConsultaProspectos` suma `delVendedor(vendedorId)` con los ids de sus prospectos.
+- Sin `vigenciaHasta` se usa hoy más `app.valuacion.vigencia-dias` (7). Los tres valores de configuración son **propuestas pendientes del PO**.
+- Se puede ofertar con una cita confirmada cuya fecha es hoy o anterior (la inspección ya ocurrió), o para renovar una `VENCIDA` si no hay otra abierta de ese cliente y vehículo. Cualquier otro caso es 409 `TRANSICION_INVALIDA`.
+- **Una oferta vigente no se edita.** Mientras está `OFERTADA` no se puede capturar otra.
+
+##### Endpoints de la app
+
+Rol `CLIENTE_CARECAR`, contrato **2.20.0**, etiqueta `Valuación`. Toda ruta responde además 401 y 403 `CUENTA_DESACTIVADA`. Lo ajeno responde 404.
+
+| Método y ruta | Historia | Éxito | Errores propios |
+| --- | --- | --- | --- |
+| `POST /valuaciones` `{estimacionTomaCuentaId}` | M26.01 | 201 `Valuacion`, o 200 con la abierta de ese vehículo | 400, 404 (estimación ajena o inexistente, o su vehículo ya no es del cliente), 422 `VALUACION_SIN_VEHICULO` |
+| `GET /valuaciones?pagina=&tamano=` | M26.01 | 200 `PaginaValuaciones`, la más reciente primero | 400 |
+| `GET /valuaciones/{valuacionId}` | M26.01 | 200 `Valuacion` | 404 |
+| `POST /valuaciones/{valuacionId}/fotos/{toma}` multipart `imagen` | M26.02 | 200 `Valuacion` | 400 (toma, tipo, tamaño o imagen ilegible), 404, 409 `VALUACION_CERRADA` si no está `SOLICITADA` ni `CITA_AGENDADA` |
+| `POST /valuaciones/{valuacionId}/cita` `{franjaId, fecha}` | M26.03 | 201 `Cita` con `motivo` `valuacion` | 400, 404, 409 `VALUACION_NO_AGENDABLE`, `FRANJA_SIN_CUPO` o `CITA_DUPLICADA` |
+| `POST /valuaciones/{valuacionId}/respuesta` `{aceptada, monto}` | M26.04 | 200 `Valuacion` | 400, 404, 409 `OFERTA_VENCIDA` u `OFERTA_NO_DISPONIBLE` |
+| `GET /vehiculos/{vehiculoId}/valor-estimado?meses=` | M26.05 | 200 `ValorEstimado` | 400 si `meses` no está entre 1 y 36, 404 |
+
+- La foto va por `POST` y no por `PUT` para reusar el envío multipart que la app ya tiene.
+- `respuesta` pide el `monto` que el cliente vio. Si no es el de la oferta actual (se venció y se renovó con la pantalla abierta), responde 409 `OFERTA_NO_DISPONIBLE` y nadie acepta una cifra que no leyó. Repetir la misma decisión con el mismo monto responde 200 sin cambiar nada, por los reintentos. La decisión contraria, o responder sin oferta, es 409 `OFERTA_NO_DISPONIBLE`. `OFERTA_VENCIDA` es para la oferta cuya vigencia pasó.
+- `asesor` es el nombre del vendedor del prospecto (`ConsultaVendedores.nombreDe`), nulo mientras no haya.
+- `GET /eventos` documenta `valuacion.oferta` (`AvisoValuacionOferta`).
+
+**Códigos nuevos y el contrato.** `VALUACION_SIN_VEHICULO` (422), `VALUACION_CERRADA`, `VALUACION_NO_AGENDABLE`, `OFERTA_VENCIDA` y `OFERTA_NO_DISPONIBLE` (409). Están en `CodigosError` y en el enum de `Problema.codigo`. El diseño salió como 2.19.0 y los códigos como 2.19.1, pero la lealtad (M12) integró antes su propia 2.19.0, así que todo lo de M26 queda en **2.20.0**, la siguiente menor libre. El implementador de la app copia esa versión junto con sus valores de `CodigoProblema`.
+
+##### Valor en el tiempo (V2-M26.05)
+
+No crea tablas ni cambia la fórmula. `valor-estimado` toma las `estimacion_toma_cuenta` del cliente para ese vehículo, las agrupa por mes de la zona `America/Mexico_City` dentro de los últimos `meses` (12 por omisión, contando el actual) y de cada mes usa la más reciente. Cada punto trae `mes` (`AAAA-MM`), `estimacionTomaCuentaId`, `creadaEn`, `minimo`, `maximo`, `medio` (promedio de ambos, 2 decimales), `km` y `estado`. Van del mes más antiguo al más reciente. Un mes sin estimación **no aparece**: no se interpola ni se recalcula hacia atrás con los parámetros de hoy, porque eso mostraría valores que nadie estimó. Sin estimaciones responde 200 con la lista vacía.
+
+##### Seguridad y privacidad
+
+- El cliente sale del token. Toda consulta de la app filtra por él y lo ajeno responde 404, también las fotos (solo se llega a ellas por la URL firmada de una valuación propia).
+- Las fotos muestran placas y a veces el interior o personas. No se escriben en registros ni claves, nombres, montos o contenido.
+- **ARCO, obligatorio en este mismo cambio.** `AnonimizadorDeCuentaJdbc` borra las `estimacion_toma_cuenta` del cliente, así que sin tocarlo la llave foránea de `valuacion` haría fallar la cancelación de la cuenta. Antes de borrar las estimaciones debe borrar sus valuaciones y, al confirmar la transacción, las fotos del almacén. La cita se conserva como hoy y el prospecto no se toca. `ExportadorDeDatosJdbc` suma la sección `valuaciones` (sin las claves de `fotos` ni `ofertada_por`) y su texto en `INCLUYE`.
+
+##### Capas
+
+- `domain`: `Valuacion` (transiciones y vigencia), `EstadoValuacion`, `TomaValuacion` y `MotivoCita.VALUACION`.
+- `infrastructure`: `ValuacionRepository`, con la lectura que bloquea la fila.
+- `application`: `ValuacionService` (cliente y personal), `ValorEstimadoService`, `ValuacionApp` y `ValorEstimadoApp`. Reloj inyectado y zona de la agencia.
+- `web`: `ValuacionController` y `ValuacionPersonalController`.
+- `ventascrm.application`: el escucha de `ValuacionSolicitada`, reusando la elección de vendedor de `ProspectosDeEstrenoService`.
+- Datos de ejemplo: `scripts/cargar-datos-de-ejemplo.sh` suma una valuación de ejemplo (OB5).
+
+##### Pruebas pedidas
+
+- **Dominio (`ValuacionTest`):** cada transición permitida y cada una prohibida, vigencia el último día (válida) y al día siguiente (vencida), respuesta repetida, respuesta contraria, monto distinto al vigente, reemplazo de una toma.
+- **Servicio (Mockito):** reutiliza el prospecto abierto de M16 y no publica evento, publica `ValuacionSolicitada` cuando no hay o está terminado, devuelve la abierta del mismo vehículo, cita cancelada reabre, reagenda solo tras los días sin oferta, la foto anterior se borra después del commit y la nueva si falla, `valor-estimado` con varios registros en un mes, meses vacíos y cambio de mes por zona horaria.
+- **Integración (`ValuacionIntegrationTest`):** cada criterio y cada código de la tabla. 401 y 403 en app y personal, token de cliente rechazado en rutas del personal y rol `SERVICIO` rechazado. Recursos de otro cliente 404 en todas las rutas. `VENTAS` sin el prospecto 404. Foto con EXIF que se guarda sin él, WebP, archivo que no es imagen y más de 8 MB con 400. URL firmada descarga y alterada da 404. `POST /citas` con `valuacion` da 400. El prospecto queda con origen `APP`. El aviso `valuacion.oferta` llega solo al dueño y sin monto. La oferta de una inspección futura da 409 y la de una cita de hoy o anterior se siembra por repositorio.
+- **ARCO:** cancelar la cuenta con una valuación con fotos termina bien y no deja fila ni archivo, y la descarga incluye la sección.
+- `ModularityTests` y `ContratoCodigosDeErrorTest` en verde.
+
+##### Entrega sugerida y supuestos sobre trabajo de otras personas
+
+PR sugeridos para que cada uno sea revisable: (1) migración, solicitud, lista, prospecto y ARCO, (2) fotos, (3) inspección y oferta, (4) valor en el tiempo.
+
+- **Citas y agenda (Juan Pablo, M02):** se toca `MotivoCita` y la validación de `AgendaAppController`.
+- **Prospectos (Daniel, M16) y ARCO (Daniel, M22):** se toca el escucha en `ventascrm`, `ConsultaProspectos`, `AnonimizadorDeCuentaJdbc` y `ExportadorDeDatosJdbc`.
+- **Fotos (Daniel, M24):** `LimpiadorImagen` gana una sobrecarga sin cambiar la actual.
+- **Push (Jael, M06):** `valuacion.oferta` es un `AvisoAlCliente`, así que llegará como push sin cambiar este código.
+- **PO:** sin filas en `parametro_toma_cuenta` toda estimación responde 422 en el backend real, y sin estimación no hay valuación ni gráfica.
+
+##### Estado: implementado en este repo
+
+V2-M26.01 a V2-M26.05 están en el backend, con pruebas de dominio, de servicio y de integración contra PostgreSQL. Precisiones al implementar:
+
+- `responder` no pone al día la valuación antes de decidir: calcula la vigencia con la fecha, porque el 409 revierte la transacción.
+- La oferta vencida y la cita cancelada se guardan al consultar, bloqueando la fila. La lista del personal solo bloquea las atrasadas.
+- Crear y renovar toman además un bloqueo por vehículo, para que dos peticiones a la vez no choquen con `uq_valuacion_abierta`.
+- Una foto de más de 20 MB la corta antes el límite general de subida, que responde 413 y no 400.
+
+Pendientes:
+
+- Los plazos de `app.valuacion.*` y las filas de `parametro_toma_cuenta` esperan al PO. Sin parámetros, el script de datos de ejemplo omite la valuación.
+- `LimpiadorImagen` quita el EXIF sin aplicar su orientación. La app debe mandar la foto ya girada.
+- Pantalla de la app contra este backend y tablero en `carecar-mobile`.
 
 ### M27 · Centro de ayuda y sucursales — H4 — módulo `carecarapp`
 
