@@ -43,7 +43,8 @@ class ConsultaRecepcionesServiceTest {
 		Refaccion refaccion = Refaccion.registrar("FIL-ACE-01", "Filtro de aceite", new BigDecimal("180.50"),
 				new BigDecimal("320.00"), 5);
 		when(refaccionRepository.existsById(1L)).thenReturn(true);
-		when(movimientoRepository.findByRefaccionIdAndTipoOrderByFechaRegistroDescIdDesc(1L, TipoMovimiento.ENTRADA))
+		when(movimientoRepository.findByRefaccionIdAndTipoAndPedidoAppIdIsNullOrderByFechaRegistroDescIdDesc(1L,
+				TipoMovimiento.ENTRADA))
 				.thenReturn(List.of(refaccion.recibir(new Recepcion(4, "Bajío", "Tarde", AYER), 7L, AHORA)));
 
 		assertThat(service.listar(1L)).singleElement().satisfies(recepcion -> {

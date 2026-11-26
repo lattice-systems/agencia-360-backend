@@ -7,7 +7,10 @@ import org.springframework.data.jpa.repository.JpaRepository;
 
 public interface MovimientoInventarioRepository extends JpaRepository<MovimientoInventario, Long> {
 
-	/** Del registro más reciente al más antiguo. */
-	List<MovimientoInventario> findByRefaccionIdAndTipoOrderByFechaRegistroDescIdDesc(Long refaccionId,
-			TipoMovimiento tipo);
+	/**
+	 * Del registro más reciente al más antiguo. Deja fuera los movimientos de los
+	 * pedidos de la app, que no son recepciones.
+	 */
+	List<MovimientoInventario> findByRefaccionIdAndTipoAndPedidoAppIdIsNullOrderByFechaRegistroDescIdDesc(
+			Long refaccionId, TipoMovimiento tipo);
 }
