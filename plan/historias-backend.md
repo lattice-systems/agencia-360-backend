@@ -327,20 +327,39 @@ Detalle: [`carecar-mobile/plan/modulos/M07-mensajeria-asesor.md`](https://github
 | V2-M07.03 | Como cliente quiero mandar fotos y audios | Compresión antes de subir · límite de tamaño · progreso | Jael |
 | V2-M07.04 | Como cliente quiero saber si mi mensaje fue leído | Doble palomita al leer | Jael |
 
-### M08 · Pagos y facturas — H5 — módulo `caja + facturacion`
+### M08 · Pagos y facturas — H5 — módulo `carecarapp`
 
 Detalle: [`carecar-mobile/plan/modulos/M08-pagos-y-facturas.md`](https://github.com/lattice-systems/carecar-mobile/blob/main/plan/modulos/M08-pagos-y-facturas.md)
 
 | ID | Historia | Criterios de aceptación | Dueño |
 | --- | --- | --- | --- |
-| V2-M08.02 | Como cliente quiero pagar mi orden con tarjeta desde la app | PaymentIntent con `Idempotency-Key` (un reintento no cobra dos veces) · `pendiente` hasta el webhook firmado, luego `pagado` o `fallido` con motivo · 3-D Secure en la hoja de pago · 409 `ORDEN_NO_PAGABLE` y `PAGO_EN_CURSO` · el ticket marca «Pagado» · evento `pago.confirmado` | Ricardo |
-| V2-M08.03 | Como cliente quiero pagar con Apple Pay o Google Pay | El mismo PaymentIntent acepta las billeteras · `pago_app.metodo` guarda `apple_pay` o `google_pay` | Ricardo |
-| V2-M08.04 | Como cliente quiero guardar mis tarjetas | Customer del procesador por cliente · `metodo_pago` con token, marca, últimos 4 y vencimiento, sin PAN · predeterminada · borrar también en el procesador · solo las propias | Ricardo |
+| V2-M08.02 | Como cliente quiero pagar mi orden con tarjeta desde la app | `ProcesadorSimulado` decide por la tarjeta de prueba · intento con `Idempotency-Key` (un reintento no cobra dos veces) · `pendiente` hasta la confirmación simulada, luego `pagado` o `fallido` con motivo · 3-D Secure simulado · 409 `ORDEN_NO_PAGABLE` y `PAGO_EN_CURSO` · «pagada en caja» por el personal · el ticket marca «Pagado» · evento `pago.confirmado` | Ricardo |
+| V2-M08.03 | Como cliente quiero pagar con Apple Pay o Google Pay | Billeteras simuladas en la hoja de pago propia · `pago_app.metodo` guarda `apple_pay` o `google_pay` | Ricardo |
+| V2-M08.04 | Como cliente quiero guardar mis tarjetas | `metodo_pago` con token simulado, marca, últimos 4 y vencimiento, sin número completo · predeterminada · borrar · solo las propias | Ricardo |
 | V2-M08.05 | Como cliente quiero capturar mis datos fiscales | `perfil_fiscal` con RFC (formato y dígito verificador), CP, régimen y uso de CFDI de los catálogos de CFDI 4.0 · varios perfiles, uno predeterminado · 400 `DATOS_FISCALES_INVALIDOS` por campo | Ricardo |
-| V2-M08.06 | Como cliente quiero descargar mi factura PDF y XML | Timbrado con Facturama (sandbox) al confirmarse el pago o desde «Facturar» · `factura` con `tipo` `SERVICIO` y las columnas nuevas (sin quitar ninguna) · PDF y XML en `archivos` con URL firmada · 409 `YA_FACTURADO` · 422 `TIMBRADO_RECHAZADO` · evento `factura.timbrada` | Ricardo |
+| V2-M08.06 | Como cliente quiero descargar mi factura PDF y XML | `TimbradorSimulado`: XML con la estructura de CFDI 4.0 y timbre simulado, PDF con OpenPDF y la leyenda «Factura simulada, sin validez fiscal», al confirmarse el pago o desde «Facturar» · `factura` con `tipo` `SERVICIO` y las columnas nuevas (sin quitar ninguna) · PDF y XML en `archivos` con URL firmada · 409 `YA_FACTURADO` · 422 `TIMBRADO_RECHAZADO` · evento `factura.timbrada` | Ricardo |
 | V2-M08.07 | Como cliente quiero ver todos mis pagos | `GET /pagos` paginado (20, del más nuevo) con estado y referencia · solo los propios | Ricardo |
 
-Decisión del procesador y del PAC (V2-M08.01): [ADR 0009](https://github.com/lattice-systems/carecar-mobile/blob/main/docs/decisiones/0009-procesador-de-pagos-y-timbrado.md) (Stripe y Facturama en modo de pruebas). Llaves solo por entorno: `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `FACTURAMA_USUARIO`, `FACTURAMA_CONTRASENA`; pruebas automáticas con `ProcesadorPagosFalso` y `TimbradorFalso`.
+Decisión del procesador y del timbrado (V2-M08.01, aceptada por el SM Daniel Ojeda Luna y el PO Haziel Hernández): [ADR 0009](https://github.com/lattice-systems/carecar-mobile/blob/main/docs/decisiones/0009-procesador-de-pagos-y-timbrado.md). **Todo es simulado y propio**: no hay Stripe, Facturama ni ningún otro servicio externo, ni cuentas, llaves o secretos nuevos. Las interfaces `ProcesadorPagos` y `Timbrador` tienen una sola implementación (`ProcesadorSimulado` y `TimbradorSimulado`), así que un procesador o un PAC reales serían otra implementación con su propia ADR. La app y la factura lo dicen («Pago simulado, no se cobra», «Factura simulada, sin validez fiscal»). M08 vive en `carecarapp` porque usa sus avisos en vivo y los datos del cliente de la app; `facturacion` (ERP, congelado) no se toca hasta V2-M08.06, que solo agrega columnas a `factura`.
+
+#### Diseño técnico — V2-M08.05 (Ricardo)
+
+**Tabla** (migración `crear_perfil_fiscal`): `perfil_fiscal` con las columnas de la ficha (`id`, `cliente_id`, `rfc`, `razon_social`, `regimen_fiscal`, `codigo_postal`, `uso_cfdi`, `correo`, `predeterminado`, `creado_en`) más `actualizado_en`. Checks de forma del RFC, código postal de 5 dígitos, régimen de 3 dígitos y razón social no vacía. `uq_perfil_fiscal_predeterminado` (índice único parcial por `cliente_id` donde `predeterminado`) impide dos predeterminados.
+
+**Reglas** (`DatosFiscales.validar`, en `carecarapp/domain`):
+
+- RFC en mayúsculas: 12 caracteres es persona moral y 13 física (`TipoPersona`), forma del SAT, fecha real (año de 2 dígitos, el 29 de febrero solo en años múltiplos de 4) y dígito verificador módulo 11 (`Rfc`). `XAXX010101000` y `XEXX010101000` no se aceptan: son para el público en general.
+- Razón social en mayúsculas y sin espacios de más (hasta 254), código postal de 5 dígitos, correo opcional.
+- Régimen y uso del catálogo (`CatalogoFiscal`, CFDI 4.0, dentro del proyecto porque la facturación es simulada), que apliquen al tipo de persona y el uso aceptado por el régimen del receptor. `CP01` y `CN01` no están: no sirven para la factura de un servicio.
+- Junta todos los campos que fallan: 400 `DATOS_FISCALES_INVALIDOS` con `campos` (nombre del campo → qué corregir). `campos` es nuevo y opcional en `ApiError` y en `Problema` (`CamposInvalidosException`).
+
+**Predeterminado:** el primero lo es siempre; otro lo toma con `predeterminado: true` (en `false` o sin él no cambia cuál es); al borrar el predeterminado lo toma el más viejo que quede. Los cambios de un cliente se serializan con `pg_advisory_xact_lock` y el anterior se escribe antes del nuevo para no chocar con el índice.
+
+**Endpoints** (`/api/v1/app`, rol `CLIENTE_CARECAR`): `GET /catalogos-fiscales`; `GET` y `POST /perfiles-fiscales`; `GET`, `PUT` y `DELETE /perfiles-fiscales/{id}` (uno ajeno responde 404). Contrato 2.22.0, tag «Pagos y facturas».
+
+**Derechos ARCO:** la copia de mis datos (V2-M22.02) incluye `perfilesFiscales` y cancelar la cuenta (V2-M22.03) los borra. Las facturas de V2-M08.06 guardarán su propia copia del receptor, que sí se conserva por ley.
+
+**Sin eventos.** Pruebas: `DatosFiscalesTest`, `PerfilesFiscalesAppServiceTest` y `PerfilesFiscalesIntegrationTest`.
 
 ### M09 · Documentos y vencimientos — H3 — módulo `documentos (nuevo)`
 

@@ -25,11 +25,11 @@ El plan maestro (propósito, objetivos, hitos, módulos, reparto y tablero) vive
 
 | Módulo | Estado hoy | Uso en la v2 |
 | --- | --- | --- |
-| `carecarapp` | Con código (tienda, valuación formal, acceso, vehículos, manuales, servicios, citas, catálogo, asistente, avisos en vivo, aviso de privacidad) | Puerta de entrada `/api/v1/app`; orquesta lecturas para la app; el asistente (M24) vive aquí mientras no crezca |
+| `carecarapp` | Con código (datos fiscales, tienda, valuación formal, acceso, vehículos, manuales, servicios, citas, catálogo, asistente, avisos en vivo, aviso de privacidad) | Puerta de entrada `/api/v1/app`; orquesta lecturas para la app; el asistente (M24) vive aquí mientras no crezca |
 | `clientes` | Con código | Cliente y vehículos del cliente (ficha) |
 | `servicio` | Con código (`orden_servicio`, `orden_refaccion`, `orden_mano_de_obra`; publica `OrdenServicioCambiada`) | Orden de servicio, etapas, inspección, adicionales, mantenimiento, garantía, traslados (lo que V2-T05.01 llamaba `postventa`) |
 | `refacciones`, `inventario` | Inventario con código (publicación, compatibilidad y apartados por movimientos) | Tienda y apartados (M14); los pedidos viven en `carecarapp` |
-| `caja`, `facturacion` | Facturación con código | Pagos en app y CFDI (M08; lo que V2-T05.01 llamaba `pagosapp`) |
+| `caja`, `facturacion` | Facturación con código | Los pagos y las facturas de la app (M08) viven en `carecarapp` y son simulados ([ADR 0009](https://github.com/lattice-systems/carecar-mobile/blob/main/docs/decisiones/0009-procesador-de-pagos-y-timbrado.md)); `facturacion` solo recibe las columnas nuevas de `factura` con V2-M08.06 |
 | `ventascrm` | Con código | Prospectos desde la app (M16, M26, referidos M12) |
 | `notificaciones` | **Nuevo** | Push FCM, bandeja y preferencias (M06) |
 | `mensajeria` | **Nuevo** | Chat cliente–asesor (M07) |
