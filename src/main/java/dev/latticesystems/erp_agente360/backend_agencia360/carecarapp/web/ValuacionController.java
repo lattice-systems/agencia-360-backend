@@ -75,6 +75,14 @@ public class ValuacionController {
 		return valuaciones.agendar(cliente.id(), valuacionId, request.franjaId(), request.fecha());
 	}
 
+	@PostMapping("/valuaciones/{valuacionId}/respuesta")
+	@Operation(summary = "Aceptar o rechazar la oferta", description = "monto es el que el cliente vio. 409 "
+			+ "OFERTA_VENCIDA u OFERTA_NO_DISPONIBLE. Repetir la misma respuesta responde 200.")
+	public ValuacionApp responder(@PathVariable Long valuacionId, @Valid @RequestBody RespuestaOfertaRequest request,
+			@AuthenticationPrincipal UsuarioAutenticado cliente) {
+		return valuaciones.responder(cliente.id(), valuacionId, request.aceptada(), request.monto());
+	}
+
 	@PostMapping(path = "/valuaciones/{valuacionId}/fotos/{toma}", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
 	@Operation(summary = "Subir o reemplazar una foto guiada", description = "JPEG o PNG de hasta 8 MB y 40 "
 			+ "megapíxeles; se guarda sin EXIF. 409 VALUACION_CERRADA si ya no admite fotos.")

@@ -20,12 +20,18 @@ import dev.latticesystems.erp_agente360.backend_agencia360.shared.exception.Codi
 import dev.latticesystems.erp_agente360.backend_agencia360.shared.exception.ConflictoException;
 import dev.latticesystems.erp_agente360.backend_agencia360.shared.exception.NoProcesableException;
 import dev.latticesystems.erp_agente360.backend_agencia360.shared.exception.RecursoNoEncontradoException;
+import dev.latticesystems.erp_agente360.backend_agencia360.shared.security.Role;
+import dev.latticesystems.erp_agente360.backend_agencia360.shared.security.UsuarioAutenticado;
 import dev.latticesystems.erp_agente360.backend_agencia360.ventascrm.ConsultaProspectos;
+import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.LocalDate;
+import java.util.EnumSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 import java.util.stream.Stream;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
@@ -52,6 +58,7 @@ public class ValuacionService {
 	private static final int FOTO_BYTES_MAXIMOS = 8 * 1024 * 1024;
 	private static final int FOTO_LADO_MAXIMO = 1600;
 	private static final String CARPETA_FOTOS = "valuacion-fotos";
+	static final String EVENTO_OFERTA = "valuacion.oferta";
 
 	/** Solicitudes de estreno donde se busca un prospecto que reutilizar. */
 	private static final int ESTRENOS_A_REVISAR = 50;
@@ -253,6 +260,113 @@ public class ValuacionService {
 				MotivoCita.VALUACION);
 		valuacion.inspeccionAgendada(cita.id());
 		return cita;
+	}
+
+	/**
+	 * El cliente acepta o rechaza la oferta que vio (V2-M26.04). No mueve la etapa
+	 * del prospecto: eso lo hace el vendedor en el CRM.
+	 *
+	 * @throws ConflictoException
+	 *             con {@code OFERTA_VENCIDA} u {@code OFERTA_NO_DISPONIBLE} (409)
+	 */
+	@Transactional
+	public ValuacionApp responder(Long clienteId, Long valuacionId, boolean aceptada, BigDecimal monto) {
+		// Sin ponerla al día antes: responder decide con la fecha, y así dice
+		// OFERTA_VENCIDA en lugar de depender de un cambio que el error revierte.
+		Valuacion valuacion = valuaciones.bloquearDeCliente(valuacionId, clienteId)
+				.orElseThrow(() -> noExiste(valuacionId));
+		valuacion.responder(aceptada, monto, hoy(), reloj.instant());
+		return comoApp(valuacion);
+	}
+
+	/**
+	 * Las valuaciones para el personal, las más antiguas primero. Ventas ve solo
+	 * las de los prospectos que atiende.
+	 *
+	 * @param estado
+	 *            filtro opcional
+	 */
+	@Transactional
+	public Pagina<ValuacionPersonalApp> delPersonal(UsuarioAutenticado actor, EstadoValuacion estado, Integer pagina,
+			Integer tamano) {
+		Pageable pedida = Pagina.pedir(pagina, tamano);
+		valuaciones.idsAtrasadas(hoy()).forEach(id -> valuaciones.bloquear(id).ifPresent(this::sincronizar));
+		valuaciones.flush();
+		Set<EstadoValuacion> estados = estado == null ? EnumSet.allOf(EstadoValuacion.class) : EnumSet.of(estado);
+		return Pagina.de(actor.tieneRol(Role.ADMINISTRADOR)
+				? valuaciones.porAtender(estados, pedida)
+				: valuaciones.porAtenderDeProspectos(estados, prospectos.delVendedor(actor.id()), pedida),
+				this::comoPersonal);
+	}
+
+	/**
+	 * @throws RecursoNoEncontradoException
+	 *             si no existe o ventas no atiende su prospecto (404)
+	 */
+	@Transactional
+	public ValuacionPersonalApp verDelPersonal(UsuarioAutenticado actor, Long valuacionId) {
+		return comoPersonal(delActor(actor, valuacionId));
+	}
+
+	/**
+	 * Captura la oferta tras la inspección, o renueva una vencida, y avisa al
+	 * cliente sin el monto (V2-M26.04).
+	 *
+	 * @param vigenciaHasta
+	 *            último día para responder; nula usa la vigencia por omisión
+	 * @throws IllegalArgumentException
+	 *             si el monto, la vigencia o la nota no son válidos (400)
+	 * @throws RecursoNoEncontradoException
+	 *             si no existe o ventas no atiende su prospecto (404)
+	 * @throws ConflictoException
+	 *             con {@code TRANSICION_INVALIDA} (409)
+	 */
+	@Transactional
+	public ValuacionPersonalApp ofertar(UsuarioAutenticado actor, Long valuacionId, BigDecimal monto,
+			LocalDate vigenciaHasta, String nota) {
+		Valuacion valuacion = delActor(actor, valuacionId);
+		LocalDate hoy = hoy();
+		LocalDate vigencia = vigenciaHasta == null ? hoy.plusDays(plazos.vigenciaDias()) : vigenciaHasta;
+		Valuacion.validarOferta(monto, vigencia, nota, hoy, plazos.vigenciaMaximaDias());
+		if (valuacion.getEstado() == EstadoValuacion.VENCIDA) {
+			exigirQueNoHayaOtraAbierta(valuacion);
+		}
+		boolean inspeccionHecha = citaDe(valuacion)
+				.map(cita -> cita.getEstado() == EstadoCita.CONFIRMADA && !cita.getFecha().isAfter(hoy)).orElse(false);
+		valuacion.ofertar(monto, vigencia, nota, actor.id(), reloj.instant(), inspeccionHecha);
+		eventos.publishEvent(new AvisoAlCliente(valuacion.getClienteId(), EVENTO_OFERTA,
+				Map.of("valuacionId", valuacion.getId(), "vehiculoId", valuacion.getVehiculoClienteId(),
+						"vigenciaHasta", vigencia.toString())));
+		return comoPersonal(valuacion);
+	}
+
+	private void exigirQueNoHayaOtraAbierta(Valuacion valuacion) {
+		valuaciones.bloquearVehiculo(valuacion.getVehiculoClienteId());
+		ponerAlDia(valuacion.getClienteId());
+		if (valuaciones.findFirstByClienteIdAndVehiculoClienteIdAndEstadoIn(valuacion.getClienteId(),
+				valuacion.getVehiculoClienteId(), EstadoValuacion.abiertos()).isPresent()) {
+			throw new ConflictoException("El cliente ya tiene otra valuación abierta de ese vehículo",
+					CodigosError.TRANSICION_INVALIDA);
+		}
+	}
+
+	/** La valuación bloqueada y al día, si el usuario del personal puede verla. */
+	private Valuacion delActor(UsuarioAutenticado actor, Long valuacionId) {
+		Valuacion valuacion = valuaciones.bloquear(valuacionId)
+				.filter(encontrada -> actor.tieneRol(Role.ADMINISTRADOR)
+						|| prospectos.delVendedor(actor.id()).contains(encontrada.getProspectoId()))
+				.orElseThrow(() -> noExiste(valuacionId));
+		sincronizar(valuacion);
+		return valuacion;
+	}
+
+	private ValuacionPersonalApp comoPersonal(Valuacion valuacion) {
+		ValuacionApp vista = comoApp(valuacion);
+		String cliente = clientes.buscarPorId(valuacion.getClienteId())
+				.map(DirectorioClientes.ClienteRegistrado::nombre).orElse(null);
+		return new ValuacionPersonalApp(vista.id(), vista.estado(), vista.creadaEn(), valuacion.getClienteId(), cliente,
+				vista.vehiculoId(), valuacion.getProspectoId(), vista.estimacion(), vista.fotos(), vista.cita(),
+				vista.oferta(), vista.respondidaEn());
 	}
 
 	@ApplicationModuleListener

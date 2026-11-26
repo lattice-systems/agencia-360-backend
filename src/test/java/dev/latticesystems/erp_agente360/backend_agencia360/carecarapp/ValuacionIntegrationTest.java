@@ -11,6 +11,7 @@ import com.jayway.jsonpath.JsonPath;
 import dev.latticesystems.erp_agente360.backend_agencia360.acceso.domain.Usuario;
 import dev.latticesystems.erp_agente360.backend_agencia360.acceso.infrastructure.RolRepository;
 import dev.latticesystems.erp_agente360.backend_agencia360.acceso.infrastructure.UsuarioRepository;
+import dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.application.AvisoAlCliente;
 import dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.application.CuentasAppService;
 import dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.application.EnvioCorreos;
 import dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.domain.ParametroTomaCuenta;
@@ -47,6 +48,8 @@ import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
+import org.springframework.test.context.event.ApplicationEvents;
+import org.springframework.test.context.event.RecordApplicationEvents;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
 import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
@@ -58,6 +61,7 @@ import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilde
  * no gastar el cupo de otras pruebas.
  */
 @AutoConfigureMockMvc
+@RecordApplicationEvents
 class ValuacionIntegrationTest extends AbstractIntegrationTest {
 
 	private static final String RUTA = "/api/v1/app/valuaciones";
@@ -93,6 +97,9 @@ class ValuacionIntegrationTest extends AbstractIntegrationTest {
 
 	@MockitoBean
 	private EnvioCorreos envioCorreos;
+
+	@Autowired
+	private ApplicationEvents eventos;
 
 	private record Cliente(long id, String correo, long vehiculo, String token) {
 	}
@@ -358,6 +365,180 @@ class ValuacionIntegrationTest extends AbstractIntegrationTest {
 				.andExpect(jsonPath("$.codigo").value("DATOS_INVALIDOS"));
 		assertThat(jdbc.queryForObject("select count(*) from cita where cliente_id = ?", Integer.class, ana.id()))
 				.isZero();
+	}
+
+	@Test
+	void laOfertaPideLaInspeccionHechaYAvisaSoloAlDuenoSinElMonto() throws Exception {
+		long id = solicitada(ana);
+		esperarProspecto(id);
+		String admin = personal("ADMINISTRADOR", Role.ADMINISTRADOR);
+
+		ofertar(admin, id, "{\"monto\":150000}").andExpect(status().isConflict())
+				.andExpect(jsonPath("$.codigo").value("TRANSICION_INVALIDA"));
+		LocalDate dia = diaHabil(43);
+		agendar(ana, id, franja(dia), dia).andExpect(status().isCreated());
+		ofertar(admin, id, "{\"monto\":150000}").andExpect(status().isConflict())
+				.andExpect(jsonPath("$.codigo").value("TRANSICION_INVALIDA"));
+		inspeccionSembrada(ana, id, hoy());
+
+		for (String malo : List.of("{}", "{\"monto\":0}", "{\"monto\":10.001}",
+				"{\"monto\":1,\"vigenciaHasta\":\"" + hoy().minusDays(1) + "\"}",
+				"{\"monto\":1,\"vigenciaHasta\":\"" + hoy().plusDays(31) + "\"}",
+				"{\"monto\":1,\"nota\":\"" + "a".repeat(501) + "\"}")) {
+			ofertar(admin, id, malo).andExpect(status().isBadRequest())
+					.andExpect(jsonPath("$.codigo").value("DATOS_INVALIDOS"));
+		}
+		ofertar(admin, id, "{\"monto\":150000,\"nota\":\"Con papeles en regla\"}").andExpect(status().isOk())
+				.andExpect(jsonPath("$.estado").value("OFERTADA"))
+				.andExpect(jsonPath("$.oferta.monto").value(150000.0))
+				.andExpect(jsonPath("$.oferta.vigenciaHasta").value(hoy().plusDays(7).toString()));
+		// Una oferta vigente no se edita.
+		ofertar(admin, id, "{\"monto\":160000}").andExpect(status().isConflict())
+				.andExpect(jsonPath("$.codigo").value("TRANSICION_INVALIDA"));
+
+		assertThat(eventos.stream(AvisoAlCliente.class).filter(aviso -> aviso.evento().equals("valuacion.oferta")))
+				.singleElement().satisfies(aviso -> {
+					assertThat(aviso.clienteId()).isEqualTo(ana.id());
+					assertThat(aviso.datos()).containsOnlyKeys("valuacionId", "vehiculoId", "vigenciaHasta")
+							.containsEntry("valuacionId", id).containsEntry("vehiculoId", ana.vehiculo())
+							.containsEntry("vigenciaHasta", hoy().plusDays(7).toString());
+				});
+		comoCliente(ana, get(RUTA + "/{id}", id)).andExpect(jsonPath("$.oferta.nota").value("Con papeles en regla"))
+				.andExpect(jsonPath("$.oferta.ofertadaEn").isString()).andExpect(jsonPath("$.puedeAgendar").value(false));
+		assertThat(jdbc.queryForObject("select ofertada_por is not null from valuacion where id = ?", Boolean.class, id))
+				.isTrue();
+	}
+
+	@Test
+	void laOfertaSeRespondeUnaVezConElMontoQueSeVio() throws Exception {
+		long id = ofertada(ana);
+
+		responder(beto, id, true, "150000").andExpect(status().isNotFound());
+		comoCliente(ana, json(post(RUTA + "/{id}/respuesta", id), "{\"aceptada\":true}"))
+				.andExpect(status().isBadRequest()).andExpect(jsonPath("$.codigo").value("DATOS_INVALIDOS"));
+		mockMvc.perform(json(post(RUTA + "/{id}/respuesta", id), "{}")).andExpect(status().isUnauthorized());
+		responder(ana, id, true, "149000").andExpect(status().isConflict())
+				.andExpect(jsonPath("$.codigo").value("OFERTA_NO_DISPONIBLE"));
+		responder(ana, id, true, "150000.00").andExpect(status().isOk())
+				.andExpect(jsonPath("$.estado").value("ACEPTADA")).andExpect(jsonPath("$.respondidaEn").isString());
+		responder(ana, id, true, "150000").andExpect(status().isOk()).andExpect(jsonPath("$.estado").value("ACEPTADA"));
+		responder(ana, id, false, "150000").andExpect(status().isConflict())
+				.andExpect(jsonPath("$.codigo").value("OFERTA_NO_DISPONIBLE"));
+		long sinOferta = solicitada(beto);
+		responder(beto, sinOferta, true, "150000").andExpect(status().isConflict())
+				.andExpect(jsonPath("$.codigo").value("OFERTA_NO_DISPONIBLE"));
+	}
+
+	@Test
+	void unaOfertaPasadaDeVigenciaEstaVencidaYSePuedeRenovarSiNoHayOtraAbierta() throws Exception {
+		long id = ofertada(ana);
+		String admin = personal("ADMINISTRADOR", Role.ADMINISTRADOR);
+		vencer(id);
+
+		responder(ana, id, true, "150000").andExpect(status().isConflict())
+				.andExpect(jsonPath("$.codigo").value("OFERTA_VENCIDA"));
+		comoCliente(ana, get(RUTA + "/{id}", id)).andExpect(jsonPath("$.estado").value("VENCIDA"));
+		assertThat(estadoGuardado(id)).isEqualTo("VENCIDA");
+		ofertar(admin, id, "{\"monto\":140000}").andExpect(status().isOk())
+				.andExpect(jsonPath("$.estado").value("OFERTADA"));
+		// Con la pantalla vieja abierta no se acepta una cifra que no leyó.
+		responder(ana, id, true, "150000").andExpect(status().isConflict())
+				.andExpect(jsonPath("$.codigo").value("OFERTA_NO_DISPONIBLE"));
+
+		vencer(id);
+		// Pedir otra guarda la vencida y no choca con el índice de abiertas.
+		long otra = solicitada(ana);
+		assertThat(estadoGuardado(id)).isEqualTo("VENCIDA");
+		assertThat(otra).isNotEqualTo(id);
+		ofertar(admin, id, "{\"monto\":140000}").andExpect(status().isConflict())
+				.andExpect(jsonPath("$.codigo").value("TRANSICION_INVALIDA"));
+	}
+
+	@Test
+	void ventasVeYOfertaSoloLoDeSusProspectosYElAdministradorTodo() throws Exception {
+		long id = ofertada(ana);
+		long prospecto = jdbc.queryForObject("select prospecto_id from valuacion where id = ?", Long.class, id);
+		long asignado = jdbc.queryForObject("select vendedor_id from prospecto where id = ?", Long.class, prospecto);
+		String suVendedor = jwtService.generateToken(asignado, "asignado", List.of(Role.VENTAS));
+		String otroVendedor = personal("VENTAS", Role.VENTAS);
+		String admin = personal("ADMINISTRADOR", Role.ADMINISTRADOR);
+
+		comoPersonal(suVendedor, get("/api/v1/valuaciones/{id}", id)).andExpect(status().isOk())
+				.andExpect(jsonPath("$.cliente").value("ana " + unico))
+				.andExpect(jsonPath("$.estimacion.marca").value(marca))
+				.andExpect(jsonPath("$.estimacion.minimo").isNumber()).andExpect(jsonPath("$.cita.citaId").isNumber())
+				.andExpect(jsonPath("$.fotos.length()").value(0));
+		comoPersonal(otroVendedor, get("/api/v1/valuaciones/{id}", id)).andExpect(status().isNotFound());
+		ofertar(otroVendedor, id, "{\"monto\":150000}").andExpect(status().isNotFound());
+		comoPersonal(otroVendedor, get("/api/v1/valuaciones")).andExpect(status().isOk())
+				.andExpect(jsonPath("$.totalElementos").value(0));
+		comoPersonal(suVendedor, get("/api/v1/valuaciones?estado=OFERTADA&tamano=50")).andExpect(status().isOk())
+				.andExpect(jsonPath("$.contenido[?(@.id == " + id + ")]").isNotEmpty());
+		comoPersonal(suVendedor, get("/api/v1/valuaciones?estado=ACEPTADA&tamano=50"))
+				.andExpect(jsonPath("$.contenido[?(@.id == " + id + ")]").isEmpty());
+		comoPersonal(admin, get("/api/v1/valuaciones/{id}", id)).andExpect(status().isOk());
+		comoPersonal(admin, get("/api/v1/valuaciones/{id}", Long.MAX_VALUE)).andExpect(status().isNotFound());
+		comoPersonal(admin, get("/api/v1/valuaciones?estado=OTRO")).andExpect(status().isBadRequest());
+		comoPersonal(admin, get("/api/v1/valuaciones?tamano=51")).andExpect(status().isBadRequest());
+		// Una sin prospecto solo la ve el administrador.
+		jdbc.update("update valuacion set prospecto_id = null where id = ?", id);
+		comoPersonal(suVendedor, get("/api/v1/valuaciones/{id}", id)).andExpect(status().isNotFound());
+		comoPersonal(admin, get("/api/v1/valuaciones/{id}", id)).andExpect(status().isOk());
+	}
+
+	@Test
+	void lasRutasDelPersonalNiegan401Y403() throws Exception {
+		long id = solicitada(ana);
+		String servicio = personal("SERVICIO", Role.SERVICIO);
+
+		for (String token : List.of(ana.token(), servicio)) {
+			comoPersonal(token, get("/api/v1/valuaciones")).andExpect(status().isForbidden());
+			comoPersonal(token, get("/api/v1/valuaciones/{id}", id)).andExpect(status().isForbidden());
+			ofertar(token, id, "{\"monto\":1}").andExpect(status().isForbidden());
+		}
+		mockMvc.perform(get("/api/v1/valuaciones")).andExpect(status().isUnauthorized());
+		mockMvc.perform(get("/api/v1/valuaciones/{id}", id)).andExpect(status().isUnauthorized());
+		mockMvc.perform(json(post("/api/v1/valuaciones/{id}/oferta", id), "{\"monto\":1}"))
+				.andExpect(status().isUnauthorized());
+	}
+
+	private long ofertada(Cliente cliente) throws Exception {
+		long id = solicitada(cliente);
+		esperarProspecto(id);
+		inspeccionSembrada(cliente, id, hoy());
+		ofertar(personal("ADMINISTRADOR", Role.ADMINISTRADOR), id, "{\"monto\":150000}").andExpect(status().isOk());
+		return id;
+	}
+
+	private void vencer(long id) {
+		jdbc.update("update valuacion set vigencia_hasta = ? where id = ?", Date.valueOf(hoy().minusDays(1)), id);
+	}
+
+	private String estadoGuardado(long id) {
+		return jdbc.queryForObject("select estado from valuacion where id = ?", String.class, id);
+	}
+
+	private String personal(String rol, Role role) {
+		String nombre = rol.toLowerCase(Locale.ROOT) + "-" + UUID.randomUUID().toString().substring(0, 8);
+		Usuario usuario = usuario(nombre, rol, "Persona de " + rol);
+		if (role == Role.VENTAS) {
+			// Inactivo para que no le toquen prospectos de otras pruebas.
+			jdbc.update("update usuario set activo = false where id = ?", usuario.getId());
+		}
+		return jwtService.generateToken(usuario.getId(), nombre, List.of(role));
+	}
+
+	private ResultActions ofertar(String token, long id, String cuerpo) throws Exception {
+		return comoPersonal(token, json(post("/api/v1/valuaciones/{id}/oferta", id), cuerpo));
+	}
+
+	private ResultActions responder(Cliente cliente, long id, boolean aceptada, String monto) throws Exception {
+		return comoCliente(cliente, json(post(RUTA + "/{id}/respuesta", id),
+				"{\"aceptada\":" + aceptada + ",\"monto\":" + monto + "}"));
+	}
+
+	private ResultActions comoPersonal(String token, MockHttpServletRequestBuilder peticion) throws Exception {
+		return mockMvc.perform(peticion.header(HttpHeaders.AUTHORIZATION, "Bearer " + token));
 	}
 
 	private ResultActions agendar(Cliente cliente, long valuacion, long franja, LocalDate dia) throws Exception {
