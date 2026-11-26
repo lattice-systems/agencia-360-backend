@@ -2,6 +2,7 @@ package dev.latticesystems.erp_agente360.backend_agencia360.carecarapp;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -20,11 +21,17 @@ import dev.latticesystems.erp_agente360.backend_agencia360.clientes.application.
 import dev.latticesystems.erp_agente360.backend_agencia360.shared.AbstractIntegrationTest;
 import dev.latticesystems.erp_agente360.backend_agencia360.shared.security.JwtService;
 import dev.latticesystems.erp_agente360.backend_agencia360.shared.security.Role;
+import java.awt.image.BufferedImage;
+import java.io.ByteArrayOutputStream;
 import java.math.BigDecimal;
+import java.net.URI;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Locale;
 import java.util.UUID;
+import javax.imageio.ImageIO;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -33,6 +40,7 @@ import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMock
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
@@ -195,6 +203,88 @@ class ValuacionIntegrationTest extends AbstractIntegrationTest {
 		cuentasAppService.desactivar(ana.id());
 		comoCliente(ana, get(RUTA)).andExpect(status().isForbidden())
 				.andExpect(jsonPath("$.codigo").value("CUENTA_DESACTIVADA"));
+	}
+
+	@Test
+	void lasFotosSeGuardanSinExifSeReemplazanYSeBajanSoloConLaUrlFirmada() throws Exception {
+		long id = solicitada(ana);
+		byte[] conExif = jpegConExif();
+		assertThat(new String(conExif, StandardCharsets.ISO_8859_1)).contains("Exif", "GPS-SECRETO");
+
+		String primera = subir(ana, id, "TABLERO_KM", conExif).andExpect(status().isOk())
+				.andExpect(jsonPath("$.fotos.length()").value(1)).andReturn().getResponse().getContentAsString();
+		String urlVieja = JsonPath.read(primera, "$.fotos[0].url");
+		subir(ana, id, "FRENTE", jpegConExif()).andExpect(status().isOk());
+		String ultima = subir(ana, id, "TABLERO_KM", conExif).andExpect(status().isOk())
+				.andExpect(jsonPath("$.fotos.length()").value(2)).andExpect(jsonPath("$.fotos[0].toma").value("FRENTE"))
+				.andExpect(jsonPath("$.fotos[1].toma").value("TABLERO_KM"))
+				.andExpect(jsonPath("$.fotos[1].subidaEn").isString()).andReturn().getResponse().getContentAsString();
+
+		String url = JsonPath.read(ultima, "$.fotos[1].url");
+		byte[] descargada = mockMvc.perform(get(URI.create(url))).andExpect(status().isOk()).andReturn().getResponse()
+				.getContentAsByteArray();
+		assertThat(new String(descargada, StandardCharsets.ISO_8859_1)).doesNotContain("Exif", "GPS-SECRETO");
+		String alterada = url.substring(0, url.length() - 1) + (url.endsWith("0") ? "1" : "0");
+		mockMvc.perform(get(URI.create(alterada))).andExpect(status().isNotFound());
+		// La reemplazada ya no está en el almacén.
+		mockMvc.perform(get(URI.create(urlVieja))).andExpect(status().isNotFound());
+		assertThat(ultima).doesNotContain("\"clave\"");
+	}
+
+	@Test
+	void unaFotoInvalidaDa400YEnUnaValuacionAjena404() throws Exception {
+		long id = solicitada(ana);
+		byte[] gif = imagen("gif");
+		byte[] webp = "RIFF0000WEBPVP8 ".getBytes(StandardCharsets.US_ASCII);
+		byte[] gigante = Arrays.copyOf(imagen("jpg"), 8 * 1024 * 1024 + 1);
+
+		for (byte[] mala : List.of(webp, gif, "no es una foto".getBytes(StandardCharsets.UTF_8), gigante)) {
+			subir(ana, id, "FRENTE", mala).andExpect(status().isBadRequest())
+					.andExpect(jsonPath("$.codigo").value("DATOS_INVALIDOS"));
+		}
+		subir(ana, id, "TECHO", imagen("jpg")).andExpect(status().isBadRequest())
+				.andExpect(jsonPath("$.codigo").value("DATOS_INVALIDOS"));
+		comoCliente(ana, multipart(RUTA + "/{id}/fotos/{toma}", id, "FRENTE")).andExpect(status().isBadRequest());
+		subir(beto, id, "FRENTE", imagen("jpg")).andExpect(status().isNotFound());
+		subir(ana, id, "FRENTE", imagen("png")).andExpect(status().isOk());
+		mockMvc.perform(multipart(RUTA + "/{id}/fotos/{toma}", id, "FRENTE")).andExpect(status().isUnauthorized());
+	}
+
+	@Test
+	void unaValuacionCerradaYaNoAdmiteFotos() throws Exception {
+		long id = solicitada(ana);
+		jdbc.update("""
+				update valuacion set estado = 'OFERTADA', oferta = 100000, vigencia_hasta = current_date + 5,
+				  ofertada_en = now() where id = ?
+				""", id);
+
+		subir(ana, id, "FRENTE", imagen("jpg")).andExpect(status().isConflict())
+				.andExpect(jsonPath("$.codigo").value("VALUACION_CERRADA"));
+	}
+
+	private ResultActions subir(Cliente cliente, long valuacion, String toma, byte[] imagen) throws Exception {
+		return comoCliente(cliente, multipart(RUTA + "/{id}/fotos/{toma}", valuacion, toma)
+				.file(new MockMultipartFile("imagen", "foto.jpg", "image/jpeg", imagen)));
+	}
+
+	private static byte[] imagen(String formato) throws Exception {
+		ByteArrayOutputStream salida = new ByteArrayOutputStream();
+		ImageIO.write(new BufferedImage(64, 48, BufferedImage.TYPE_INT_RGB), formato, salida);
+		return salida.toByteArray();
+	}
+
+	/** Un JPEG con un segmento APP1 Exif, como el que escribe un teléfono. */
+	private static byte[] jpegConExif() throws Exception {
+		byte[] jpeg = imagen("jpg");
+		byte[] datos = "Exif  GPS-SECRETO".getBytes(StandardCharsets.US_ASCII);
+		datos[4] = 0;
+		datos[5] = 0;
+		ByteArrayOutputStream salida = new ByteArrayOutputStream();
+		salida.write(jpeg, 0, 2);
+		salida.write(new byte[]{(byte) 0xFF, (byte) 0xE1, 0, (byte) (datos.length + 2)});
+		salida.write(datos);
+		salida.write(jpeg, 2, jpeg.length - 2);
+		return salida.toByteArray();
 	}
 
 	private Cliente cliente(String nombre, String letra) {

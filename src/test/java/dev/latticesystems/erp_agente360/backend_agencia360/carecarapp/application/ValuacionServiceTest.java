@@ -2,6 +2,7 @@ package dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.applicati
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -14,6 +15,7 @@ import dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.domain.Cit
 import dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.domain.EstadoCita;
 import dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.domain.EstadoValuacion;
 import dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.domain.EstimacionTomaCuenta;
+import dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.domain.TomaValuacion;
 import dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.domain.Valuacion;
 import dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.infrastructure.CitaRepository;
 import dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.infrastructure.EstimacionTomaCuentaRepository;
@@ -25,11 +27,14 @@ import dev.latticesystems.erp_agente360.backend_agencia360.clientes.VehiculosDeC
 import dev.latticesystems.erp_agente360.backend_agencia360.shared.eventos.ValuacionSolicitada;
 import dev.latticesystems.erp_agente360.backend_agencia360.ventascrm.ConsultaProspectos;
 import dev.latticesystems.erp_agente360.backend_agencia360.ventascrm.ConsultaProspectos.EstadoProspecto;
+import java.awt.image.BufferedImage;
+import java.io.ByteArrayOutputStream;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
+import javax.imageio.ImageIO;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -38,6 +43,8 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.test.util.ReflectionTestUtils;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 @ExtendWith(MockitoExtension.class)
 class ValuacionServiceTest {
@@ -172,6 +179,65 @@ class ValuacionServiceTest {
 		when(vendedores.nombreDe(5L)).thenReturn(Optional.of("Vera"));
 
 		assertThat(servicio.ver(CLIENTE, 10L).asesor()).isEqualTo("Vera");
+	}
+
+	@Test
+	void laFotoAnteriorSeBorraSoloDespuesDelCommit() throws Exception {
+		Valuacion valuacion = conUnaFoto();
+		TransactionSynchronizationManager.initSynchronization();
+		try {
+			servicio.subirFoto(CLIENTE, 10L, TomaValuacion.FRENTE, png());
+			verify(archivos, never()).borrar(any());
+
+			terminar(TransactionSynchronization.STATUS_COMMITTED);
+
+			verify(archivos).borrar("valuacion-fotos/anterior");
+			verify(archivos, never()).borrar("valuacion-fotos/nueva");
+		} finally {
+			TransactionSynchronizationManager.clearSynchronization();
+		}
+		assertThat(valuacion.getFotos().get(TomaValuacion.FRENTE).clave()).isEqualTo("valuacion-fotos/nueva");
+	}
+
+	@Test
+	void siLaTransaccionFallaSeBorraLaFotoNuevaYNoLaAnterior() throws Exception {
+		conUnaFoto();
+		TransactionSynchronizationManager.initSynchronization();
+		try {
+			servicio.subirFoto(CLIENTE, 10L, TomaValuacion.FRENTE, png());
+
+			terminar(TransactionSynchronization.STATUS_ROLLED_BACK);
+
+			verify(archivos).borrar("valuacion-fotos/nueva");
+			verify(archivos, never()).borrar("valuacion-fotos/anterior");
+		} finally {
+			TransactionSynchronizationManager.clearSynchronization();
+		}
+	}
+
+	private Valuacion conUnaFoto() {
+		Valuacion valuacion = existente();
+		valuacion.ponerFoto(TomaValuacion.FRENTE, "valuacion-fotos/anterior", AHORA);
+		when(valuaciones.bloquearDeCliente(10L, CLIENTE)).thenReturn(Optional.of(valuacion));
+		when(archivos.guardar(eq("valuacion-fotos"), eq("image/jpeg"), any()))
+				.thenReturn(new AlmacenArchivos.ArchivoGuardado("valuacion-fotos/nueva", "image/jpeg", 1));
+		return valuacion;
+	}
+
+	/** Lo que hace Spring al cerrar la transacción. */
+	private static void terminar(int estado) {
+		for (TransactionSynchronization pendiente : TransactionSynchronizationManager.getSynchronizations()) {
+			if (estado == TransactionSynchronization.STATUS_COMMITTED) {
+				pendiente.afterCommit();
+			}
+			pendiente.afterCompletion(estado);
+		}
+	}
+
+	private static byte[] png() throws Exception {
+		ByteArrayOutputStream salida = new ByteArrayOutputStream();
+		ImageIO.write(new BufferedImage(8, 8, BufferedImage.TYPE_INT_RGB), "png", salida);
+		return salida.toByteArray();
 	}
 
 	private Cita cita(long id, EstadoCita estado, LocalDate fecha) {

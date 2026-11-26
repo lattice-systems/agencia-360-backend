@@ -6,6 +6,7 @@ import dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.domain.Cit
 import dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.domain.EstadoCita;
 import dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.domain.EstadoValuacion;
 import dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.domain.EstimacionTomaCuenta;
+import dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.domain.TomaValuacion;
 import dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.domain.Valuacion;
 import dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.infrastructure.CitaRepository;
 import dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.infrastructure.EstimacionTomaCuentaRepository;
@@ -15,6 +16,7 @@ import dev.latticesystems.erp_agente360.backend_agencia360.clientes.VehiculosDeC
 import dev.latticesystems.erp_agente360.backend_agencia360.shared.eventos.ProspectoDeValuacionCreado;
 import dev.latticesystems.erp_agente360.backend_agencia360.shared.eventos.ValuacionSolicitada;
 import dev.latticesystems.erp_agente360.backend_agencia360.shared.exception.CodigosError;
+import dev.latticesystems.erp_agente360.backend_agencia360.shared.exception.ConflictoException;
 import dev.latticesystems.erp_agente360.backend_agencia360.shared.exception.NoProcesableException;
 import dev.latticesystems.erp_agente360.backend_agencia360.shared.exception.RecursoNoEncontradoException;
 import dev.latticesystems.erp_agente360.backend_agencia360.ventascrm.ConsultaProspectos;
@@ -31,6 +33,8 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.modulith.events.ApplicationModuleListener;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 /**
  * Valuación formal (M26). El prospecto lo crea ventascrm por evento cuando el
@@ -43,6 +47,10 @@ import org.springframework.transaction.annotation.Transactional;
  */
 @Service
 public class ValuacionService {
+
+	private static final int FOTO_BYTES_MAXIMOS = 8 * 1024 * 1024;
+	private static final int FOTO_LADO_MAXIMO = 1600;
+	private static final String CARPETA_FOTOS = "valuacion-fotos";
 
 	/** Solicitudes de estreno donde se busca un prospecto que reutilizar. */
 	private static final int ESTRENOS_A_REVISAR = 50;
@@ -174,6 +182,55 @@ public class ValuacionService {
 	@Transactional
 	public ValuacionApp ver(Long clienteId, Long valuacionId) {
 		return comoApp(propia(clienteId, valuacionId));
+	}
+
+	/**
+	 * Guarda o reemplaza la foto de una toma, sin EXIF ni ubicación (V2-M26.02).
+	 * La reemplazada se borra del almacén cuando la transacción se confirma, y la
+	 * nueva si se revierte.
+	 *
+	 * @throws RecursoNoEncontradoException
+	 *             si la valuación no es del cliente (404)
+	 * @throws ConflictoException
+	 *             con {@code VALUACION_CERRADA} (409)
+	 * @throws IllegalArgumentException
+	 *             si falta la foto, pasa de 8 MB o 40 megapíxeles o no es un JPEG
+	 *             o PNG legible (400)
+	 */
+	@Transactional
+	public ValuacionApp subirFoto(Long clienteId, Long valuacionId, TomaValuacion toma, byte[] imagen) {
+		Valuacion valuacion = propia(clienteId, valuacionId);
+		valuacion.exigirQueAdmitaFotos();
+		if (imagen == null || imagen.length == 0) {
+			throw new IllegalArgumentException("Falta la foto");
+		}
+		if (imagen.length > FOTO_BYTES_MAXIMOS) {
+			throw new IllegalArgumentException("La foto pasa de 8 MB");
+		}
+		byte[] limpia = LimpiadorImagen.limpiar(imagen, FOTO_LADO_MAXIMO);
+		String clave = archivos.guardar(CARPETA_FOTOS, "image/jpeg", limpia).clave();
+		Optional<String> anterior = valuacion.ponerFoto(toma, clave, reloj.instant());
+		alTerminarLaTransaccion(anterior.orElse(null), clave);
+		return comoApp(valuacion);
+	}
+
+	private void alTerminarLaTransaccion(String siSeConfirma, String siSeRevierte) {
+		TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+
+			@Override
+			public void afterCommit() {
+				if (siSeConfirma != null) {
+					archivos.borrar(siSeConfirma);
+				}
+			}
+
+			@Override
+			public void afterCompletion(int status) {
+				if (status == STATUS_ROLLED_BACK) {
+					archivos.borrar(siSeRevierte);
+				}
+			}
+		});
 	}
 
 	@ApplicationModuleListener
