@@ -2277,6 +2277,9 @@ paths:
         - `garantia.por_vencer` (V2-M10.05), `AvisoGarantiaPorVencer`: una sola vez a 60 días, a
           15 días y a 1 000 km del límite de cada cobertura. La app vuelve a consultar
           `GET /vehiculos/{vehiculoId}/garantia`.
+        - `valuacion.oferta` (V2-M26.04), `AvisoValuacionOferta`: cuando la agencia captura o
+          renueva la oferta de una valuación del cliente. No trae el monto. La app vuelve a
+          consultar `GET /valuaciones/{valuacionId}`.
 
         Ejemplo en el flujo:
         ```
@@ -2296,6 +2299,7 @@ paths:
                   - $ref: '#/components/schemas/AvisoTrasladoUbicacion'
                   - $ref: '#/components/schemas/AvisoMantenimientoRecordatorio'
                   - $ref: '#/components/schemas/AvisoArco'
+                  - $ref: '#/components/schemas/AvisoValuacionOferta'
         '401':
           $ref: '#/components/responses/NoAutenticado'
         '403':
@@ -3925,6 +3929,21 @@ components:
           type: integer
         estado:
           $ref: '#/components/schemas/EstadoVehiculo'
+
+    AvisoValuacionOferta:
+      type: object
+      description: V2-M26.04 · `data` del evento `valuacion.oferta`
+      required: [valuacionId, vehiculoId, vigenciaHasta]
+      properties:
+        valuacionId:
+          type: integer
+          format: int64
+        vehiculoId:
+          type: integer
+          format: int64
+        vigenciaHasta:
+          type: string
+          format: date
 
     AvisoOrden:
       type: object
