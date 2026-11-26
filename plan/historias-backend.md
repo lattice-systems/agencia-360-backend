@@ -39,9 +39,14 @@ La ficha nombra `sesion_app` con `dispositivo` y `ultimo_uso` como campos **nuev
 ```sql
 alter table sesion_app add column dispositivo varchar(80);
 alter table sesion_app add column ultimo_uso  timestamp(6) with time zone;
+alter table sesion_app add column iniciada_en timestamp(6) with time zone;
 ```
 
-Las dos nulas: las sesiones que ya existen quedan sin nombre y sin último uso, y la app muestra un texto genérico en su lugar.
+Las tres nulas: las sesiones que ya existen quedan sin nombre, sin último uso y sin inicio, y la app muestra un texto genérico en su lugar.
+
+**Por qué hace falta `iniciada_en` y no basta `created_at`.** El refresco **revoca la fila y crea otra** (`refrescar` → `sesion.revocar` → `emitirSesion`), así que `created_at` es el momento del último refresco: una sesión abierta hace 20 días se vería «iniciada hace 1 hora» y el dato sería inservible. `iniciada_en` se copia de una fila a la siguiente en cada refresco y así sí dice cuándo empezó la sesión de verdad.
+
+**Y por qué el diseño de fila-por-token se queda tal cual.** Es tentador rotar el hash en la misma fila para que el `id` no cambie, pero eso **perdería la detección de robo**: hoy la fila revocada se queda, así que reusar un token gastado lo encuentra revocado y dispara `cerrarTodas` (`AccesoAppService.refrescar`). Sobrescribiendo el hash, el token viejo simplemente no se encontraría y no habría de qué sospechar. Consecuencia aceptada: el `id` de una sesión cambia en cada refresco, así que un `DELETE /sesiones/{id}` puede llegar tarde y responder 404; la app vuelve a leer la lista.
 
 **`POST /auth/login` acepta `dispositivo` opcional** (≤ 80). Es el nombre que arma la app («Pixel 7 · Android 14»). Aditivo: un cliente que no lo mande sigue funcionando igual, y por eso no sube la versión mayor del contrato.
 
@@ -51,7 +56,7 @@ Las dos nulas: las sesiones que ya existen quedan sin nombre y sin último uso, 
 
 | Método | Ruta | Responde |
 | --- | --- | --- |
-| GET | `/api/v1/app/sesiones` | 200 con las sesiones **vigentes** de la cuenta: `[{id, dispositivo, ultimoUso, iniciadaEn, expiraEn}]`, ordenadas por `ultimoUso` descendente y las nulas al final |
+| GET | `/api/v1/app/sesiones` | 200 con las sesiones **vigentes** de la cuenta: `[{id, dispositivo, ultimoUso, iniciadaEn, expiraEn}]`, ordenadas por `ultimoUso` descendente y las nulas al final. `iniciadaEn` viene de `iniciada_en`, no de `created_at`; `expiraEn` son 30 días **desde el último refresco** |
 | DELETE | `/api/v1/app/sesiones/{id}` | 204. Revoca esa sesión. **404 si no existe o es de otra cuenta**, nunca 403: es la regla del contrato para un recurso ajeno |
 | DELETE | `/api/v1/app/sesiones` | 204. Revoca **todas** las de la cuenta, incluida la de quien llama |
 
