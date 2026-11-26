@@ -29,6 +29,8 @@ import java.math.BigDecimal;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.sql.Date;
+import java.sql.Timestamp;
+import java.time.YearMonth;
 import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.time.ZoneId;
@@ -500,6 +502,44 @@ class ValuacionIntegrationTest extends AbstractIntegrationTest {
 		mockMvc.perform(get("/api/v1/valuaciones/{id}", id)).andExpect(status().isUnauthorized());
 		mockMvc.perform(json(post("/api/v1/valuaciones/{id}/oferta", id), "{\"monto\":1}"))
 				.andExpect(status().isUnauthorized());
+	}
+
+	@Test
+	void elValorEstimadoDaUnPuntoPorMesSoloDelVehiculoPropio() throws Exception {
+		String ruta = "/api/v1/app/vehiculos/{id}/valor-estimado";
+		comoCliente(ana, get(ruta, ana.vehiculo())).andExpect(status().isOk())
+				.andExpect(jsonPath("$.vehiculoId").value(ana.vehiculo()))
+				.andExpect(jsonPath("$.puntos.length()").value(0));
+		long vieja = estimar(ana);
+		long reemplazada = estimar(ana);
+		long deEsteMes = estimar(ana);
+		estimar(beto);
+		jdbc.update("update estimacion_toma_cuenta set created_at = ? where id = ?",
+				Timestamp.from(hoy().minusMonths(2).withDayOfMonth(15).atTime(12, 0).atZone(ZONA_AGENCIA).toInstant()),
+				vieja);
+
+		comoCliente(ana, get(ruta, ana.vehiculo())).andExpect(status().isOk())
+				.andExpect(jsonPath("$.puntos.length()").value(2))
+				.andExpect(jsonPath("$.puntos[0].mes").value(YearMonth.from(hoy().minusMonths(2)).toString()))
+				.andExpect(jsonPath("$.puntos[0].estimacionTomaCuentaId").value(vieja))
+				.andExpect(jsonPath("$.puntos[1].mes").value(YearMonth.from(hoy()).toString()))
+				.andExpect(jsonPath("$.puntos[1].estimacionTomaCuentaId").value(deEsteMes))
+				.andExpect(jsonPath("$.puntos[1].creadaEn").isString())
+				.andExpect(jsonPath("$.puntos[1].minimo").isNumber())
+				.andExpect(jsonPath("$.puntos[1].maximo").isNumber())
+				.andExpect(jsonPath("$.puntos[1].medio").isNumber()).andExpect(jsonPath("$.puntos[1].km").value(60000))
+				.andExpect(jsonPath("$.puntos[1].estado").value("BUENO"));
+		assertThat(reemplazada).isNotEqualTo(deEsteMes);
+		comoCliente(ana, get(ruta + "?meses=2", ana.vehiculo())).andExpect(jsonPath("$.puntos.length()").value(1));
+		comoCliente(ana, get(ruta + "?meses=37", ana.vehiculo())).andExpect(status().isBadRequest())
+				.andExpect(jsonPath("$.codigo").value("DATOS_INVALIDOS"));
+		comoCliente(ana, get(ruta + "?meses=0", ana.vehiculo())).andExpect(status().isBadRequest());
+		comoCliente(beto, get(ruta, ana.vehiculo())).andExpect(status().isNotFound());
+		mockMvc.perform(get(ruta, ana.vehiculo())).andExpect(status().isUnauthorized());
+		comoPersonal(personal("SERVICIO", Role.SERVICIO), get(ruta, ana.vehiculo())).andExpect(status().isForbidden());
+		cuentasAppService.desactivar(ana.id());
+		comoCliente(ana, get(ruta, ana.vehiculo())).andExpect(status().isForbidden())
+				.andExpect(jsonPath("$.codigo").value("CUENTA_DESACTIVADA"));
 	}
 
 	private long ofertada(Cliente cliente) throws Exception {

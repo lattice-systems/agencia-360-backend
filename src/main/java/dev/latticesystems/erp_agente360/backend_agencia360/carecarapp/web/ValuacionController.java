@@ -2,6 +2,8 @@ package dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.web;
 
 import dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.application.CitaApp;
 import dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.application.Pagina;
+import dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.application.ValorEstimadoApp;
+import dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.application.ValorEstimadoService;
 import dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.application.ValuacionApp;
 import dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.application.ValuacionService;
 import dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.domain.TomaValuacion;
@@ -37,9 +39,11 @@ import org.springframework.web.multipart.MultipartFile;
 public class ValuacionController {
 
 	private final ValuacionService valuaciones;
+	private final ValorEstimadoService valorEstimado;
 
-	public ValuacionController(ValuacionService valuaciones) {
+	public ValuacionController(ValuacionService valuaciones, ValorEstimadoService valorEstimado) {
 		this.valuaciones = valuaciones;
+		this.valorEstimado = valorEstimado;
 	}
 
 	@PostMapping("/valuaciones")
@@ -81,6 +85,14 @@ public class ValuacionController {
 	public ValuacionApp responder(@PathVariable Long valuacionId, @Valid @RequestBody RespuestaOfertaRequest request,
 			@AuthenticationPrincipal UsuarioAutenticado cliente) {
 		return valuaciones.responder(cliente.id(), valuacionId, request.aceptada(), request.monto());
+	}
+
+	@GetMapping("/vehiculos/{vehiculoId}/valor-estimado")
+	@Operation(summary = "Valor estimado del auto por mes", description = "La última estimación guardada de cada "
+			+ "mes, sin inventar los meses sin dato. meses va de 1 a 36 (12 por omisión).")
+	public ValorEstimadoApp valorEstimado(@PathVariable Long vehiculoId, @RequestParam(required = false) Integer meses,
+			@AuthenticationPrincipal UsuarioAutenticado cliente) {
+		return valorEstimado.porMes(cliente.id(), vehiculoId, meses);
 	}
 
 	@PostMapping(path = "/valuaciones/{valuacionId}/fotos/{toma}", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
