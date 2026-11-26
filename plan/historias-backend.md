@@ -440,7 +440,7 @@ Sigue en `carecarapp`. Sin tablas nuevas: `solicitud_asistencia` gana `cerrada_e
 
 Pendiente (historia nueva, `Borrador`): bandeja del personal para listar solicitudes abiertas con su ubicación.
 
-### M12 · Lealtad y recompensas — H4 — módulo `lealtad (nuevo)`
+### M12 · Lealtad y recompensas — H4 — módulo `carecarapp`
 
 Detalle: [`carecar-mobile/plan/modulos/M12-lealtad.md`](https://github.com/lattice-systems/carecar-mobile/blob/main/plan/modulos/M12-lealtad.md)
 
@@ -453,6 +453,35 @@ Detalle: [`carecar-mobile/plan/modulos/M12-lealtad.md`](https://github.com/latti
 | V2-M12.05 | Como cliente quiero ver mis movimientos de puntos | `GET /lealtad/movimientos` paginado con motivo y referencia | Ricardo |
 
 Reglas propuestas (pendientes del PO) en [`M12-lealtad.md`](https://github.com/lattice-systems/carecar-mobile/blob/main/plan/modulos/M12-lealtad.md#reglas-propuestas-pendientes-del-po).
+
+#### Diseño técnico — V2-M12.01 a V2-M12.05 (Ricardo)
+
+Vive en `carecarapp`, como M05 y M10: usa el canal en vivo (`AvisoAlCliente`), el ticket de la orden (`HistorialDeServicios.detalle`, de `servicio`), el directorio de clientes (`DirectorioClientes`) y el estado del prospecto (`ConsultaProspectos`, de `ventascrm`), todos por su API pública. Una migración nueva (número al integrar).
+
+**Tablas (ficha, sección 12).**
+
+- `movimiento_puntos`: `id`, `cliente_id` (FK), `puntos` (distinto de cero), `motivo` (`SERVICIO`, `CANJE`, `DEVOLUCION_CANJE`, `REFERIDO`, `AJUSTE`), `referencia_tipo` y `referencia_id` (los dos o ninguno), `creado_en`. Único por (`motivo`, `referencia_tipo`, `referencia_id`): un evento repetido no suma dos veces. El saldo es la suma; nunca se borra ni se edita.
+- `recompensa`: `id`, `nombre`, `descripcion`, `puntos` (> 0), `activa`, `existencia` (nula = sin límite), `creado_en`. La migración siembra las cuatro recompensas propuestas.
+- `canje`: `id`, `cliente_id`, `recompensa_id`, `codigo` (8 caracteres sin letras confusas, único), `puntos` (lo que costó), `estado` (`VIGENTE`, `USADO`, `VENCIDO`), `vence_en`, `usado_en` (solo si usado), `creado_en`.
+- `referido`: `id`, `cliente_id`, `codigo` (el del cliente), `nombre`, `telefono` (10 dígitos) o `correo`, `consentimiento_en`, `prospecto_id` (FK, único, se llena por evento), `estado` (`REGISTRADO`, `EN_SEGUIMIENTO`, `COMPRO`, `DESCARTADO`), `recompensado_en` (solo si compró), `creado_en`.
+
+**Reglas** en `app.lealtad.*` (`ReglasLealtad`): `pesos-por-punto` 10, `nivel.plata` 1500, `nivel.oro` 4000, `canje.dias-vigencia` 30, `referido.puntos` 500, `referido.abiertos` 10. El nivel sale de los puntos ganados (`SERVICIO`, `REFERIDO` y `AJUSTE` positivos) en los últimos 365 días.
+
+**Concurrencia.** `canjear` bloquea el saldo del cliente con `pg_advisory_xact_lock` (no hay una fila de saldo que bloquear) y la fila de la recompensa con `SELECT ... FOR UPDATE`, en ese orden, antes de leer el saldo. Vencer un canje toma los mismos bloqueos.
+
+**Eventos.**
+
+- Escucha `OrdenServicioCambiada` (de `servicio`): con estatus `ENTREGADO` y motivo distinto de `REGISTRO`, suma `floor(total / 10)` puntos con referencia `ORDEN`. Cuando exista `pago.confirmado` (V2-M08.02) se escucha ese en su lugar.
+- Publica `ReferidoRegistrado` (en `shared.eventos`); `ventascrm` lo escucha en `ProspectosDeEstrenoService`, crea el prospecto con `registrarDesdeApp` (historial con origen `APP`, vendedor con menos carga) y responde `ProspectoDeReferidoCreado`, que liga el referido.
+- Escucha `ProspectoFinalizado`: si el prospecto es de un referido que no ha comprado, lo marca `COMPRO` y suma `referido.puntos` con referencia `REFERIDO`. El estado `DESCARTADO` se calcula al listar con `ConsultaProspectos` (etapa `CERRADO`).
+- Cada movimiento publica `AvisoAlCliente` `puntos.movidos` con `puntos`, `motivo` y `saldo`.
+- Job diario `app.lealtad.canje.vencer-cron` (0:15 de México): vence los canjes vigentes pasados y regresa sus puntos (`DEVOLUCION_CANJE`) y su existencia, cada uno en su transacción.
+
+**Endpoints** (`/api/v1/app/lealtad`, contrato 2.19.0): `GET` (resumen), `GET /movimientos` (paginado), `GET /recompensas`, `GET` y `POST /canjes` (409 `SALDO_INSUFICIENTE`, `RECOMPENSA_AGOTADA`; 404), `GET` y `POST /referidos` (400 sin contacto, sin consentimiento o teléfono que no tiene 10 dígitos; 409 `REFERIDO_DUPLICADO` si el correo es de un cliente o el teléfono o correo ya se refirió; 409 `LIMITE_REFERIDOS`). Personal (`CAJA`, `SERVICIO`, `ADMINISTRADOR`): `POST /api/v1/lealtad/canjes/{codigo}/usar` (404; 409 `CANJE_NO_VIGENTE`, que la app no ve y por eso no está en su contrato). El ticket de la orden (`GET /servicios/{id}`) suma `puntosGanados`, opcional: los puntos del movimiento `SERVICIO` de esa orden, nulo si no dio.
+
+**Pruebas.** `LealtadDominioTest`, `ReglasLealtadTest`, `LealtadAppServiceTest`, `ReferidosAppServiceTest` y `LealtadIntegrationTest`.
+
+**Supuestos.** La regla de duplicado compara el correo contra los clientes y el teléfono o correo contra referidos anteriores; no busca en los prospectos del CRM, que no tienen API pública de búsqueda. El push con la app cerrada lo hará V2-M06.07 escuchando `AvisoAlCliente`.
 
 ### M13 · Promociones y novedades — H4 — módulo `promociones (nuevo)`
 
