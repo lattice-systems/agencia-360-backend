@@ -68,6 +68,12 @@ public class GlobalExceptionHandler {
 				ex.getMessage(), request.getRequestURI(), ex.getCodigo()));
 	}
 
+	@ExceptionHandler(CamposInvalidosException.class)
+	public ResponseEntity<ApiError> handleCamposInvalidos(CamposInvalidosException ex, HttpServletRequest request) {
+		return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(ApiError.conCampos(HttpStatus.BAD_REQUEST.value(),
+				"Bad Request", ex.getMessage(), request.getRequestURI(), ex.getCodigo(), ex.getCampos()));
+	}
+
 	@ExceptionHandler(SolicitudInvalidaException.class)
 	public ResponseEntity<ApiError> handleSolicitudInvalida(SolicitudInvalidaException ex, HttpServletRequest request) {
 		return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(ApiError.of(HttpStatus.BAD_REQUEST.value(),
