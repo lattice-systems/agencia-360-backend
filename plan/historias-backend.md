@@ -872,6 +872,23 @@ Reprogramar la cita con `POST /citas/{citaId}/reprogramar` conserva su id, así 
 
 Agendar, subir una foto, ofertar y responder bloquean la fila de `valuacion` (`PESSIMISTIC_WRITE`). Sin el bloqueo, dos fotos subidas a la vez pisan la una a la otra dentro del JSON de `fotos`.
 
+##### Fotos (V2-M26.02)
+
+Tomas fijas, en este orden, en el enum `TomaValuacion`: `FRENTE`, `TRASERA`, `LATERAL_IZQUIERDO`, `LATERAL_DERECHO`, `INTERIOR_DELANTERO`, `INTERIOR_TRASERO`, `TABLERO_KM` y `CAJUELA`.
+
+- Una foto por petición y por toma. Volver a subir una toma la reemplaza, así que reintentar tras un corte de red es seguro.
+- JPEG o PNG de hasta 8 MB. No se acepta WebP porque `LimpiadorImagen` no lo decodifica.
+- Se guarda siempre la versión reescrita por `LimpiadorImagen`, que quita EXIF y ubicación GPS. Se agrega `limpiar(bytes, ladoMaximo)` y aquí se usa 1600 px. `limpiar(bytes)` sigue en 1024 para el asistente (M24).
+- Antes de decodificar se leen las dimensiones del encabezado y se rechaza con 400 lo que pase de 40 megapíxeles, para que un archivo chico no agote la memoria.
+- Se guardan con `AlmacenArchivos` en la carpeta `valuacion-fotos`. La foto reemplazada se borra del almacén solo después del commit, y la nueva se borra si la transacción falla.
+- Se entregan con `urlTemporal` (HMAC, 15 minutos). La clave del archivo nunca sale en la API.
+
+##### Inspección (V2-M26.03)
+
+`ValuacionService.agendar` usa `AgendaAppService.agendar(..., MotivoCita.VALUACION)` en la misma transacción, como `CampanasAppService`. Se puede agendar en `SOLICITADA`, y en `CITA_AGENDADA` solo si la cita ya pasó hace más de `app.valuacion.dias-sin-oferta` días (7) sin oferta, que es el caso de quien no llegó. En cualquier otro caso responde 409 `VALUACION_NO_AGENDABLE`.
+
+`POST /citas` con `motivo` `valuacion` responde 400 `DATOS_INVALIDOS`: esa cita solo nace desde la valuación, para que no haya inspecciones sin solicitud.
+
 ### M27 · Centro de ayuda y sucursales — H4 — módulo `carecarapp`
 
 Detalle: [`carecar-mobile/plan/modulos/M27-ayuda-y-sucursales.md`](https://github.com/lattice-systems/carecar-mobile/blob/main/plan/modulos/M27-ayuda-y-sucursales.md)
