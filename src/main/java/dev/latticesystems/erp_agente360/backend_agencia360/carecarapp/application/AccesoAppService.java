@@ -73,6 +73,21 @@ public class AccesoAppService {
 	 */
 	@Transactional(noRollbackFor = NoAutenticadoException.class)
 	public SesionIniciadaApp iniciarSesion(String correo, String contrasena) {
+		return iniciarSesion(correo, contrasena, null);
+	}
+
+	/**
+	 * Igual que {@link #iniciarSesion(String, String)}, guardando el nombre del
+	 * dispositivo (V2-M01.09).
+	 *
+	 * <p>
+	 * {@code dispositivo} es opcional: sin él la sesion queda sin nombre y la lista
+	 * de «mis sesiones» muestra un texto genérico. Que sea opcional no es un
+	 * detalle: un cliente con una versión vieja de la app no manda nada y tiene que
+	 * poder entrar igual.
+	 */
+	@Transactional(noRollbackFor = NoAutenticadoException.class)
+	public SesionIniciadaApp iniciarSesion(String correo, String contrasena, String dispositivo) {
 		Instant ahora = Instant.now(reloj);
 		CuentaApp cuenta = cuentaPorUsuario(correo).orElseThrow(this::credencialesInvalidas);
 		ClienteRegistrado cliente = directorioClientes.buscarPorId(cuenta.getClienteId())
@@ -88,7 +103,7 @@ public class AccesoAppService {
 		}
 		exigirActiva(cuenta);
 		cuenta.registrarIngreso();
-		return emitirSesion(cuenta, cliente, ahora);
+		return emitirSesion(cuenta, cliente, ahora, dispositivo);
 	}
 
 	/**
@@ -118,7 +133,7 @@ public class AccesoAppService {
 		ClienteRegistrado cliente = directorioClientes.buscarPorId(cuenta.getClienteId())
 				.orElseThrow(() -> new NoAutenticadoException(SESION_TERMINADA));
 		sesion.revocar(ahora);
-		return emitirSesion(cuenta, cliente, ahora);
+		return continuarSesion(cuenta, cliente, ahora, sesion);
 	}
 
 	/** Revoca el refresh token. No falla si ya no era válido. */
@@ -187,10 +202,83 @@ public class AccesoAppService {
 		return cuentaRepository.findByUsuario(CuentaApp.normalizarUsuario(usuario));
 	}
 
-	private SesionIniciadaApp emitirSesion(CuentaApp cuenta, ClienteRegistrado cliente, Instant ahora) {
-		String accessToken = jwtService.generateToken(cliente.id(), cliente.correo(), List.of(Role.CLIENTE_CARECAR));
+	/**
+	 * Las sesiones vigentes de la cuenta del cliente (V2-M01.09).
+	 *
+	 * <p>
+	 * No se devuelve nada derivado del refresh token: con el hash y la tabla se
+	 * podría revocar la sesión de otro, así que leer la lista nunca puede ser una
+	 * fuga.
+	 *
+	 * <p>
+	 * <strong>No se marca cuál es la sesión de quien pregunta.</strong> El JWT
+	 * lleva el id del cliente, no el de la sesión, así que aquí no hay forma de
+	 * saberlo; marcarla exigiría un claim nuevo en {@code shared}, que también usan
+	 * el ERP y el CRM, y se propone aparte.
+	 */
+	@Transactional(readOnly = true)
+	public List<SesionActivaApp> sesionesDe(Long clienteId) {
+		CuentaApp cuenta = cuentaDe(clienteId);
+		return sesionRepository.vigentesDe(cuenta.getId(), Instant.now(reloj)).stream()
+				.map(s -> new SesionActivaApp(s.getId(), s.getDispositivo(), s.getUltimoUso(), s.getIniciadaEn(),
+						s.getExpiraEn()))
+				.toList();
+	}
+
+	/**
+	 * Revoca esa sesión. Idempotente: una ya revocada termina bien.
+	 *
+	 * @throws RecursoNoEncontradoException
+	 *             no existe o no es de este cliente (404, nunca 403: un 403 diría
+	 *             «existe, pero no es tuya»)
+	 */
+	@Transactional
+	public void cerrarSesion(Long clienteId, Long sesionId) {
+		CuentaApp cuenta = cuentaDe(clienteId);
+		SesionApp sesion = sesionRepository.findById(sesionId).filter(s -> s.getCuentaId().equals(cuenta.getId()))
+				.orElseThrow(() -> new RecursoNoEncontradoException("La sesión no existe"));
+		sesion.revocar(Instant.now(reloj));
+	}
+
+	/**
+	 * Revoca <strong>todas</strong> las sesiones de la cuenta, incluida la de quien
+	 * llama: es «cerrar sesión en todos los dispositivos».
+	 *
+	 * <p>
+	 * El access token en curso sigue valiendo hasta que expire, igual que en
+	 * {@code /auth/cerrar-sesion}, así que la app tiene que soltar su sesión por su
+	 * cuenta.
+	 */
+	@Transactional
+	public void cerrarTodasLasSesiones(Long clienteId) {
+		cerrarTodas(cuentaDe(clienteId).getId(), Instant.now(reloj));
+	}
+
+	private SesionIniciadaApp emitirSesion(CuentaApp cuenta, ClienteRegistrado cliente, Instant ahora,
+			String dispositivo) {
 		String refreshToken = Secretos.nuevoRefreshToken();
-		sesionRepository.save(SesionApp.iniciar(cuenta.getId(), Secretos.sha256(refreshToken), ahora));
+		sesionRepository.save(SesionApp.iniciar(cuenta.getId(), Secretos.sha256(refreshToken), ahora, dispositivo));
+		return respuestaDeSesion(cuenta, cliente, refreshToken);
+	}
+
+	/**
+	 * La sesión que sustituye a {@code previa} al refrescar, arrastrando el nombre
+	 * del dispositivo y el inicio real (V2-M01.09).
+	 *
+	 * <p>
+	 * Refrescar revoca la fila y guarda otra, porque el refresh token es de un solo
+	 * uso. Si no se arrastraran, el nombre se perdería en el primer refresco -a la
+	 * hora de haber entrado- y la lista de «mis sesiones» quedaría inservible.
+	 */
+	private SesionIniciadaApp continuarSesion(CuentaApp cuenta, ClienteRegistrado cliente, Instant ahora,
+			SesionApp previa) {
+		String refreshToken = Secretos.nuevoRefreshToken();
+		sesionRepository.save(SesionApp.continuar(previa, Secretos.sha256(refreshToken), ahora));
+		return respuestaDeSesion(cuenta, cliente, refreshToken);
+	}
+
+	private SesionIniciadaApp respuestaDeSesion(CuentaApp cuenta, ClienteRegistrado cliente, String refreshToken) {
+		String accessToken = jwtService.generateToken(cliente.id(), cliente.correo(), List.of(Role.CLIENTE_CARECAR));
 		return new SesionIniciadaApp(accessToken, jwtService.segundosDeVigencia(), refreshToken,
 				cuenta.isDebeCambiarContrasena());
 	}
