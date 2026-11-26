@@ -25,6 +25,13 @@ public interface VehiculosDeClientes {
 	List<VehiculoDeCliente> deCliente(Long clienteId);
 
 	/**
+	 * Los vehículos de un modelo (el Tipo, sin distinguir mayúsculas) con año entre
+	 * {@code anioDesde} y {@code anioHasta}, para cruzar una campaña de seguridad
+	 * (V2-M10.04).
+	 */
+	List<VehiculoDeCliente> delModelo(String modelo, int anioDesde, int anioHasta);
+
+	/**
 	 * Corrige las placas y el kilometraje (ERP-3.0). Un valor vacío los deja sin
 	 * capturar; el color, si viene {@code null}, se deja como está.
 	 *

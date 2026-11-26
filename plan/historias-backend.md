@@ -363,6 +363,42 @@ Detalle: [`carecar-mobile/plan/modulos/M10-garantia-y-campanas.md`](https://gith
 | V2-M10.04 | Como cliente quiero un aviso cuando salga una campaña para mi auto | Push con gravedad · no silenciable si es crítica | Ricardo |
 | V2-M10.05 | Como cliente quiero saber que mi garantía está por vencer | Aviso 60 y 15 días antes / 1 000 km antes | Ricardo |
 
+#### Diseño técnico — V2-M10.01 a V2-M10.05 (Ricardo)
+
+Vive en `carecarapp`, como M05: necesita el km actual (`KilometrajeService`), la agenda de citas y el canal en vivo, que están ahí; del módulo `clientes` solo usa su API pública `VehiculosDeClientes`, que suma `delModelo(modelo, anioDesde, anioHasta)` para el cruce. Una migración nueva (número al integrar).
+
+**Tablas (ficha, sección 10).**
+
+- `garantia`: `id`, `vehiculo_cliente_id` (FK), `componente`, `descripcion` (nula), `inicia_en`, `vence_en`, `km_limite` (nulo si solo cuenta la fecha) y, agregadas, `aviso_60_dias_en`, `aviso_15_dias_en`, `aviso_km_en` para no repetir el aviso. `check` de fechas en orden y km mayor a cero.
+- `campana_seguridad`: `id`, `codigo` (único, en mayúsculas), `titulo`, `descripcion`, `que_hacer`, `gravedad` (`BAJA`, `MEDIA`, `ALTA`, `CRITICA`), `modelo` (el Tipo, sin distinguir mayúsculas), `anio_desde`, `anio_hasta`, `vin_desde` y `vin_hasta` (los dos o ninguno) y `publicada_en`.
+- `campana_vehiculo`: `id`, `campana_seguridad_id` (FK), `vehiculo_cliente_id` (FK), `estado` (`ABIERTA`, `AGENDADA`, `ATENDIDA`), `cita_id` (FK a `cita`, obligatoria si está agendada) y `avisada_en`; única por (campaña, vehículo).
+- `cita.motivo` suma `CAMPANA` (se rehace el `check`).
+
+**Reglas.**
+
+- **Cobertura (M10.01):** vencida si pasó `vence_en` o el km actual llegó a `km_limite`; por vencer a 60 días o a 1 000 km; si no, vigente. `consumo` (0 a 100) es lo usado del tiempo o del km, lo que vaya más adelante, y `limite` dice cuál se alcanza primero (o cuál la venció). Sin km conocido solo cuenta la fecha. Es pura (`PoliticaGarantia`).
+- **Cruce (M10.02):** una campaña aplica a un vehículo con el mismo modelo, año dentro del rango y, si trae rango, VIN dentro (comparación de texto en mayúsculas). Al consultar las campañas se crea la fila de `campana_vehiculo` de las que aún no la tienen (así un auto que llega después también la ve) y una agendada cuya cita se canceló vuelve a `ABIERTA`. Orden: abiertas primero, la más grave arriba; luego agendadas y atendidas. La insignia del garaje sale de que alguna esté abierta.
+- **Agendar (M10.03):** usa `AgendaAppService.agendar` con motivo `CAMPANA` en la misma transacción y guarda la cita en `campana_vehiculo`; el motivo «Campaña <código>» se lee uniendo la cita con su campaña. Una campaña agendada o atendida responde 409 `CAMPANA_NO_AGENDABLE`.
+- **Aviso de campaña (M10.04):** al publicar, la campaña se cruza con los vehículos del modelo y año (`VehiculosDeClientes.delModelo`) y el rango de VIN; por cada uno se crea su fila con `avisada_en` y se publica `AvisoAlCliente` `campana.nueva` (`vehiculoId`, `campanaId`, `codigo`, `titulo`, `gravedad`, `critica`).
+- **Garantía por vencer (M10.05):** job diario (`AvisosGarantiaService`, `app.garantia.aviso.cron`, 9:30 hora de México) sobre las coberturas vigentes; manda el aviso más urgente pendiente (15 días, 1 000 km, 60 días), cada uno una sola vez (el de 15 días también cierra el de 60), con `AvisoAlCliente` `garantia.por_vencer` (`vehiculoId`, `garantiaId`, `componente`, `venceEn`, `diasRestantes`, `kmRestantes` si aplica, `motivo`). Un fallo en una cobertura se registra y no detiene a las demás.
+
+**Endpoints de la app** (contrato 2.18.0):
+
+- `GET /vehiculos/{id}/garantia` → 200 `GarantiaVehiculo` (`kmActual` y `coberturas`). 404 si el vehículo no es del cliente.
+- `GET /vehiculos/{id}/campanas` → 200 `CampanaSeguridad[]`. 404 si el vehículo no es del cliente.
+- `POST /vehiculos/{id}/campanas/{campanaId}/cita` `{franjaId, fecha}` → 201 `Cita` con `motivo` `campana`. 400 (franja o fecha), 404 (vehículo ajeno o campaña que no le aplica), 409 `CAMPANA_NO_AGENDABLE`, `FRANJA_SIN_CUPO` o `CITA_DUPLICADA`.
+- `GET /eventos` documenta `campana.nueva` (`AvisoCampanaNueva`) y `garantia.por_vencer` (`AvisoGarantiaPorVencer`).
+
+**Endpoints del personal** (rol `SERVICIO` o `ADMINISTRADOR`, mientras el ERP siga congelado): `POST /api/v1/garantias` (400 si un dato no es válido, 404 si el vehículo no existe), `POST /api/v1/campanas` → 201 `{id, codigo, vehiculosAfectados}` (400 si un dato no es válido o el código ya existe) y `POST /api/v1/campanas/{id}/vehiculos/{vehiculoId}/atendida` (404 si no le aplica).
+
+**Pruebas.** `GarantiaYCampanasTest` (dominio), `PoliticaGarantiaTest`, `CampanasAppServiceTest` y `AvisosGarantiaServiceTest` (Mockito), y `GarantiaCampanasIntegrationTest` (cobertura contra el km de una lectura, validaciones y roles; campaña publicada que avisa solo al dueño que entra por VIN, agendar con motivo `campana`, 409 al repetir, reabrir al cancelar la cita, atendida, ajenos y código repetido). El modelo de la prueba lleva un sufijo aleatorio porque las pruebas comparten la base.
+
+**Supuestos sobre trabajo de otras personas (para reconciliar)**
+
+- **Push (V2-M06.02 y V2-M06.07, Jael):** `campana.nueva` y `garantia.por_vencer` son `AvisoAlCliente`, como el recordatorio de M05.05; cuando `notificaciones` escuche ese evento llegan como push sin cambiar este código. «No silenciable si es crítica» queda en `critica: true`: lo debe respetar M06.05 (preferencias y horario silencioso).
+- **Citas (V2-M02.08, Juan Pablo):** la app aún no conoce el motivo `campana` en «Mis citas»; su lector lo deja nulo sin fallar. Mostrar «Campaña» ahí es un cambio chico de ese módulo.
+- **Origen de garantías y campañas:** el ERP congelado no las captura; mientras tanto, los endpoints del personal y los datos de ejemplo (V2-T05.10).
+
 ### M11 · Asistencia en camino (SOS) — H6 — módulo `asistencia (nuevo)`
 
 Detalle: [`carecar-mobile/plan/modulos/M11-asistencia-en-camino.md`](https://github.com/lattice-systems/carecar-mobile/blob/main/plan/modulos/M11-asistencia-en-camino.md)

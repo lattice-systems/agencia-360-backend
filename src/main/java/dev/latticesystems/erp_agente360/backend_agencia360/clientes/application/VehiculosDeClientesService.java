@@ -55,6 +55,16 @@ public class VehiculosDeClientesService implements VehiculosDeClientes {
 	}
 
 	@Override
+	@Transactional(readOnly = true)
+	public List<VehiculoDeCliente> delModelo(String modelo, int anioDesde, int anioHasta) {
+		if (modelo == null || modelo.isBlank()) {
+			return List.of();
+		}
+		return vehiculoRepository.delModelo(modelo.strip(), anioDesde, anioHasta).stream()
+				.map(VehiculosDeClientesService::vista).toList();
+	}
+
+	@Override
 	@Transactional
 	public VehiculoDeCliente corregir(Long vehiculoId, String placas, Integer kilometraje, String color) {
 		VehiculoCliente vehiculo = vehiculoRepository.obtener(vehiculoId)
