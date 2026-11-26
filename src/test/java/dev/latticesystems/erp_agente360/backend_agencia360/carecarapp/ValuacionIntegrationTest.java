@@ -39,6 +39,12 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Locale;
 import java.util.UUID;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
+import java.util.stream.IntStream;
 import javax.imageio.ImageIO;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -448,6 +454,9 @@ class ValuacionIntegrationTest extends AbstractIntegrationTest {
 				.andExpect(jsonPath("$.codigo").value("OFERTA_NO_DISPONIBLE"));
 
 		vencer(id);
+		// Se renueva aunque nadie la haya consultado desde que venció.
+		ofertar(admin, id, "{\"monto\":130000}").andExpect(status().isOk());
+		vencer(id);
 		// Pedir otra guarda la vencida y no choca con el índice de abiertas.
 		long otra = solicitada(ana);
 		assertThat(estadoGuardado(id)).isEqualTo("VENCIDA");
@@ -540,6 +549,50 @@ class ValuacionIntegrationTest extends AbstractIntegrationTest {
 		cuentasAppService.desactivar(ana.id());
 		comoCliente(ana, get(ruta, ana.vehiculo())).andExpect(status().isForbidden())
 				.andExpect(jsonPath("$.codigo").value("CUENTA_DESACTIVADA"));
+	}
+
+	@Test
+	void pedirVariasVecesALaVezCreaUnaSolaValuacion() throws Exception {
+		long estimacion = estimar(ana);
+
+		List<Integer> estados = aLaVez(4, i -> pedir(ana, estimacion).andReturn().getResponse().getStatus());
+
+		assertThat(estados).containsExactlyInAnyOrder(201, 200, 200, 200);
+	}
+
+	@Test
+	void lasFotosSubidasALaVezNoSePisan() throws Exception {
+		long id = solicitada(ana);
+		esperarProspecto(id);
+		byte[] foto = imagen("jpg");
+		String[] tomas = {"FRENTE", "TRASERA", "LATERAL_IZQUIERDO", "LATERAL_DERECHO", "INTERIOR_DELANTERO",
+				"INTERIOR_TRASERO", "TABLERO_KM", "CAJUELA"};
+
+		List<Integer> estados = aLaVez(tomas.length,
+				i -> subir(ana, id, tomas[i], foto).andReturn().getResponse().getStatus());
+
+		assertThat(estados).containsOnly(200);
+		comoCliente(ana, get(RUTA + "/{id}", id)).andExpect(jsonPath("$.fotos.length()").value(8));
+	}
+
+	private interface Peticion {
+		int estado(int turno) throws Exception;
+	}
+
+	private static List<Integer> aLaVez(int cuantas, Peticion peticion) throws Exception {
+		try (ExecutorService hilos = Executors.newFixedThreadPool(cuantas)) {
+			CountDownLatch salida = new CountDownLatch(1);
+			List<Future<Integer>> pendientes = IntStream.range(0, cuantas).mapToObj(turno -> hilos.submit(() -> {
+				salida.await();
+				return peticion.estado(turno);
+			})).toList();
+			salida.countDown();
+			List<Integer> estados = new ArrayList<>();
+			for (Future<Integer> pendiente : pendientes) {
+				estados.add(pendiente.get(60, TimeUnit.SECONDS));
+			}
+			return estados;
+		}
 	}
 
 	private long ofertada(Cliente cliente) throws Exception {
