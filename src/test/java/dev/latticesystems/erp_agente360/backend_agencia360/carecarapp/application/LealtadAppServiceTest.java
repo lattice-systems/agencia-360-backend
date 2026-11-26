@@ -150,6 +150,17 @@ class LealtadAppServiceTest {
 	}
 
 	@Test
+	void pagarLaOrdenSumaBajoElCandadoDelSaldo() {
+		when(historial.detalle(41L)).thenReturn(Optional.of(detalle(41L, "1650.00")));
+
+		servicio.alConfirmarPago(new PagoConfirmado(7L, 41L, 3L, new BigDecimal("1650.00")));
+
+		InOrder orden = inOrder(cuenta);
+		orden.verify(cuenta).bloquear(3L);
+		orden.verify(cuenta).mover(3L, 165, MotivoPuntos.SERVICIO, "ORDEN", 41L);
+	}
+
+	@Test
 	void unaOrdenSinEntregarRegistradaYaHechaOSinClienteNoSuma() {
 		when(historial.detalle(anyLong())).thenReturn(Optional.of(detalle(41L, "1650.00")));
 		servicio.alCambiarOrden(new OrdenServicioCambiada(41L, 9L, 3L, EstatusOrden.TERMINADO,

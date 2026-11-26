@@ -170,7 +170,8 @@ public class LealtadAppService {
 	/**
 	 * Puntos por un servicio entregado (V2-M12.02): un punto por cada
 	 * {@code app.lealtad.pesos-por-punto} del total. Los servicios que se registran
-	 * ya hechos no suman, y la misma orden suma una sola vez.
+	 * ya hechos no suman, y la misma orden suma una sola vez aunque también se
+	 * pague (ver {@link #alConfirmarPago}).
 	 */
 	@ApplicationModuleListener
 	void alCambiarOrden(OrdenServicioCambiada cambio) {
@@ -178,9 +179,25 @@ public class LealtadAppService {
 				|| cambio.motivo() == MotivoCambio.REGISTRO) {
 			return;
 		}
-		int puntos = historial.detalle(cambio.ordenId()).map(d -> reglas.puntosPorServicio(d.total())).orElse(0);
+		sumarPorServicio(cambio.clienteId(), cambio.ordenId());
+	}
+
+	/**
+	 * Puntos por un servicio pagado, en la app o en caja (V2-M08.02 y V2-M12.02):
+	 * lo que pase primero entre pagar y entregar suma, y la orden suma una sola
+	 * vez.
+	 */
+	@ApplicationModuleListener
+	void alConfirmarPago(PagoConfirmado pago) {
+		sumarPorServicio(pago.clienteId(), pago.ordenId());
+	}
+
+	/** Bajo el candado del saldo, para que el pago y la entrega no sumen los dos. */
+	private void sumarPorServicio(Long clienteId, Long ordenId) {
+		int puntos = historial.detalle(ordenId).map(d -> reglas.puntosPorServicio(d.total())).orElse(0);
 		if (puntos > 0) {
-			cuenta.mover(cambio.clienteId(), puntos, MotivoPuntos.SERVICIO, REFERENCIA_ORDEN, cambio.ordenId());
+			cuenta.bloquear(clienteId);
+			cuenta.mover(clienteId, puntos, MotivoPuntos.SERVICIO, REFERENCIA_ORDEN, ordenId);
 		}
 	}
 
