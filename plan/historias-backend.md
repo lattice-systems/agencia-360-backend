@@ -30,6 +30,39 @@ Detalle: [`carecar-mobile/plan/modulos/M01-acceso-y-perfil.md`](https://github.c
 | V2-M01.07 | Como cliente quiero editar mi teléfono y correo para que la agencia me contacte | Cambio se guarda tras confirmar un código enviado al nuevo dato · al cambiar correo cambia también `cuenta_app.usuario` · validación de formato | Jael |
 | V2-M01.09 | Como cliente quiero ver y cerrar mis sesiones abiertas en otros celulares para sentirme seguro | Lista con dispositivo y último uso · cerrar una o todas revoca sus tokens | Jael |
 
+#### Diseño técnico — V2-M01.09 (parte B de Jael)
+
+La ficha nombra `sesion_app` con `dispositivo` y `ultimo_uso` como campos **nuevos**; hoy la tabla (`V10__crear_tablas_acceso_app.sql`) no los tiene. No se renombra ni se quita nada de la ficha.
+
+**Migración** `VNN__agregar_dispositivo_y_ultimo_uso_a_sesion_app.sql` — el número se toma al final, al rebasar antes de integrar:
+
+```sql
+alter table sesion_app add column dispositivo varchar(80);
+alter table sesion_app add column ultimo_uso  timestamp(6) with time zone;
+```
+
+Las dos nulas: las sesiones que ya existen quedan sin nombre y sin último uso, y la app muestra un texto genérico en su lugar.
+
+**`POST /auth/login` acepta `dispositivo` opcional** (≤ 80). Es el nombre que arma la app («Pixel 7 · Android 14»). Aditivo: un cliente que no lo mande sigue funcionando igual, y por eso no sube la versión mayor del contrato.
+
+**⚠️ El refresco tiene que arrastrar el nombre.** `emitirSesion` **crea una fila nueva** en cada refresco (revoca la vieja y guarda otra, porque el refresh es de un solo uso). Si no se copia `dispositivo` al par nuevo, el nombre del dispositivo se pierde en el primer refresco —a la hora de haber entrado— y la lista queda inservible. `POST /auth/refrescar` además pone `ultimo_uso` en la sesión que emite.
+
+**Endpoints nuevos**, los tres privados (access token):
+
+| Método | Ruta | Responde |
+| --- | --- | --- |
+| GET | `/api/v1/app/sesiones` | 200 con las sesiones **vigentes** de la cuenta: `[{id, dispositivo, ultimoUso, iniciadaEn, expiraEn}]`, ordenadas por `ultimoUso` descendente y las nulas al final |
+| DELETE | `/api/v1/app/sesiones/{id}` | 204. Revoca esa sesión. **404 si no existe o es de otra cuenta**, nunca 403: es la regla del contrato para un recurso ajeno |
+| DELETE | `/api/v1/app/sesiones` | 204. Revoca **todas** las de la cuenta, incluida la de quien llama |
+
+Errores comunes: 401 sin token o con token inválido, 403 `CUENTA_DESACTIVADA`. Nunca se devuelve `token_hash` ni nada derivado del refresh token.
+
+**Lo que esta historia NO puede hacer, y por qué**
+
+La lista **no puede marcar «este dispositivo»**. El JWT lleva `uid` y `roles` pero no el id de la sesión (`shared/security/JwtService`), así que el backend no sabe cuál de las sesiones está usando quien pregunta. Marcarla exigiría un claim `sid` y tocar `JwtService`, `UsuarioAutenticado` y el filtro, que usan también el ERP y el CRM: es un cambio de `shared` con alcance mucho mayor que esta historia, y **se propone aparte**.
+
+Mientras tanto, `DELETE /sesiones` se presenta en la app como «cerrar sesión en todos los dispositivos», que incluye el propio. Es lo que dice el documento del módulo («cerrar sesión en todos») y es la lectura segura: quien usa esa opción quiere exactamente eso.
+
 ### M02 · Mis vehículos y postventa (garaje, manuales, historial, tickets, citas) — H2 — módulo `carecarapp + servicio`
 
 Detalle: [`carecar-mobile/plan/modulos/M02-vehiculos-y-postventa.md`](https://github.com/lattice-systems/carecar-mobile/blob/main/plan/modulos/M02-vehiculos-y-postventa.md)
