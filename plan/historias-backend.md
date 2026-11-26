@@ -34,7 +34,7 @@ Detalle: [`carecar-mobile/plan/modulos/M01-acceso-y-perfil.md`](https://github.c
 
 La ficha nombra `sesion_app` con `dispositivo` y `ultimo_uso` como campos **nuevos**; hoy la tabla (`V10__crear_tablas_acceso_app.sql`) no los tiene. No se renombra ni se quita nada de la ficha.
 
-**Migración** `VNN__agregar_dispositivo_y_ultimo_uso_a_sesion_app.sql` — el número se toma al final, al rebasar antes de integrar:
+**Migración** `V52__agregar_dispositivo_y_ultimo_uso_a_sesion_app.sql` — el número se tomó al rebasar, cuando `main` ya iba en la V51:
 
 ```sql
 alter table sesion_app add column dispositivo varchar(80);
@@ -67,6 +67,30 @@ Errores comunes: 401 sin token o con token inválido, 403 `CUENTA_DESACTIVADA`. 
 La lista **no puede marcar «este dispositivo»**. El JWT lleva `uid` y `roles` pero no el id de la sesión (`shared/security/JwtService`), así que el backend no sabe cuál de las sesiones está usando quien pregunta. Marcarla exigiría un claim `sid` y tocar `JwtService`, `UsuarioAutenticado` y el filtro, que usan también el ERP y el CRM: es un cambio de `shared` con alcance mucho mayor que esta historia, y **se propone aparte**.
 
 Mientras tanto, `DELETE /sesiones` se presenta en la app como «cerrar sesión en todos los dispositivos», que incluye el propio. Es lo que dice el documento del módulo («cerrar sesión en todos») y es la lectura segura: quien usa esa opción quiere exactamente eso.
+
+#### Qué quedó — V2-M01.09
+
+| Pieza | Archivo |
+| --- | --- |
+| Migración | `V52__agregar_dispositivo_y_ultimo_uso_a_sesion_app.sql`, las tres columnas nulas |
+| Entidad | `SesionApp.iniciar(..., dispositivo)` y `SesionApp.continuar(previa, ...)` |
+| Consulta | `SesionAppRepository.vigentesDe(cuentaId, ahora)`, ordenada y sin vencidas |
+| Servicio | `sesionesDe`, `cerrarSesion(clienteId, sesionId)` y `cerrarTodasLasSesiones` en `AccesoAppService` |
+| DTO | `SesionActivaApp`, que no expone nada derivado del refresh token |
+| Endpoints | los tres en `AccesoAppController`, con `@PreAuthorize("hasRole('CLIENTE_CARECAR')")` |
+| Login | `LoginAppRequest.dispositivo`, opcional y con `@Size(max = 80)` |
+| Pruebas | `SesionesActivasAppIntegrationTest`, 14 de integración |
+
+**Las dos decisiones que más importan, y por qué:**
+
+1. **`SesionApp.continuar` arrastra `dispositivo` e `iniciada_en`.** Es lo más fácil de romper de la historia: refrescar revoca la fila y guarda otra, así que sin arrastrarlos el nombre se perdería en el primer refresco —a la hora de haber entrado— y la lista quedaría inservible. Hay una prueba por cada uno.
+2. **`vigentesDe` excluye las vencidas, no solo las revocadas.** Una sesión vencida tiene `revocada_en` en nulo, así que filtrar solo por eso dejaría en la lista un dispositivo que ya no puede entrar.
+
+**Nulos explícitos, no campos ausentes.** `SesionActivaApp` no usa `@JsonInclude(NON_NULL)` a propósito, aunque otros DTO del módulo sí: `mock_api` responde con nulos explícitos y conviene que la app vea la misma forma contra las dos.
+
+**El `dispositivo` demasiado largo responde 400** y no se corta en silencio. La app ya recorta a 80 antes de mandar, así que no debería pasar; si pasa, es mejor un error claro que un nombre mutilado por la base de datos.
+
+**Lo que esta historia no puede hacer:** la lista no marca «esta sesión». El JWT lleva `uid` y `roles`, no el id de la sesión, así que el servidor no sabe cuál pregunta. Exigiría un claim `sid` y tocar `JwtService`, `UsuarioAutenticado` y el filtro, que usan también el ERP y el CRM: se propone aparte.
 
 ### M02 · Mis vehículos y postventa (garaje, manuales, historial, tickets, citas) — H2 — módulo `carecarapp + servicio`
 
