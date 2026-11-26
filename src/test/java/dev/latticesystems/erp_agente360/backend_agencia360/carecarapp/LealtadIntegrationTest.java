@@ -20,6 +20,7 @@ import dev.latticesystems.erp_agente360.backend_agencia360.shared.AbstractIntegr
 import dev.latticesystems.erp_agente360.backend_agencia360.shared.eventos.ProspectoFinalizado;
 import dev.latticesystems.erp_agente360.backend_agencia360.shared.security.JwtService;
 import dev.latticesystems.erp_agente360.backend_agencia360.shared.security.Role;
+import java.sql.Timestamp;
 import java.time.Instant;
 import java.util.List;
 import java.util.Locale;
@@ -214,9 +215,14 @@ class LealtadIntegrationTest extends AbstractIntegrationTest {
 		comoCliente(get("/api/v1/app/lealtad/referidos")).andExpect(jsonPath("$.length()").value(0));
 	}
 
+	/**
+	 * Con la hora de la JVM y un minuto antes, no con {@code now()} de la base: el
+	 * reloj del contenedor puede ir adelantado al de la JVM y el ajuste saldría
+	 * después del canje que se hace enseguida.
+	 */
 	private void ajuste(int puntos) {
-		jdbc.update("insert into movimiento_puntos (cliente_id, puntos, motivo, creado_en) "
-				+ "values (?, ?, 'AJUSTE', now())", cliente, puntos);
+		jdbc.update("insert into movimiento_puntos (cliente_id, puntos, motivo, creado_en) values (?, ?, 'AJUSTE', ?)",
+				cliente, puntos, Timestamp.from(Instant.now().minusSeconds(60)));
 	}
 
 	private Long recompensa(String nombre, int puntos, Integer existencia) {
