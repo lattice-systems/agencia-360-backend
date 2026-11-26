@@ -166,6 +166,8 @@ Todos van bajo `/api/v1` y, salvo el login, piden el token en `Authorization: Be
 | `carecarapp` | `GET /app/agenda/disponibilidad?desde=&hasta=`, `GET /app/citas?estado=&desde=&hasta=&pagina=&tamano=`, `POST /app/citas`, `POST /app/citas/{id}/cancelar` (horario y cupo en `app.agenda.*`; plazo de cancelación provisional de 24 h, pendiente del PO) | Clientes de la app (rol `CLIENTE_CARECAR`) |
 | `carecarapp` | `POST /garantias` (cobertura de un componente), `POST /campanas` (publica una campaña de seguridad, la cruza por modelo, año y rango de VIN y avisa `campana.nueva`), `POST /campanas/{id}/vehiculos/{vehiculoId}/atendida` (V2-M10, mientras el ERP no tenga pantalla) | Servicio y Administrador |
 | `carecarapp` | `GET /app/vehiculos/{id}/garantia`, `GET /app/vehiculos/{id}/campanas`, `POST /app/vehiculos/{id}/campanas/{campanaId}/cita` (cita con motivo `campana`; 409 `CAMPANA_NO_AGENDABLE`). El aviso de garantía por vencer corre a diario (`app.garantia.aviso.cron`) | Clientes de la app (rol `CLIENTE_CARECAR`) |
+| `carecarapp` | `GET /valuaciones?estado=&pagina=&tamano=` (las más antiguas primero), `GET /valuaciones/{id}`, `POST /valuaciones/{id}/oferta` con `{monto, vigenciaHasta?, nota?}` (después de la inspección o para renovar una vencida; 409 `TRANSICION_INVALIDA`). Ventas ve solo las de sus prospectos; lo demás responde 404 (V2-M26.04, mientras el CRM no tenga pantalla) | Ventas y Administrador |
+| `carecarapp` | `POST` y `GET /app/valuaciones`, `GET /app/valuaciones/{id}`, `POST /app/valuaciones/{id}/fotos/{toma}` (multipart `imagen`: 8 tomas, JPEG o PNG de hasta 8 MB, se guarda sin EXIF; 409 `VALUACION_CERRADA`), `POST /app/valuaciones/{id}/cita` (cita con motivo `valuacion`; 409 `VALUACION_NO_AGENDABLE`), `POST /app/valuaciones/{id}/respuesta` (409 `OFERTA_VENCIDA` u `OFERTA_NO_DISPONIBLE`), `GET /app/vehiculos/{id}/valor-estimado?meses=` (un punto por mes con la última estimación guardada). Pedirla necesita una estimación hecha con un vehículo registrado (422 `VALUACION_SIN_VEHICULO`) y la liga a un prospecto de ventas. Al capturar la oferta se avisa `valuacion.oferta` sin el monto. Plazos en `app.valuacion.*`, propuestas pendientes del PO (V2-M26) | Clientes de la app (rol `CLIENTE_CARECAR`) |
 | `carecarapp` | `POST /lealtad/canjes/{codigo}/usar` (usa en la agencia el canje que muestra el cliente; V2-M12.03, mientras el ERP no tenga pantalla) | Caja, Servicio y Administrador |
 | `carecarapp` | `GET /app/lealtad`, `GET /app/lealtad/movimientos`, `GET /app/lealtad/recompensas`, `GET` y `POST /app/lealtad/canjes`, `GET` y `POST /app/lealtad/referidos` (puntos, nivel, canjes y referidos; reglas en `app.lealtad.*`). Los puntos de un servicio llegan al entregarse la orden y los canjes vencidos regresan sus puntos a diario (`app.lealtad.canje.vencer-cron`) | Clientes de la app (rol `CLIENTE_CARECAR`) |
 | `carecarapp` | `POST /app/asistencia` (SOS, una abierta por cliente; 409 `SOLICITUD_ABIERTA`), `GET /app/asistencia?activa=true` (204 si no hay) | Clientes de la app (rol `CLIENTE_CARECAR`) |
@@ -329,6 +331,7 @@ La API lee su configuración de variables de entorno. Si no defines ninguna, usa
 | `RECOLECCION_CENTRO_LAT`, `RECOLECCION_CENTRO_LNG`, `RECOLECCION_RADIO_KM` | `21.1250`, `-101.6860`, `15` | Zona de cobertura de la recolección a domicilio (V2-M17): centro (León, Gto.) y radio en km. Una dirección fuera de ella responde 422 `FUERA_DE_COBERTURA` |
 | `RECOLECCION_TARIFA_BASE`, `RECOLECCION_TARIFA_POR_KM` | `80`, `8` | Costo de cada traslado en pesos: base más tarifa por km en línea recta al centro |
 | `RECOLECCION_VENTANA_INICIO`, `RECOLECCION_VENTANA_FIN`, `ENTREGA_VENTANA_INICIO`, `ENTREGA_VENTANA_FIN` | `07:00`, `09:00`, `17:00`, `19:00` | Franjas del día para recoger y para entregar (hora local de la agencia) |
+| `VALUACION_DIAS_SIN_OFERTA`, `VALUACION_VIGENCIA_DIAS`, `VALUACION_VIGENCIA_MAXIMA_DIAS` | `7`, `7`, `30` | Valuación formal (V2-M26): días tras una cita sin oferta para poder agendar otra, vigencia de la oferta si no se indica y máximo de días de vigencia |
 | `ADMIN_INICIAL_USUARIO` / `ADMIN_INICIAL_CONTRASENA` | Vacío | Si tienen valor, al arrancar se crea el primer Administrador (ERP) cuando todavía no existe |
 | `GERENTE_INICIAL_USUARIO` / `GERENTE_INICIAL_CONTRASENA` | Vacío | Igual, para el primer Gerente de marketing (administrador del CRM) |
 | `AGENCIA_MARCA` | `Nissan` | Marca que vende la agencia; va en la factura y en la unidad del expediente |
@@ -349,7 +352,8 @@ La base empieza vacía. Para probar el ERP y el CRM en local hay un juego de dat
 - 8 vehículos;
 - 8 refacciones con sus recepciones;
 - 12 prospectos repartidos en las 7 etapas;
-- una clienta de la app CareCar con 2 vehículos, sus servicios en el expediente y el manual de uno de ellos.
+- una clienta de la app CareCar con 2 vehículos, sus servicios en el expediente y el manual de uno de ellos,
+- una solicitud de valuación formal de esa clienta, si hay parámetros de toma a cuenta para su auto.
 
 Qué contiene y qué demuestra cada dato está en [`docs/datos-de-ejemplo.md`](docs/datos-de-ejemplo.md).
 

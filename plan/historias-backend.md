@@ -860,7 +860,7 @@ Detalle: [`carecar-mobile/plan/modulos/M26-valuacion.md`](https://github.com/lat
 
 ##### Tablas y migración
 
-Una migración, `V49__crear_valuacion.sql`. **El número es provisional:** al diseñar, la última de `main` es `V48`. Antes de integrar se rebasa y se renombra con el siguiente número libre (el mayor de `main` más 1).
+Una migración, `V50__crear_valuacion.sql`. Al diseñar iba como `V49`, pero la lealtad (M12) se integró antes con ese número. Si otra historia integra antes una `V50`, se renombra con el siguiente número libre (el mayor de `main` más 1).
 
 | Columna de `valuacion` | Tipo | Notas |
 | --- | --- | --- |
@@ -952,7 +952,7 @@ No se hace pantalla web. Igual que en las campañas (M10), los traslados (M17) y
 
 ##### Endpoints de la app
 
-Rol `CLIENTE_CARECAR`, contrato **2.19.0**, etiqueta `Valuación`. Toda ruta responde además 401 y 403 `CUENTA_DESACTIVADA`. Lo ajeno responde 404.
+Rol `CLIENTE_CARECAR`, contrato **2.20.0**, etiqueta `Valuación`. Toda ruta responde además 401 y 403 `CUENTA_DESACTIVADA`. Lo ajeno responde 404.
 
 | Método y ruta | Historia | Éxito | Errores propios |
 | --- | --- | --- | --- |
@@ -969,7 +969,7 @@ Rol `CLIENTE_CARECAR`, contrato **2.19.0**, etiqueta `Valuación`. Toda ruta res
 - `asesor` es el nombre del vendedor del prospecto (`ConsultaVendedores.nombreDe`), nulo mientras no haya.
 - `GET /eventos` documenta `valuacion.oferta` (`AvisoValuacionOferta`).
 
-**Códigos nuevos y el contrato.** `VALUACION_SIN_VEHICULO` (422), `VALUACION_CERRADA`, `VALUACION_NO_AGENDABLE`, `OFERTA_VENCIDA` y `OFERTA_NO_DISPONIBLE` (409). El contrato 2.19.0 los nombra en las descripciones y **todavía no los agrega al enum de `Problema.codigo`**: `ContratoCodigosDeErrorTest` y la prueba de contrato de la app exigen que ese enum sea igual al código que existe, y este diseño no trae código. El implementador del backend los agrega a `CodigosError` y al enum **en el mismo commit, que es el primero de código**, para que la app pueda copiarlo pronto, y sube el contrato a 2.19.1 (como pasó entre 2.10.0 y 2.12.1). El implementador de la app copia esa versión junto con sus valores de `CodigoProblema`. Si otra historia integra antes una 2.19.0, se toma la siguiente menor libre.
+**Códigos nuevos y el contrato.** `VALUACION_SIN_VEHICULO` (422), `VALUACION_CERRADA`, `VALUACION_NO_AGENDABLE`, `OFERTA_VENCIDA` y `OFERTA_NO_DISPONIBLE` (409). Están en `CodigosError` y en el enum de `Problema.codigo`. El diseño salió como 2.19.0 y los códigos como 2.19.1, pero la lealtad (M12) integró antes su propia 2.19.0, así que todo lo de M26 queda en **2.20.0**, la siguiente menor libre. El implementador de la app copia esa versión junto con sus valores de `CodigoProblema`.
 
 ##### Valor en el tiempo (V2-M26.05)
 
@@ -1008,7 +1008,20 @@ PR sugeridos para que cada uno sea revisable: (1) migración, solicitud, lista, 
 - **Push (Jael, M06):** `valuacion.oferta` es un `AvisoAlCliente`, así que llegará como push sin cambiar este código.
 - **PO:** sin filas en `parametro_toma_cuenta` toda estimación responde 422 en el backend real, y sin estimación no hay valuación ni gráfica.
 
-**Mientras no se implemente.** La app trabaja contra el contrato y `mock_api` de `carecar-mobile` (dependencia simulable).
+##### Estado: implementado en este repo
+
+V2-M26.01 a V2-M26.05 están en el backend, con pruebas de dominio, de servicio y de integración contra PostgreSQL. Precisiones al implementar:
+
+- `responder` no pone al día la valuación antes de decidir: calcula la vigencia con la fecha, porque el 409 revierte la transacción.
+- La oferta vencida y la cita cancelada se guardan al consultar, bloqueando la fila. La lista del personal solo bloquea las atrasadas.
+- Crear y renovar toman además un bloqueo por vehículo, para que dos peticiones a la vez no choquen con `uq_valuacion_abierta`.
+- Una foto de más de 20 MB la corta antes el límite general de subida, que responde 413 y no 400.
+
+Pendientes:
+
+- Los plazos de `app.valuacion.*` y las filas de `parametro_toma_cuenta` esperan al PO. Sin parámetros, el script de datos de ejemplo omite la valuación.
+- `LimpiadorImagen` quita el EXIF sin aplicar su orientación. La app debe mandar la foto ya girada.
+- Pantalla de la app contra este backend y tablero en `carecar-mobile`.
 
 ### M27 · Centro de ayuda y sucursales — H4 — módulo `carecarapp`
 
