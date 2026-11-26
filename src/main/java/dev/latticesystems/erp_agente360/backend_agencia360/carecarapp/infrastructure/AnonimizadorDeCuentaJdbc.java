@@ -87,6 +87,10 @@ public class AnonimizadorDeCuentaJdbc implements AnonimizadorDeCuenta {
 				where cliente_id = ?
 				""", clienteId);
 
+		// Datos fiscales (V2-M08.05): son de la persona y no se conservan. Las
+		// facturas guardan su propia copia del receptor, que sí se conserva por ley.
+		jdbc.update("delete from perfil_fiscal where cliente_id = ?", clienteId);
+
 		// Ya no se entra ni se recupera la cuenta.
 		jdbc.update("delete from sesion_app where cuenta_id in " + DE_SU_CUENTA, clienteId);
 		jdbc.update("delete from token_recuperacion where cuenta_app_id in " + DE_SU_CUENTA, clienteId);
