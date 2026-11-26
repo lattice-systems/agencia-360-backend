@@ -66,8 +66,7 @@ public class ExportadorDeDatosJdbc implements ExportadorDeDatos {
 					"""), Seccion.lista("tarjetasGuardadas", """
 					select id, marca, ultimos4, mes_vence, anio_vence, tipo, predeterminado, creado_en
 					from metodo_pago where cliente_id = :c
-					"""),
-			Seccion.lista("servicios", """
+					"""), Seccion.lista("servicios", """
 					select o.* from orden_servicio o
 					join vehiculo_cliente v on v.id = o.vehiculo_cliente_id where v.cliente_id = :c
 					"""),

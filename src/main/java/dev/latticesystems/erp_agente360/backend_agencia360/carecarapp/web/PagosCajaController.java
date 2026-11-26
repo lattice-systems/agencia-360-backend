@@ -17,9 +17,9 @@ import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * La caja marca pagada una orden que se cobró en el mostrador, para que nadie la
- * pague otra vez en la app (V2-M08.02). Mientras el ERP siga congelado se opera
- * con Swagger UI en local o con un cliente HTTP.
+ * La caja marca pagada una orden que se cobró en el mostrador, para que nadie
+ * la pague otra vez en la app (V2-M08.02). Mientras el ERP siga congelado se
+ * opera con Swagger UI en local o con un cliente HTTP.
  */
 @RestController
 @RequestMapping("/api/v1/caja/ordenes")

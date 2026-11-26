@@ -12,6 +12,8 @@ public enum MotivoFalloPago {
 	/** Nadie respondió el 3-D Secure a tiempo. */
 	AUTENTICACION_VENCIDA,
 
-	/** El personal marcó la orden pagada en caja mientras el intento seguía abierto. */
+	/**
+	 * El personal marcó la orden pagada en caja mientras el intento seguía abierto.
+	 */
 	PAGADA_EN_CAJA
 }

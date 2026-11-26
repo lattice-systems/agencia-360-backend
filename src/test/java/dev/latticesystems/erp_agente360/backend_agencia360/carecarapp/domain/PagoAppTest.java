@@ -94,8 +94,7 @@ class PagoAppTest {
 		assertThat(caja.getMedio()).isEqualTo(MedioPago.CAJA);
 		assertThat(caja.getReferencia()).isEqualTo("F-100");
 		assertThat(caja.getVence()).isNull();
-		assertThat(PagoApp.enCaja(ORDEN, "caja_sim_pi_4", null, 70L, AHORA).getReferencia())
-				.isEqualTo("caja_sim_pi_4");
+		assertThat(PagoApp.enCaja(ORDEN, "caja_sim_pi_4", null, 70L, AHORA).getReferencia()).isEqualTo("caja_sim_pi_4");
 	}
 
 	@Test

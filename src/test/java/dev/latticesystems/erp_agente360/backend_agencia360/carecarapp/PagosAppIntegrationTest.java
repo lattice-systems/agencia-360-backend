@@ -47,8 +47,8 @@ import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilde
  * Pagos simulados de punta a punta (V2-M08.02, V2-M08.04 y V2-M08.07): cobrar
  * con las tarjetas de prueba, idempotencia, 3-D Secure, tarjetas guardadas, mis
  * pagos, el ticket, la caja, los puntos y los derechos ARCO. No es
- * transaccional porque los puntos llegan por un evento asíncrono que necesita su
- * commit; cada prueba usa clientes y vehículos propios y no asume totales.
+ * transaccional porque los puntos llegan por un evento asíncrono que necesita
+ * su commit; cada prueba usa clientes y vehículos propios y no asume totales.
  */
 @AutoConfigureMockMvc
 class PagosAppIntegrationTest extends AbstractIntegrationTest {
@@ -160,8 +160,8 @@ class PagosAppIntegrationTest extends AbstractIntegrationTest {
 	@Test
 	void elTresDeSecureConfirmadoCobraYGuardaLaTarjeta() throws Exception {
 		Long orden = ordenLista(vehiculo(cliente), "800.00");
-		String pendiente = pagar(orden, "tds-" + unico, tarjetaGuardada("tok_sim_3ds"))
-				.andExpect(status().isCreated()).andExpect(jsonPath("$.estado").value("PENDIENTE"))
+		String pendiente = pagar(orden, "tds-" + unico, tarjetaGuardada("tok_sim_3ds")).andExpect(status().isCreated())
+				.andExpect(jsonPath("$.estado").value("PENDIENTE"))
 				.andExpect(jsonPath("$.requiereAutenticacion").value(true)).andReturn().getResponse()
 				.getContentAsString();
 		Number pago = JsonPath.read(pendiente, "$.id");
@@ -178,8 +178,9 @@ class PagosAppIntegrationTest extends AbstractIntegrationTest {
 				.andExpect(jsonPath("$.codigo").value("PAGO_NO_PENDIENTE"));
 
 		con(token, get(APP + "/metodos-pago")).andExpect(status().isOk()).andExpect(jsonPath("$.length()").value(1))
-				.andExpect(jsonPath("$[0].ultimos4").value("3220")).andExpect(jsonPath("$[0].predeterminado").value(true))
-				.andExpect(jsonPath("$[0].vencida").value(false)).andExpect(jsonPath("$[0].token").doesNotExist());
+				.andExpect(jsonPath("$[0].ultimos4").value("3220"))
+				.andExpect(jsonPath("$[0].predeterminado").value(true)).andExpect(jsonPath("$[0].vencida").value(false))
+				.andExpect(jsonPath("$[0].token").doesNotExist());
 	}
 
 	@Test
@@ -209,8 +210,7 @@ class PagosAppIntegrationTest extends AbstractIntegrationTest {
 				.andExpect(status().isCreated());
 		String lista = con(token, get(APP + "/metodos-pago")).andExpect(jsonPath("$.length()").value(2))
 				.andExpect(jsonPath("$[0].ultimos4").value("5556")).andExpect(jsonPath("$[0].tipo").value("DEBITO"))
-				.andExpect(jsonPath("$[1].predeterminado").value(false)).andReturn().getResponse()
-				.getContentAsString();
+				.andExpect(jsonPath("$[1].predeterminado").value(false)).andReturn().getResponse().getContentAsString();
 		Number debito = JsonPath.read(lista, "$[0].id");
 		Number master = JsonPath.read(lista, "$[1].id");
 
@@ -272,13 +272,10 @@ class PagosAppIntegrationTest extends AbstractIntegrationTest {
 		Long orden = ordenLista(vehiculo(cliente), "100.00");
 		pagar(orden, "corta", tarjeta("tok_sim_visa")).andExpect(status().isBadRequest());
 		pagar(orden, "desconocida-" + unico, tarjeta("tok_otro_procesador")).andExpect(status().isBadRequest());
-		pagar(orden, "vencida-" + unico,
-				"{\"tarjeta\":{\"token\":\"tok_sim_visa\",\"mesVence\":1,\"anioVence\":2020}}")
+		pagar(orden, "vencida-" + unico, "{\"tarjeta\":{\"token\":\"tok_sim_visa\",\"mesVence\":1,\"anioVence\":2020}}")
 				.andExpect(status().isBadRequest());
-		pagar(orden, "doble-" + unico,
-				"{\"tarjeta\":{\"token\":\"tok_sim_visa\",\"mesVence\":12,\"anioVence\":" + anioQueViene()
-						+ "},\"metodoPagoId\":1}")
-				.andExpect(status().isBadRequest());
+		pagar(orden, "doble-" + unico, "{\"tarjeta\":{\"token\":\"tok_sim_visa\",\"mesVence\":12,\"anioVence\":"
+				+ anioQueViene() + "},\"metodoPagoId\":1}").andExpect(status().isBadRequest());
 		pagar(orden, "ninguna-" + unico, "{}").andExpect(status().isBadRequest());
 		pagar(orden, "perfil-" + unico, "{\"tarjeta\":{\"token\":\"tok_sim_visa\",\"mesVence\":12,\"anioVence\":"
 				+ anioQueViene() + "},\"perfilFiscalId\":" + Long.MAX_VALUE + "}").andExpect(status().isNotFound());
@@ -334,9 +331,10 @@ class PagosAppIntegrationTest extends AbstractIntegrationTest {
 		anonimizador.anonimizar(cliente);
 		assertThat(jdbc.queryForObject("select count(*) from metodo_pago where cliente_id = ?", Integer.class, cliente))
 				.isZero();
-		assertThat(jdbc.queryForObject(
-				"select count(*) from pago_app where cliente_id = ? and token_procesador is null", Integer.class,
-				cliente)).isEqualTo(1);
+		assertThat(
+				jdbc.queryForObject("select count(*) from pago_app where cliente_id = ? and token_procesador is null",
+						Integer.class, cliente))
+				.isEqualTo(1);
 	}
 
 	private Long registrar(String nombre) {
@@ -352,8 +350,8 @@ class PagosAppIntegrationTest extends AbstractIntegrationTest {
 	}
 
 	private String personal(String usuario, String rol, Role permiso) {
-		Usuario guardado = usuarioRepository.save(
-				new Usuario(usuario, "hash-de-prueba", "Persona " + rol, rolRepository.findByNombre(rol).orElseThrow()));
+		Usuario guardado = usuarioRepository.save(new Usuario(usuario, "hash-de-prueba", "Persona " + rol,
+				rolRepository.findByNombre(rol).orElseThrow()));
 		return jwtService.generateToken(guardado.getId(), usuario, List.of(permiso));
 	}
 
@@ -366,8 +364,10 @@ class PagosAppIntegrationTest extends AbstractIntegrationTest {
 	}
 
 	private Long abrir(Long vehiculoId) throws Exception {
-		return id(con(tokenDeServicio, post("/api/v1/taller/ordenes").contentType(MediaType.APPLICATION_JSON)
-				.content("{\"vehiculoId\":" + vehiculoId + ",\"kilometraje\":15200}")).andExpect(status().isCreated()));
+		return id(con(tokenDeServicio,
+				post("/api/v1/taller/ordenes").contentType(MediaType.APPLICATION_JSON)
+						.content("{\"vehiculoId\":" + vehiculoId + ",\"kilometraje\":15200}"))
+				.andExpect(status().isCreated()));
 	}
 
 	/** Una orden del taller con un renglón, lista para entrega. */
@@ -383,7 +383,9 @@ class PagosAppIntegrationTest extends AbstractIntegrationTest {
 		return orden;
 	}
 
-	/** Un servicio registrado en el expediente ya hecho: no tiene línea de tiempo. */
+	/**
+	 * Un servicio registrado en el expediente ya hecho: no tiene línea de tiempo.
+	 */
 	private Long registrada(Long vehiculoId) throws Exception {
 		return id(con(tokenDeServicio,
 				post("/api/v1/expedientes/{id}/servicios", vehiculoId).contentType(MediaType.APPLICATION_JSON)

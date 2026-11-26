@@ -203,7 +203,9 @@ public class PagoApp {
 		this.actualizadoEn = ahora;
 	}
 
-	/** Pendiente desde hace más de {@code vigencia}: nadie respondió el 3-D Secure. */
+	/**
+	 * Pendiente desde hace más de {@code vigencia}: nadie respondió el 3-D Secure.
+	 */
 	public boolean vencido(Instant ahora, Duration vigencia) {
 		return estado == EstadoPago.PENDIENTE && !creadoEn.plus(vigencia).isAfter(ahora);
 	}
@@ -212,7 +214,9 @@ public class PagoApp {
 		return estado == EstadoPago.PENDIENTE && autenticacion == AutenticacionPago.REQUERIDA;
 	}
 
-	/** Lo que la app muestra como referencia: el folio de caja o el del procesador. */
+	/**
+	 * Lo que la app muestra como referencia: el folio de caja o el del procesador.
+	 */
 	public String getReferencia() {
 		return referenciaCaja != null ? referenciaCaja : intencionId;
 	}

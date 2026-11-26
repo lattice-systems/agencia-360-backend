@@ -10,8 +10,8 @@ import java.util.Optional;
 import org.springframework.stereotype.Component;
 
 /**
- * Procesador de pagos simulado y propio (ADR 0009 de carecar-mobile): decide por
- * la tarjeta de prueba, sin red, sin cuentas y sin cobrar nada. Es la
+ * Procesador de pagos simulado y propio (ADR 0009 de carecar-mobile): decide
+ * por la tarjeta de prueba, sin red, sin cuentas y sin cobrar nada. Es la
  * implementación de todos los ambientes, así que las pruebas ejercen el mismo
  * código que corre en Azure.
  */

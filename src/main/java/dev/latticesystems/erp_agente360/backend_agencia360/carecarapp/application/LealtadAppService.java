@@ -192,7 +192,9 @@ public class LealtadAppService {
 		sumarPorServicio(pago.clienteId(), pago.ordenId());
 	}
 
-	/** Bajo el candado del saldo, para que el pago y la entrega no sumen los dos. */
+	/**
+	 * Bajo el candado del saldo, para que el pago y la entrega no sumen los dos.
+	 */
 	private void sumarPorServicio(Long clienteId, Long ordenId) {
 		int puntos = historial.detalle(ordenId).map(d -> reglas.puntosPorServicio(d.total())).orElse(0);
 		if (puntos > 0) {

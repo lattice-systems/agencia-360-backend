@@ -74,16 +74,15 @@ class PagosAppServiceTest {
 
 	@BeforeEach
 	void preparar() {
-		servicio = new PagosAppService(pagos, metodos, perfiles, new ProcesadorSimulado(), historial, taller,
-				vehiculos, eventos, Clock.fixed(AHORA, ZoneOffset.UTC), ZONA);
+		servicio = new PagosAppService(pagos, metodos, perfiles, new ProcesadorSimulado(), historial, taller, vehiculos,
+				eventos, Clock.fixed(AHORA, ZoneOffset.UTC), ZONA);
 		when(pagos.saveAndFlush(any(PagoApp.class))).thenAnswer(invocacion -> invocacion.getArgument(0));
 		when(metodos.saveAndFlush(any(MetodoPago.class))).thenAnswer(invocacion -> invocacion.getArgument(0));
 		when(vehiculos.buscarPorId(VEHICULO)).thenReturn(Optional.of(new VehiculoDeCliente(VEHICULO, "VIN", "Nissan",
 				"March", 2026, null, null, null, null, new Propietario(CLIENTE, "Paula", null, null))));
 		when(historial.detalle(ORDEN)).thenReturn(Optional.of(detalle(EstatusOrden.TERMINADO, "1650.00")));
 		when(taller.orden(ORDEN)).thenReturn(Optional.of(delTaller(true)));
-		doAnswer(invocacion -> publicados.add(invocacion.getArgument(0))).when(eventos)
-				.publishEvent(any(Object.class));
+		doAnswer(invocacion -> publicados.add(invocacion.getArgument(0))).when(eventos).publishEvent(any(Object.class));
 	}
 
 	@Test
@@ -164,14 +163,12 @@ class PagosAppServiceTest {
 	void noSePagaLoQueNoEstaListoNiLoRegistradoNiLoAjeno() {
 		when(historial.detalle(ORDEN)).thenReturn(Optional.of(detalle(EstatusOrden.EN_PROCESO, "1650.00")));
 		assertThatThrownBy(() -> servicio.pagar(CLIENTE, ORDEN, "llave-1234", tarjeta("tok_sim_visa", false)))
-				.isInstanceOf(ConflictoException.class).extracting("codigo")
-				.isEqualTo(CodigosError.ORDEN_NO_PAGABLE);
+				.isInstanceOf(ConflictoException.class).extracting("codigo").isEqualTo(CodigosError.ORDEN_NO_PAGABLE);
 
 		when(historial.detalle(ORDEN)).thenReturn(Optional.of(detalle(EstatusOrden.ENTREGADO, "1650.00")));
 		when(taller.orden(ORDEN)).thenReturn(Optional.of(delTaller(false)));
 		assertThatThrownBy(() -> servicio.pagar(CLIENTE, ORDEN, "llave-1234", tarjeta("tok_sim_visa", false)))
-				.isInstanceOf(ConflictoException.class).extracting("codigo")
-				.isEqualTo(CodigosError.ORDEN_NO_PAGABLE);
+				.isInstanceOf(ConflictoException.class).extracting("codigo").isEqualTo(CodigosError.ORDEN_NO_PAGABLE);
 
 		assertThatThrownBy(() -> servicio.pagar(99L, ORDEN, "llave-1234", tarjeta("tok_sim_visa", false)))
 				.isInstanceOf(RecursoNoEncontradoException.class);
@@ -180,10 +177,12 @@ class PagosAppServiceTest {
 	@Test
 	void unaTarjetaVencidaODesconocidaNoSeCobra() {
 		assertThatThrownBy(() -> servicio.pagar(CLIENTE, ORDEN, "llave-1234",
-				new NuevoPago("tok_sim_visa", 10, 2026, null, false, null))).isInstanceOf(IllegalArgumentException.class)
-				.hasMessageContaining("venció");
-		assertThat(servicio.pagar(CLIENTE, ORDEN, "llave-1234", new NuevoPago("tok_sim_visa", 11, 2026, null, false,
-				null)).pago().estado()).isEqualTo(EstadoPago.PAGADO);
+				new NuevoPago("tok_sim_visa", 10, 2026, null, false, null)))
+				.isInstanceOf(IllegalArgumentException.class).hasMessageContaining("venció");
+		assertThat(
+				servicio.pagar(CLIENTE, ORDEN, "llave-1234", new NuevoPago("tok_sim_visa", 11, 2026, null, false, null))
+						.pago().estado())
+				.isEqualTo(EstadoPago.PAGADO);
 		assertThatThrownBy(() -> servicio.pagar(CLIENTE, ORDEN, "llave-5678", tarjeta("4242424242424242", false)))
 				.isInstanceOf(IllegalArgumentException.class);
 	}
@@ -228,8 +227,8 @@ class PagosAppServiceTest {
 		List<PasoDeEtapa> etapas = conEtapas
 				? List.of(new PasoDeEtapa(EtapaTaller.RECIBIDO, AHORA, null, null))
 				: List.of();
-		return new OrdenEnVivo(ORDEN, VEHICULO, EstatusOrden.TERMINADO, EtapaTaller.LISTO_PARA_ENTREGA, null, null,
-				86, etapas, List.of(), List.of(), List.of(), BigDecimal.TEN, BigDecimal.ZERO, BigDecimal.ZERO,
+		return new OrdenEnVivo(ORDEN, VEHICULO, EstatusOrden.TERMINADO, EtapaTaller.LISTO_PARA_ENTREGA, null, null, 86,
+				etapas, List.of(), List.of(), List.of(), BigDecimal.TEN, BigDecimal.ZERO, BigDecimal.ZERO,
 				BigDecimal.TEN, List.of());
 	}
 }

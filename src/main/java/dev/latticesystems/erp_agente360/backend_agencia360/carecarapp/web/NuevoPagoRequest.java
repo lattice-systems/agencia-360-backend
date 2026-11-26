@@ -8,8 +8,7 @@ import jakarta.validation.constraints.Size;
  * Cómo paga el cliente: {@code tarjeta} nueva (token de prueba y vencimiento) o
  * {@code metodoPagoId} de una guardada. Nunca el número ni el CVV.
  */
-public record NuevoPagoRequest(@Valid Tarjeta tarjeta, Long metodoPagoId, Boolean guardarTarjeta,
-		Long perfilFiscalId) {
+public record NuevoPagoRequest(@Valid Tarjeta tarjeta, Long metodoPagoId, Boolean guardarTarjeta, Long perfilFiscalId) {
 
 	public record Tarjeta(@Size(max = 64) String token, Integer mesVence, Integer anioVence) {
 	}

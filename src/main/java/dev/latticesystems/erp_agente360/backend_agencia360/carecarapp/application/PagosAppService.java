@@ -142,8 +142,8 @@ public class PagosAppService {
 					() -> new IllegalArgumentException("El procesador ya no reconoce la tarjeta guardada"));
 			vence = guardada.getVence();
 		} else {
-			tarjeta = procesador.tarjeta(nuevo.token().strip()).orElseThrow(
-					() -> new IllegalArgumentException("Esa tarjeta no es una de las tarjetas de prueba"));
+			tarjeta = procesador.tarjeta(nuevo.token().strip())
+					.orElseThrow(() -> new IllegalArgumentException("Esa tarjeta no es una de las tarjetas de prueba"));
 			vence = vencimiento(nuevo.mesVence(), nuevo.anioVence());
 		}
 		PagoApp pago = PagoApp.conTarjeta(orden, procesador.nombre(), procesador.nuevaIntencion(), llaveLimpia, tarjeta,
@@ -275,8 +275,8 @@ public class PagosAppService {
 	 * @throws RecursoNoEncontradoException
 	 *             si la orden no existe (404)
 	 * @throws ConflictoException
-	 *             con {@code ORDEN_NO_PAGABLE} si aún no está lista, no tiene
-	 *             total o ya está pagada (409)
+	 *             con {@code ORDEN_NO_PAGABLE} si aún no está lista, no tiene total
+	 *             o ya está pagada (409)
 	 */
 	@Transactional
 	public PagoVista pagarEnCaja(Long ordenId, Long usuarioId, String referencia) {
@@ -342,8 +342,7 @@ public class PagosAppService {
 	}
 
 	private void confirmar(PagoApp pago) {
-		eventos.publishEvent(
-				new PagoConfirmado(pago.getId(), pago.getOrdenId(), pago.getClienteId(), pago.getMonto()));
+		eventos.publishEvent(new PagoConfirmado(pago.getId(), pago.getOrdenId(), pago.getClienteId(), pago.getMonto()));
 		Map<String, Object> datos = new LinkedHashMap<>();
 		datos.put("pagoId", pago.getId());
 		datos.put("ordenId", pago.getOrdenId());
@@ -394,7 +393,9 @@ public class PagosAppService {
 		return new Cobrable(ordenId, detalle.vehiculoId(), clienteId, detalle.total());
 	}
 
-	/** {@code null} si la orden se puede pagar en la app, sin contar si ya se pagó. */
+	/**
+	 * {@code null} si la orden se puede pagar en la app, sin contar si ya se pagó.
+	 */
 	private String porQueNoSePaga(DetalleDelServicio detalle) {
 		if (!detalle.estatus().cerrada()) {
 			return "La orden aún no está lista para entrega";

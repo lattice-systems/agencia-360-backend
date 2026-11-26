@@ -40,7 +40,10 @@ public interface ProcesadorPagos {
 		APROBADO, RECHAZADO, PIDE_AUTENTICACION
 	}
 
-	/** @param motivo solo cuando la respuesta es {@code RECHAZADO} */
+	/**
+	 * @param motivo
+	 *            solo cuando la respuesta es {@code RECHAZADO}
+	 */
 	record Resultado(Respuesta respuesta, MotivoFalloPago motivo) {
 
 		public Resultado {
