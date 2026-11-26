@@ -97,7 +97,7 @@ public class ValuacionController {
 
 	@PostMapping(path = "/valuaciones/{valuacionId}/fotos/{toma}", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
 	@Operation(summary = "Subir o reemplazar una foto guiada", description = "JPEG o PNG de hasta 8 MB y 40 "
-			+ "megapíxeles; se guarda sin EXIF. 409 VALUACION_CERRADA si ya no admite fotos.")
+			+ "megapíxeles. Se guarda sin EXIF. 409 VALUACION_CERRADA si ya no admite fotos.")
 	public ValuacionApp subirFoto(@PathVariable Long valuacionId, @PathVariable TomaValuacion toma,
 			@RequestParam(required = false) MultipartFile imagen, @AuthenticationPrincipal UsuarioAutenticado cliente)
 			throws IOException {
