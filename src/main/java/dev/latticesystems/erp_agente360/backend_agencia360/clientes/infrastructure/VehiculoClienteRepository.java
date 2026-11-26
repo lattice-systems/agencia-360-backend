@@ -26,4 +26,11 @@ public interface VehiculoClienteRepository extends JpaRepository<VehiculoCliente
 			where c.id = :clienteId
 			order by v.createdAt, v.id""")
 	List<VehiculoCliente> deCliente(@Param("clienteId") Long clienteId);
+
+	@Query("""
+			select v from VehiculoCliente v join fetch v.cliente
+			where lower(v.modelo) = lower(:modelo) and v.anio between :desde and :hasta
+			order by v.id""")
+	List<VehiculoCliente> delModelo(@Param("modelo") String modelo, @Param("desde") int desde,
+			@Param("hasta") int hasta);
 }
