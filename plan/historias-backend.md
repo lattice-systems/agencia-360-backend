@@ -829,6 +829,49 @@ Detalle: [`carecar-mobile/plan/modulos/M26-valuacion.md`](https://github.com/lat
 
 **La ficha** (sección 22) pide `valuacion`, `estimacion_toma_cuenta` y `cita`. Las dos últimas ya existen y no cambian de columnas. `valuacion` se crea con ese nombre y con todos los campos del plan (`id`, `estimacion_toma_cuenta_id`, `cliente_id`, `fotos`, `cita_id`, `oferta`, `vigencia_hasta`, `estado`) más campos agregados.
 
+##### Tablas y migración
+
+Una migración, `V49__crear_valuacion.sql`. **El número es provisional:** al diseñar, la última de `main` es `V48`. Antes de integrar se rebasa y se renombra con el siguiente número libre (el mayor de `main` más 1).
+
+| Columna de `valuacion` | Tipo | Notas |
+| --- | --- | --- |
+| `id` | bigint identidad | Ficha |
+| `estimacion_toma_cuenta_id` | bigint, obligatoria, FK | Ficha. De ahí salen los datos del auto y el rango estimado |
+| `cliente_id` | bigint, obligatoria, FK a `cliente` | Ficha |
+| `fotos` | text, obligatoria, `'{}'` por omisión | Ficha. Objeto JSON de toma a `{"clave", "subidaEn"}`, como texto igual que `estimacion_toma_cuenta.supuestos` |
+| `cita_id` | bigint, FK a `cita` | Ficha. La cita de inspección vigente |
+| `oferta` | numeric(12,2) | Ficha. Pesos con IVA |
+| `vigencia_hasta` | date | Ficha. Último día válido, hora de la agencia, inclusive |
+| `estado` | varchar(15), obligatoria | Ficha. `SOLICITADA`, `CITA_AGENDADA`, `OFERTADA`, `ACEPTADA`, `RECHAZADA`, `VENCIDA` |
+| `vehiculo_cliente_id` | bigint, obligatoria, FK | Agregada. Se copia de la estimación para la cita y el índice |
+| `prospecto_id` | bigint, FK a `prospecto` | Agregada. Nula hasta que hay prospecto |
+| `oferta_nota` | varchar(500) | Agregada. Condiciones que el vendedor quiere que el cliente lea |
+| `ofertada_por` | bigint | Agregada. Id del usuario del personal que capturó la oferta, para auditar |
+| `ofertada_en`, `respondida_en` | timestamptz | Agregadas |
+| `created_at`, `updated_at` | timestamptz | `Auditable` |
+
+Checks: `estado` en los seis valores, `oferta` mayor a cero, `oferta` y `vigencia_hasta` van juntas, los estados `OFERTADA`, `ACEPTADA`, `RECHAZADA` y `VENCIDA` exigen `oferta`, y `CITA_AGENDADA` exige `cita_id`. Índices: `(cliente_id, created_at desc)` y el único parcial `uq_valuacion_abierta` sobre `(cliente_id, vehiculo_cliente_id) where estado in ('SOLICITADA', 'CITA_AGENDADA', 'OFERTADA')`. Incluye `cliente_id` para que un vehículo que cambia de dueño no quede bloqueado por la valuación del anterior.
+
+La misma migración rehace `ck_cita_motivo` para sumar `VALUACION` (cabe en el `varchar(15)` actual).
+
+##### Estados
+
+| Estado | Entra cuando | Sale a |
+| --- | --- | --- |
+| `SOLICITADA` | Se pide la valuación, o su cita de inspección se cancela | `CITA_AGENDADA` |
+| `CITA_AGENDADA` | El cliente agenda la inspección | `OFERTADA`, o `SOLICITADA` si la cita se cancela |
+| `OFERTADA` | El personal captura la oferta | `ACEPTADA`, `RECHAZADA` o `VENCIDA` |
+| `VENCIDA` | Pasa `vigencia_hasta` sin respuesta | `OFERTADA` si el personal la renueva |
+| `ACEPTADA`, `RECHAZADA` | El cliente responde | Final |
+
+Las fotos no son un estado: se cuentan. Se puede agendar sin las 8 fotos y la oferta no las exige, porque la oferta formal sale de la inspección física.
+
+**Sincronización al leer**, como en las campañas de M10, sin job nuevo: una `CITA_AGENDADA` cuya cita está `CANCELADA` vuelve a `SOLICITADA` con `cita_id` nulo, y una `OFERTADA` cuya vigencia pasó se muestra y se guarda como `VENCIDA`. Antes de crear o de renovar se persisten las vencidas para que no choquen con el índice único. Un método que responde con error revierte la transacción, así que ninguna regla depende de guardar un estado y lanzar la excepción en la misma transacción: se decide con el estado calculado.
+
+Reprogramar la cita con `POST /citas/{citaId}/reprogramar` conserva su id, así que la valuación no cambia.
+
+Agendar, subir una foto, ofertar y responder bloquean la fila de `valuacion` (`PESSIMISTIC_WRITE`). Sin el bloqueo, dos fotos subidas a la vez pisan la una a la otra dentro del JSON de `fotos`.
+
 ### M27 · Centro de ayuda y sucursales — H4 — módulo `carecarapp`
 
 Detalle: [`carecar-mobile/plan/modulos/M27-ayuda-y-sucursales.md`](https://github.com/lattice-systems/carecar-mobile/blob/main/plan/modulos/M27-ayuda-y-sucursales.md)
