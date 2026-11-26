@@ -77,6 +77,15 @@ public final class CodigosError {
 	 * trae {@code campos} con qué corregir en cada uno.
 	 */
 	public static final String DATOS_FISCALES_INVALIDOS = "DATOS_FISCALES_INVALIDOS";
+	/**
+	 * V2-M08.02: la orden no se puede pagar en la app: no viene del taller, aún no
+	 * está lista, no tiene total o ya está pagada.
+	 */
+	public static final String ORDEN_NO_PAGABLE = "ORDEN_NO_PAGABLE";
+	/** V2-M08.02: la orden ya tiene un intento de pago esperando el 3-D Secure. */
+	public static final String PAGO_EN_CURSO = "PAGO_EN_CURSO";
+	/** V2-M08.02: el pago ya no espera el 3-D Secure. */
+	public static final String PAGO_NO_PENDIENTE = "PAGO_NO_PENDIENTE";
 
 	private CodigosError() {
 	}

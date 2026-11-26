@@ -474,6 +474,37 @@ Decisión del procesador y del timbrado (V2-M08.01, aceptada por el SM Daniel Oj
 
 **Sin eventos.** Pruebas: `DatosFiscalesTest`, `PerfilesFiscalesAppServiceTest` y `PerfilesFiscalesIntegrationTest`.
 
+#### Diseño técnico — V2-M08.02, V2-M08.04 y V2-M08.07 (Ricardo)
+
+**Tablas** (migración `crear_pago_app_y_metodo_pago`):
+
+- `metodo_pago` con las columnas de la ficha (`id`, `cliente_id`, `procesador`, `cliente_procesador_id`, `token_procesador`, `marca`, `ultimos4`, `mes_vence`, `anio_vence`, `predeterminado`, `creado_en`) más `tipo` (`CREDITO` o `DEBITO`, para la forma de pago 04 o 28 de la factura). Sin número ni CVV. `uq_metodo_pago_token` (una tarjeta de prueba se guarda una vez por cliente) y `uq_metodo_pago_predeterminado` (índice único parcial).
+- `pago_app` con las columnas de la ficha (`id`, `orden_servicio_id`, `cliente_id`, `monto`, `moneda`, `procesador`, `intencion_id`, `llave_idempotencia`, `metodo`, `marca`, `ultimos4`, `estado`, `motivo_fallo`, `perfil_fiscal_id`, `pagado_en`, `creado_en`) más `vehiculo_cliente_id`, `tipo_tarjeta`, `token_procesador`, `mes_vence`, `anio_vence`, `guardar_tarjeta`, `metodo_pago_id`, `autenticacion`, `referencia_caja`, `registrado_por` y `actualizado_en`. `metodo` acepta `TARJETA`, `APPLE_PAY`, `GOOGLE_PAY` y `CAJA`. `intencion_id` y (`cliente_id`, `llave_idempotencia`) son únicos, y dos índices únicos parciales dejan una sola fila `PAGADO` y una sola `PENDIENTE` por orden. `perfil_fiscal_id` y `metodo_pago_id` pasan a nulo si se borra el perfil o la tarjeta: el pago se conserva.
+
+**Procesador** (`ProcesadorPagos` en `application`, `ProcesadorSimulado` en `infrastructure`): decide por la tarjeta de prueba (`TarjetaDePrueba`): `tok_sim_visa`, `tok_sim_mastercard` y `tok_sim_visa_debito` aprueban; `tok_sim_fondos_insuficientes` rechaza; `tok_sim_3ds` pide 3-D Secure y aprueba al confirmar; `tok_sim_3ds_falla` pide 3-D Secure y rechaza aunque se confirme. Folios `sim_pi_…` y clientes `sim_cus_…`. Un token que no está en la lista responde 400.
+
+**Cobro** (`PagosAppService.pagar`):
+
+- `POST /ordenes/{ordenId}/pagos` con `Idempotency-Key` (8 a 64). Repetir la llave devuelve el mismo intento (200) y no vuelve a cobrar; usarla con otra orden es 400. Los cobros de una orden se serializan con `pg_advisory_xact_lock`.
+- La orden tiene que ser del cliente (si no, 404), venir del taller (tener línea de tiempo: lo registrado ya hecho en el expediente se paga en la agencia), estar `TERMINADO` o `ENTREGADO`, tener total y no estar pagada: si no, 409 `ORDEN_NO_PAGABLE`. Se cobra el total del ticket, con IVA.
+- Tarjeta nueva (`token`, `mesVence`, `anioVence`; vencida o a más de 20 años es 400) o guardada (`metodoPagoId`, 404 si es ajena, 400 si venció). `perfilFiscalId` opcional (404 si es ajeno), para la factura de V2-M08.06.
+- Resultado: `PAGADO`, `FALLIDO` con `motivoFallo` o `PENDIENTE` con `requiereAutenticacion`. `POST /pagos/{pagoId}/autenticacion` con `{confirmada}` lo resuelve; 409 `PAGO_NO_PENDIENTE` si ya no espera. Un intento pendiente bloquea otros (409 `PAGO_EN_CURSO`) hasta 15 minutos; después cuenta como `FALLIDO` con `AUTENTICACION_VENCIDA`.
+- Al quedar pagado: con `guardarTarjeta` guarda la tarjeta nueva (la primera queda predeterminada; si ya estaba, renueva su vencimiento; más de 10 no se guardan) y publica `PagoConfirmado` y el aviso `pago.confirmado`.
+
+**Caja** (personal con rol `CAJA` o `ADMINISTRADOR`): `POST /api/v1/caja/ordenes/{ordenId}/pagada-en-caja` con `{referencia}` opcional (hasta 40) crea un pago `PAGADO` con `metodo` `CAJA`, procesador `CAJA` y quien lo registró. 409 `ORDEN_NO_PAGABLE` si aún no está lista, no tiene total o ya está pagada; un intento que esperaba el 3-D Secure queda `FALLIDO` con `PAGADA_EN_CAJA`. Así nadie la paga otra vez en la app mientras la caja del ERP siga congelada. No está en el contrato de la app.
+
+**Ticket:** `GET /servicios/{id}` suma `pago` (el pago con que quedó pagada) y `pagable`.
+
+**Tarjetas guardadas:** `GET /metodos-pago` (la predeterminada primero, con `vencida`), `PUT /metodos-pago/{id}/predeterminado` y `DELETE /metodos-pago/{id}` (204; si era la predeterminada lo es la más vieja que quede). Lo ajeno es 404. **Mis pagos:** `GET /pagos` paginado (20 por omisión, del más nuevo) y `GET /pagos/{id}`, con los fallidos.
+
+**Eventos:** `PagoConfirmado` (en `carecarapp.application`; lo escucha la lealtad y lo escuchará el timbrado) y el aviso SSE `pago.confirmado` con `pagoId`, `ordenId` y `estado`.
+
+**Puntos (V2-M12.02):** `LealtadAppService` también escucha `PagoConfirmado`. Pagar o entregar, lo que pase primero, suma una sola vez por orden; los dos caminos toman el candado del saldo del cliente antes de sumar.
+
+**Derechos ARCO:** la copia de mis datos incluye `pagos` y `tarjetasGuardadas` (sin token). Cancelar la cuenta borra las tarjetas y deja los pagos sin el token, porque el dinero no se borra.
+
+Contrato 2.24.0. Pruebas: `PagoAppTest`, `PagosAppServiceTest`, `LealtadAppServiceTest` y `PagosAppIntegrationTest`.
+
 ### M09 · Documentos y vencimientos — H3 — módulo `documentos (nuevo)`
 
 Detalle: [`carecar-mobile/plan/modulos/M09-documentos-y-vencimientos.md`](https://github.com/lattice-systems/carecar-mobile/blob/main/plan/modulos/M09-documentos-y-vencimientos.md)

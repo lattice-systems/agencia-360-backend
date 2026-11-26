@@ -59,7 +59,14 @@ public class ExportadorDeDatosJdbc implements ExportadorDeDatos {
 					where c.cliente_id = :c
 					"""), Seccion.lista("direcciones", "select * from direccion_cliente where cliente_id = :c"),
 			Seccion.lista("perfilesFiscales", "select * from perfil_fiscal where cliente_id = :c"),
-			Seccion.lista("servicios", """
+			Seccion.lista("pagos", """
+					select id, orden_servicio_id, monto, moneda, procesador, intencion_id, metodo, marca, ultimos4,
+					  estado, motivo_fallo, pagado_en, creado_en
+					from pago_app where cliente_id = :c
+					"""), Seccion.lista("tarjetasGuardadas", """
+					select id, marca, ultimos4, mes_vence, anio_vence, tipo, predeterminado, creado_en
+					from metodo_pago where cliente_id = :c
+					"""), Seccion.lista("servicios", """
 					select o.* from orden_servicio o
 					join vehiculo_cliente v on v.id = o.vehiculo_cliente_id where v.cliente_id = :c
 					"""),
@@ -89,6 +96,7 @@ public class ExportadorDeDatosJdbc implements ExportadorDeDatos {
 
 	private static final List<String> INCLUYE = List.of("Tus datos de contacto", "Tu cuenta de la app (sin contraseña)",
 			"Tus vehículos, citas, traslados y direcciones", "Tus datos fiscales para facturar",
+			"Tus pagos desde la app y tus tarjetas guardadas (sin el número completo)",
 			"El historial de servicios de tus vehículos",
 			"Tus estimaciones de toma a cuenta, tus valuaciones formales y tus solicitudes de prueba de manejo o "
 					+ "cotización",
