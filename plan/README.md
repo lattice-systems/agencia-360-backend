@@ -25,10 +25,10 @@ El plan maestro (propósito, objetivos, hitos, módulos, reparto y tablero) vive
 
 | Módulo | Estado hoy | Uso en la v2 |
 | --- | --- | --- |
-| `carecarapp` | Con código (valuación formal, acceso, vehículos, manuales, servicios, citas, catálogo, asistente, avisos en vivo, aviso de privacidad) | Puerta de entrada `/api/v1/app`; orquesta lecturas para la app; el asistente (M24) vive aquí mientras no crezca |
+| `carecarapp` | Con código (tienda, valuación formal, acceso, vehículos, manuales, servicios, citas, catálogo, asistente, avisos en vivo, aviso de privacidad) | Puerta de entrada `/api/v1/app`; orquesta lecturas para la app; el asistente (M24) vive aquí mientras no crezca |
 | `clientes` | Con código | Cliente y vehículos del cliente (ficha) |
 | `servicio` | Con código (`orden_servicio`, `orden_refaccion`, `orden_mano_de_obra`; publica `OrdenServicioCambiada`) | Orden de servicio, etapas, inspección, adicionales, mantenimiento, garantía, traslados (lo que V2-T05.01 llamaba `postventa`) |
-| `refacciones`, `inventario` | Inventario con código | Tienda y apartados (M14) |
+| `refacciones`, `inventario` | Inventario con código (publicación, compatibilidad y apartados por movimientos) | Tienda y apartados (M14); los pedidos viven en `carecarapp` |
 | `caja`, `facturacion` | Facturación con código | Pagos en app y CFDI (M08; lo que V2-T05.01 llamaba `pagosapp`) |
 | `ventascrm` | Con código | Prospectos desde la app (M16, M26, referidos M12) |
 | `notificaciones` | **Nuevo** | Push FCM, bandeja y preferencias (M06) |

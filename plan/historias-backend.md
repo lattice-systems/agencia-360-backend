@@ -550,6 +550,14 @@ V2-M14.04 (pagar en la app) queda fuera: reusa el cobro de V2-M08.02, que no est
 
 **Aviso.** Cada cambio de estado publica `AvisoAlCliente` con `pedido.estado` (`pedidoId`, `estado`). Llega en vivo por SSE. El push con la app cerrada (V2-M14.05) llegará cuando exista V2-M06.07, sin cambiar este código.
 
+**Estado.** V2-M14.01, V2-M14.02, V2-M14.03 y V2-M14.05 implementadas. Pendientes:
+
+- **PO:** confirmar la vigencia de 48 horas, los límites contra el acaparamiento y que `refaccion.precio` incluye IVA.
+- **Push (V2-M06.07):** `pedido.estado` ya es un `AvisoAlCliente`.
+- **Pago en la app (V2-M14.04):** espera a V2-M08.02.
+- **Privacidad:** la descarga ARCO todavía no incluye los pedidos.
+- **Taller:** instalar la pieza no agrega un renglón a la orden. Si el taller lo agrega con `POST .../renglones`, hoy no se descuenta dos veces porque ese renglón no mueve inventario.
+
 ### M15 · Encuestas y NPS — H4 — módulo `encuestas (nuevo)`
 
 Detalle: [`carecar-mobile/plan/modulos/M15-encuestas-nps.md`](https://github.com/lattice-systems/carecar-mobile/blob/main/plan/modulos/M15-encuestas-nps.md)
