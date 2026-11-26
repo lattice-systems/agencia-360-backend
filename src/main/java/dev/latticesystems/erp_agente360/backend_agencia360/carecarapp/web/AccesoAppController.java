@@ -3,16 +3,20 @@ package dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.web;
 import dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.application.AccesoAppService;
 import dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.application.PerfilApp;
 import dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.application.RecuperacionContrasenaService;
+import dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.application.SesionActivaApp;
 import dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.application.SesionIniciadaApp;
 import dev.latticesystems.erp_agente360.backend_agencia360.shared.security.UsuarioAutenticado;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirements;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
+import java.util.List;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -43,7 +47,7 @@ public class AccesoAppController {
 			+ "fallidos seguidos y 403 (CUENTA_DESACTIVADA) si la contraseña es correcta pero la cuenta está "
 			+ "desactivada.")
 	public SesionIniciadaApp login(@Valid @RequestBody LoginAppRequest request) {
-		return accesoAppService.iniciarSesion(request.correo(), request.contrasena());
+		return accesoAppService.iniciarSesion(request.correo(), request.contrasena(), request.dispositivo());
 	}
 
 	@PostMapping("/auth/refrescar")
@@ -99,6 +103,35 @@ public class AccesoAppController {
 		} else {
 			throw new IllegalArgumentException("Manda el token del enlace o el correo con el código");
 		}
+	}
+
+	@GetMapping("/sesiones")
+	@PreAuthorize("hasRole('CLIENTE_CARECAR')")
+	@Operation(summary = "Sesiones abiertas del cliente", description = "Las sesiones vigentes de la cuenta: ni "
+			+ "revocadas ni vencidas, ordenadas por último uso y con las que nunca se han refrescado al final. No "
+			+ "se devuelve nada derivado del refresh token.")
+	public List<SesionActivaApp> sesiones(@AuthenticationPrincipal UsuarioAutenticado cliente) {
+		return accesoAppService.sesionesDe(cliente.id());
+	}
+
+	@DeleteMapping("/sesiones/{id}")
+	@PreAuthorize("hasRole('CLIENTE_CARECAR')")
+	@ResponseStatus(HttpStatus.NO_CONTENT)
+	@Operation(summary = "Cerrar una sesión", description = "Revoca esa sesión. Idempotente: una ya revocada "
+			+ "responde 204 igual. Una sesión de otra cuenta responde 404, no 403, como el resto del contrato para "
+			+ "un recurso ajeno.")
+	public void cerrarUnaSesion(@PathVariable Long id, @AuthenticationPrincipal UsuarioAutenticado cliente) {
+		accesoAppService.cerrarSesion(cliente.id(), id);
+	}
+
+	@DeleteMapping("/sesiones")
+	@PreAuthorize("hasRole('CLIENTE_CARECAR')")
+	@ResponseStatus(HttpStatus.NO_CONTENT)
+	@Operation(summary = "Cerrar todas las sesiones", description = "Revoca todas las sesiones de la cuenta, "
+			+ "incluida la de quien llama: es «cerrar sesión en todos los dispositivos». El access token en curso "
+			+ "sigue valiendo hasta que expire, igual que en /auth/cerrar-sesion.")
+	public void cerrarTodasLasSesiones(@AuthenticationPrincipal UsuarioAutenticado cliente) {
+		accesoAppService.cerrarTodasLasSesiones(cliente.id());
 	}
 
 	@GetMapping("/perfil")

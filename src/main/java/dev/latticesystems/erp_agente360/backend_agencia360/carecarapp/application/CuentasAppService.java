@@ -1,6 +1,7 @@
 package dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.application;
 
 import dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.domain.CuentaApp;
+import dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.domain.MotivoRevocacion;
 import dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.infrastructure.CuentaAppRepository;
 import dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.infrastructure.SesionAppRepository;
 import dev.latticesystems.erp_agente360.backend_agencia360.clientes.CorreoDeClienteCambiado;
@@ -96,7 +97,8 @@ public class CuentasAppService {
 		CuentaApp cuenta = cuentaDe(clienteId);
 		cuenta.desactivar();
 		Instant ahora = Instant.now();
-		sesionRepository.findByCuentaIdAndRevocadaEnIsNull(cuenta.getId()).forEach(s -> s.revocar(ahora));
+		sesionRepository.findByCuentaIdAndRevocadaEnIsNull(cuenta.getId())
+				.forEach(s -> s.revocar(ahora, MotivoRevocacion.CIERRE));
 		return estado(clienteId);
 	}
 
