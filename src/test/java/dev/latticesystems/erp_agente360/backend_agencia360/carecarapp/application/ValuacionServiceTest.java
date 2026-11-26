@@ -103,8 +103,8 @@ class ValuacionServiceTest {
 			ReflectionTestUtils.setField(nueva, "id", 10L);
 			return nueva;
 		});
-		lenient().when(clientes.buscarPorId(CLIENTE))
-				.thenReturn(Optional.of(new ClienteRegistrado(CLIENTE, "Ana", "ana@correo.com")));
+		lenient().when(clientes.buscarPorId(CLIENTE)).thenReturn(Optional.of(new ClienteRegistrado(CLIENTE, "Ana",
+				"ana@correo.com", "4771234567", Instant.parse("2024-03-01T10:00:00Z"))));
 		lenient().when(solicitudesEstreno.delCliente(CLIENTE, 0, 50)).thenReturn(List.of());
 	}
 

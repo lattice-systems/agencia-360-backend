@@ -1,5 +1,6 @@
 package dev.latticesystems.erp_agente360.backend_agencia360.clientes;
 
+import java.time.Instant;
 import java.util.Optional;
 
 /**
@@ -41,7 +42,17 @@ public interface DirectorioClientes {
 	 */
 	void anonimizar(Long clienteId);
 
-	/** Datos básicos de un cliente. El correo puede faltar si rechazó la app. */
-	record ClienteRegistrado(Long id, String nombre, String correo) {
+	/**
+	 * Datos básicos de un cliente. El correo puede faltar si rechazó la app.
+	 *
+	 * @param telefono
+	 *            nulo cuando la agencia no lo capturó al darlo de alta, que pasa
+	 *            seguido (V2-M01.06)
+	 * @param registradoEn
+	 *            cuándo se dio de alta, como **instante**. Quien lo muestre decide
+	 *            en qué zona lo resuelve: el directorio no sabe en qué huso vive
+	 *            quien pregunta.
+	 */
+	record ClienteRegistrado(Long id, String nombre, String correo, String telefono, Instant registradoEn) {
 	}
 }

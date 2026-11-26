@@ -50,7 +50,9 @@ El criterio pide que el perfil muestre **nombre, correo, teléfono, «cliente de
 
 **`clienteDesde` es `date`, no `date-time`, y se calcula en la zona de la agencia.** `created_at` es un instante; convertirlo en el celular haría que un cliente registrado el 1 de marzo a las 02:00 UTC apareciera como «desde febrero» en México. Quien sabe en qué zona opera la agencia es el servidor, así que la fecha sale ya resuelta con `America/Mexico_City`.
 
-> La zona vive hoy en `AgendaAppService.ZONA_AGENCIA`, visible solo dentro del paquete. Usarla desde el acceso funciona pero deja al perfil dependiendo de la agenda: **la constante merece un lugar compartido**, y es un arreglo aparte, no de esta historia.
+> **La zona está definida en tres lugares**: `AgendaAppService.ZONA_AGENCIA`, `ServicioApp.ZONA_AGENCIA` y una copia privada en `RecoleccionService`. Se usó la de `ServicioApp`, que es la que ya comparten dos servicios. Tres copias de la misma constante es justo como se desincronizan: **merece un lugar compartido**, y es un arreglo aparte, no de esta historia.
+
+**Dónde se convierte el instante en fecha.** El puerto entrega `registradoEn` como `Instant` y la conversión a `LocalDate` vive en `AccesoAppService`. El directorio de clientes no sabe en qué huso vive quien pregunta, y hornear ahí la zona de la agencia obligaría al módulo `clientes` a conocer una decisión de presentación de la app.
 
 **`clienteDesde` es obligatorio en el contrato** porque `cliente.created_at` es `not null` desde la V7: declararlo opcional diria que a veces falta, y no falta nunca.
 
