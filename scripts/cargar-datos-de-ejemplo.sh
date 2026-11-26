@@ -687,5 +687,31 @@ else
   fi
 fi
 
+# Valuación formal de ejemplo (V2-M26): Laura estima su March y pide la
+# valuación. Necesita parámetros de toma a cuenta, que todavía no tienen API: sin
+# ellos la estimación responde 422 y el paso se omite. No duplica al repetirse.
+echo "Valuación formal de Laura Méndez (app):"
+if [ -z "$TOKEN_LAURA" ]; then
+  echo "  omitida     Laura no inició sesión"
+else
+  pedir GET /api/v1/app/valuaciones "$TOKEN_LAURA"
+  [ "$CODIGO" = 200 ] || fallar "listar las valuaciones de Laura"
+  if grep -q '"totalElementos":0' <<<"$RESPUESTA"; then
+    pedir POST /api/v1/app/toma-a-cuenta/estimaciones "$TOKEN_LAURA" \
+      "{\"vehiculoId\":$ID_MARCH,\"km\":10250,\"estado\":\"BUENO\"}"
+    case "$CODIGO" in
+      201)
+        pedir POST /api/v1/app/valuaciones "$TOKEN_LAURA" "{\"estimacionTomaCuentaId\":$(id_de_la_respuesta)}"
+        [ "$CODIGO" = 201 ] || [ "$CODIGO" = 200 ] || fallar "pedir la valuación del March"
+        echo "  solicitada  valuación del March"
+        ;;
+      422) echo "  omitida     faltan parámetros de toma a cuenta para el March (parametro_toma_cuenta)" ;;
+      *) fallar "estimar el March" ;;
+    esac
+  else
+    echo "  ya existía  la valuación de Laura"
+  fi
+fi
+
 echo
 echo "Listo. Qué demuestra cada dato: docs/datos-de-ejemplo.md. Contraseñas: README, sección 5.6."
