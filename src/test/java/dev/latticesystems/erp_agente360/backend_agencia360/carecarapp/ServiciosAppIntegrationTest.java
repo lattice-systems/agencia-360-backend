@@ -34,6 +34,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.transaction.annotation.Transactional;
@@ -68,9 +69,13 @@ class ServiciosAppIntegrationTest extends AbstractIntegrationTest {
 	@Autowired
 	private JwtService jwtService;
 
+	@Autowired
+	private JdbcTemplate jdbc;
+
 	@MockitoBean
 	private EnvioCorreos envioCorreos;
 
+	private Long ana;
 	private String tokenDeAna;
 	private Long marchDeAna;
 	private Long vehiculoDeBruno;
@@ -78,7 +83,7 @@ class ServiciosAppIntegrationTest extends AbstractIntegrationTest {
 
 	@BeforeEach
 	void registrarClientesYServicios() {
-		Long ana = registroClientesService.registrar(new NuevoCliente("Ana López", "ana@correo.com", null, null)).id();
+		ana = registroClientesService.registrar(new NuevoCliente("Ana López", "ana@correo.com", null, null)).id();
 		marchDeAna = registroClientesService
 				.asignarVehiculo(ana, new VehiculoNuevo(null, "3N1CK3CD5RL000011", "Nissan", "March", 2026, "Sense"))
 				.vehiculos().getFirst().id();
@@ -193,6 +198,21 @@ class ServiciosAppIntegrationTest extends AbstractIntegrationTest {
 				.andExpect(jsonPath("$.totalManoDeObra").value(450.0))
 				.andExpect(jsonPath("$.totalRefacciones").value(832.0)).andExpect(jsonPath("$.total").value(1282.0))
 				.andExpect(jsonPath("$.subtotal").value(1105.17)).andExpect(jsonPath("$.iva").value(176.83));
+	}
+
+	@Test
+	void elTicketDiceCuantosPuntosDioLaOrden() throws Exception {
+		Long conPuntos = registrar(marchDeAna, hoy(), "1650.00");
+		Long sinPuntos = registrar(marchDeAna, hoy(), "300.00");
+		jdbc.update("insert into movimiento_puntos (cliente_id, puntos, motivo, referencia_tipo, referencia_id, "
+				+ "creado_en) values (?, 165, 'SERVICIO', 'ORDEN', ?, now())", ana, conPuntos);
+
+		mockMvc.perform(
+				get("/api/v1/app/servicios/{id}", conPuntos).header(HttpHeaders.AUTHORIZATION, "Bearer " + tokenDeAna))
+				.andExpect(status().isOk()).andExpect(jsonPath("$.puntosGanados").value(165));
+		mockMvc.perform(
+				get("/api/v1/app/servicios/{id}", sinPuntos).header(HttpHeaders.AUTHORIZATION, "Bearer " + tokenDeAna))
+				.andExpect(status().isOk()).andExpect(jsonPath("$.puntosGanados").doesNotExist());
 	}
 
 	@Test
