@@ -20,6 +20,11 @@ import org.springframework.data.repository.query.Param;
  */
 public interface PedidoAppRepository extends JpaRepository<PedidoApp, Long> {
 
+	/** Un pedido pagado o con un intento vigente no vence. */
+	String SIN_PAGO = "and p.pagadoEn is null and not exists (select g.id from PagoApp g where g.pedidoId = p.id "
+			+ "and g.estado = dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.domain.EstadoPago.PENDIENTE "
+			+ "and g.creadoEn > :desde)";
+
 	@Lock(LockModeType.PESSIMISTIC_WRITE)
 	@Query("select p from PedidoApp p where p.id = :id")
 	Optional<PedidoApp> bloquear(@Param("id") Long id);
@@ -38,13 +43,20 @@ public interface PedidoAppRepository extends JpaRepository<PedidoApp, Long> {
 	@Query("select p.id from PedidoApp p where p.citaId = :citaId and p.estado in :estados order by p.id")
 	List<Long> idsDeCita(@Param("citaId") Long citaId, @Param("estados") Collection<EstadoPedido> estados);
 
-	@Query("select p.id from PedidoApp p where p.estado in :estados and p.venceEn <= :ahora order by p.id")
-	List<Long> idsVencidos(@Param("estados") Collection<EstadoPedido> estados, @Param("ahora") Instant ahora);
+	/**
+	 * Los vencidos sin pagar y sin un intento de pago que nació después de
+	 * {@code desde} y sigue esperando el 3-D Secure (V2-M14.04).
+	 */
+	@Query("select p.id from PedidoApp p where p.estado in :estados and p.venceEn <= :ahora " + SIN_PAGO
+			+ " order by p.id")
+	List<Long> idsVencidos(@Param("estados") Collection<EstadoPedido> estados, @Param("ahora") Instant ahora,
+			@Param("desde") Instant desde);
 
 	@Query("select p.id from PedidoApp p where p.clienteId = :clienteId and p.estado in :estados "
-			+ "and p.venceEn <= :ahora order by p.id")
+			+ "and p.venceEn <= :ahora " + SIN_PAGO + " order by p.id")
 	List<Long> idsVencidosDelCliente(@Param("clienteId") Long clienteId,
-			@Param("estados") Collection<EstadoPedido> estados, @Param("ahora") Instant ahora);
+			@Param("estados") Collection<EstadoPedido> estados, @Param("ahora") Instant ahora,
+			@Param("desde") Instant desde);
 
 	/** Para el personal: los más antiguos primero. */
 	Page<PedidoApp> findByEstadoInOrderByCreatedAtAscIdAsc(Collection<EstadoPedido> estados, Pageable pagina);

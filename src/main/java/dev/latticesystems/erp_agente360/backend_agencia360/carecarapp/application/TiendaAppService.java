@@ -3,11 +3,13 @@ package dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.applicati
 import dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.domain.Cita;
 import dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.domain.EntregaPedido;
 import dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.domain.EstadoCita;
+import dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.domain.EstadoPago;
 import dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.domain.EstadoPedido;
 import dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.domain.MotivoCancelacionPedido;
 import dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.domain.PedidoApp;
 import dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.domain.PedidoRenglon;
 import dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.infrastructure.CitaRepository;
+import dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.infrastructure.PagoAppRepository;
 import dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.infrastructure.PedidoAppRepository;
 import dev.latticesystems.erp_agente360.backend_agencia360.clientes.VehiculosDeClientes;
 import dev.latticesystems.erp_agente360.backend_agencia360.inventario.ApartadoDeRefacciones;
@@ -42,8 +44,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * La tienda de la app (V2-M14.01 a V2-M14.03 y V2-M14.05): catálogo compatible,
- * apartados, instalación en una cita y estados del pedido.
+ * La tienda de la app (V2-M14.01 a V2-M14.05): catálogo compatible, apartados,
+ * instalación en una cita, estados del pedido y lo que cambia al pagarlo en la
+ * app. El cobro lo hace {@link PagosAppService}.
  */
 @Service
 public class TiendaAppService {
@@ -67,26 +70,28 @@ public class TiendaAppService {
 	private final VehiculosDeClientes vehiculos;
 	private final CatalogoDeTienda catalogo;
 	private final ApartadoDeRefacciones inventario;
+	private final PagoAppRepository pagos;
 	private final ApplicationEventPublisher eventos;
 	private final Duration vigencia;
 	private final Clock reloj;
 
 	@Autowired
 	public TiendaAppService(PedidoAppRepository pedidos, CitaRepository citas, VehiculosDeClientes vehiculos,
-			CatalogoDeTienda catalogo, ApartadoDeRefacciones inventario, ApplicationEventPublisher eventos,
-			@Value("${app.tienda.apartado.vigencia:PT48H}") Duration vigencia) {
-		this(pedidos, citas, vehiculos, catalogo, inventario, eventos, vigencia,
+			CatalogoDeTienda catalogo, ApartadoDeRefacciones inventario, PagoAppRepository pagos,
+			ApplicationEventPublisher eventos, @Value("${app.tienda.apartado.vigencia:PT48H}") Duration vigencia) {
+		this(pedidos, citas, vehiculos, catalogo, inventario, pagos, eventos, vigencia,
 				Clock.system(AgendaAppService.ZONA_AGENCIA));
 	}
 
 	TiendaAppService(PedidoAppRepository pedidos, CitaRepository citas, VehiculosDeClientes vehiculos,
-			CatalogoDeTienda catalogo, ApartadoDeRefacciones inventario, ApplicationEventPublisher eventos,
-			Duration vigencia, Clock reloj) {
+			CatalogoDeTienda catalogo, ApartadoDeRefacciones inventario, PagoAppRepository pagos,
+			ApplicationEventPublisher eventos, Duration vigencia, Clock reloj) {
 		this.pedidos = pedidos;
 		this.citas = citas;
 		this.vehiculos = vehiculos;
 		this.catalogo = catalogo;
 		this.inventario = inventario;
+		this.pagos = pagos;
 		this.eventos = eventos;
 		this.vigencia = vigencia;
 		this.reloj = reloj;
@@ -193,11 +198,17 @@ public class TiendaAppService {
 	 * @throws RecursoNoEncontradoException
 	 *             si no existe o no es del cliente (404)
 	 * @throws ConflictoException
-	 *             con {@code PEDIDO_NO_CANCELABLE} si ya se entregó (409)
+	 *             con {@code PEDIDO_NO_CANCELABLE} si ya se entregó, con
+	 *             {@code PEDIDO_PAGADO} si ya se pagó en la app o con
+	 *             {@code PAGO_EN_CURSO} si un intento espera el 3-D Secure (409)
 	 */
 	@Transactional
 	public PedidoVista cancelar(Long clienteId, Long pedidoId) {
 		PedidoApp pedido = propio(clienteId, pedidoId);
+		if (pedido.abierto() && !pedido.pagado() && pagoEnCurso(pedido)) {
+			throw new ConflictoException("Hay un pago de este pedido esperando la confirmación de tu banco",
+					CodigosError.PAGO_EN_CURSO);
+		}
 		if (pedido.getEstado() != EstadoPedido.CANCELADO) {
 			cancelarYLiberar(pedido, MotivoCancelacionPedido.CLIENTE);
 		}
@@ -271,7 +282,8 @@ public class TiendaAppService {
 	/** Ids de los pedidos que ya vencieron, para el proceso programado. */
 	@Transactional(readOnly = true)
 	public List<Long> idsVencidos() {
-		return pedidos.idsVencidos(PedidoApp.estadosAbiertos(), Instant.now(reloj));
+		Instant ahora = Instant.now(reloj);
+		return pedidos.idsVencidos(PedidoApp.estadosAbiertos(), ahora, desdeEnCurso(ahora));
 	}
 
 	/** Cancela el pedido si venció; cada uno va en su transacción. */
@@ -281,13 +293,28 @@ public class TiendaAppService {
 	}
 
 	private void ponerAlDia(Long clienteId) {
-		pedidos.idsVencidosDelCliente(clienteId, PedidoApp.estadosAbiertos(), Instant.now(reloj)).forEach(this::vencer);
+		Instant ahora = Instant.now(reloj);
+		pedidos.idsVencidosDelCliente(clienteId, PedidoApp.estadosAbiertos(), ahora, desdeEnCurso(ahora))
+				.forEach(this::vencer);
 	}
 
+	/** Un pedido pagado o con un intento que espera el 3-D Secure no vence. */
 	private void vencerSiToca(PedidoApp pedido) {
-		if (pedido.vencido(Instant.now(reloj))) {
+		if (pedido.vencido(Instant.now(reloj)) && !pagoEnCurso(pedido)) {
 			cancelarYLiberar(pedido, MotivoCancelacionPedido.VENCIDO);
 		}
+	}
+
+	/**
+	 * Un intento sigue vigente si nació hace menos de la vigencia del 3-D Secure.
+	 */
+	private boolean pagoEnCurso(PedidoApp pedido) {
+		return pagos.existsByPedidoIdAndEstadoAndCreadoEnAfter(pedido.getId(), EstadoPago.PENDIENTE,
+				desdeEnCurso(Instant.now(reloj)));
+	}
+
+	private static Instant desdeEnCurso(Instant ahora) {
+		return ahora.minus(PagosAppService.VIGENCIA_AUTENTICACION);
 	}
 
 	private void cancelarYLiberar(PedidoApp pedido, MotivoCancelacionPedido motivo) {
@@ -367,7 +394,15 @@ public class TiendaAppService {
 				pedido.getTotal(), pedido.getCreatedAt(), pedido.getVenceEn(), pedido.getListoEn(),
 				pedido.getEntregadoEn(), pedido.getCanceladoEn(),
 				pedido.getMotivoCancelacion() == null ? null : minusculas(pedido.getMotivoCancelacion()), cita,
-				renglones, paraElPersonal ? pedido.getClienteId() : null);
+				renglones, paraElPersonal ? pedido.getClienteId() : null, pedido.pagable(Instant.now(reloj)),
+				pagoDe(pedido), pedido.getPagadoEn());
+	}
+
+	private PagoVista pagoDe(PedidoApp pedido) {
+		if (!pedido.pagado()) {
+			return null;
+		}
+		return pagos.findFirstByPedidoIdAndEstado(pedido.getId(), EstadoPago.PAGADO).map(PagoVista::de).orElse(null);
 	}
 
 	private static PedidoVista.Renglon renglon(PedidoRenglon renglon, ProductoDeTienda producto) {
