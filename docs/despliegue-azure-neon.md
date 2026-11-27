@@ -37,6 +37,8 @@ Perfil `prod`. Los valores sensibles son **secretos de la Container App** (nunca
 | `WALLET_APPLE_CERT_P12_BASE64`, `WALLET_APPLE_CERT_PASSWORD`, `WALLET_APPLE_WWDR_PEM_BASE64` | secretos `wallet-apple-cert-p12`, `wallet-apple-cert-password`, `wallet-apple-wwdr-pem` (base64 de los archivos) |
 | `WALLET_GOOGLE_ISSUER_ID` | ID de emisor de Google Wallet (opcional) |
 | `WALLET_GOOGLE_SERVICE_ACCOUNT_JSON_BASE64` | secreto `wallet-google-service-account` (base64 del JSON de la cuenta de servicio) |
+| `PUSH_FCM_PROJECT_ID` | ID del proyecto de Firebase para los push (opcional) |
+| `PUSH_FCM_SERVICE_ACCOUNT_JSON_BASE64` | secreto `push-fcm-service-account` (base64 del JSON de la cuenta de servicio de Firebase; opcional) |
 | `ARCHIVOS_SECRETO` | opcional: secreto aleatorio `archivos-secreto`. Si falta, el perfil `prod` firma las URL de archivos con `MANUALES_SECRETO` (con su propio prefijo), nunca con el valor de desarrollo |
 | `ARCHIVOS_ALMACEN` | sin definir (por omisión `base`: los archivos de la v2 van a la tabla `archivo` de Neon). `ARCHIVOS_DIRECTORIO` solo se usa con `ARCHIVOS_ALMACEN=local` |
 | `RECUPERACION_ENLACE` | sin definir (por omisión `carecar://restablecer-contrasena`): el enlace del correo de recuperación de contraseña, al que se agrega `?token=...`. Cambiarlo solo si la app abre otro esquema o un enlace universal (V2-M01.04) |
