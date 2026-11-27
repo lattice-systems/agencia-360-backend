@@ -17,11 +17,17 @@ import java.time.Instant;
  *            Secure
  * @param simulado
  *            lo cobró el procesador simulado; {@code false} si se pagó en caja
+ * @param factura
+ *            la factura timbrada del pago (V2-M08.06); {@code null} si aún no
+ *            tiene
+ * @param facturable
+ *            se puede facturar desde la app: pagado, no en caja y sin factura
  */
 public record PagoVista(Long id, Long ordenId, Long pedidoId, Long vehiculoId, BigDecimal monto, String moneda,
 		MedioPago medio, String marca, String ultimos4, TipoTarjeta tipoTarjeta, EstadoPago estado,
 		MotivoFalloPago motivoFallo, boolean requiereAutenticacion, String referencia, boolean simulado,
-		Long metodoPagoId, Long perfilFiscalId, Instant pagadoEn, Instant creadoEn) {
+		Long metodoPagoId, Long perfilFiscalId, Instant pagadoEn, Instant creadoEn, FacturaVista factura,
+		boolean facturable) {
 
 	static final String PROCESADOR_SIMULADO = "SIMULADO";
 
@@ -30,6 +36,7 @@ public record PagoVista(Long id, Long ordenId, Long pedidoId, Long vehiculoId, B
 				pago.getMoneda(), pago.getMedio(), pago.getMarca(), pago.getUltimos4(), pago.getTipoTarjeta(),
 				pago.getEstado(), pago.getMotivoFallo(), pago.requiereAutenticacion(), pago.getReferencia(),
 				PROCESADOR_SIMULADO.equals(pago.getProcesador()), pago.getMetodoPagoId(), pago.getPerfilFiscalId(),
-				pago.getPagadoEn(), pago.getCreadoEn());
+				pago.getPagadoEn(), pago.getCreadoEn(),
+				pago.getFactura() == null ? null : FacturaVista.de(pago.getFactura()), pago.facturable());
 	}
 }
