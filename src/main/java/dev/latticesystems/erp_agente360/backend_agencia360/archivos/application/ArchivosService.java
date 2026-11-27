@@ -14,6 +14,13 @@ public class ArchivosService implements AlmacenArchivos {
 	public static final String RUTA = "/api/v1/archivos/";
 	static final Set<String> TIPOS_PERMITIDOS = Set.of("image/jpeg", "image/png", "image/webp", "application/pdf",
 			"video/mp4");
+
+	/**
+	 * El XML de una factura (V2-M08.06) lo arma el backend; solo se guarda en esa
+	 * carpeta, así ningún archivo que suba alguien puede ser XML.
+	 */
+	static final String TIPO_XML = "application/xml";
+	static final String CARPETA_FACTURAS = "facturas";
 	private static final Pattern CARPETA = Pattern.compile("[a-z0-9-]{1,40}");
 	private static final Pattern CLAVE = Pattern.compile("[a-z0-9-]{1,40}/[0-9a-f-]{36}");
 
@@ -30,7 +37,8 @@ public class ArchivosService implements AlmacenArchivos {
 		if (carpeta == null || !CARPETA.matcher(carpeta).matches()) {
 			throw new IllegalArgumentException("La carpeta admite minúsculas, números y guiones, hasta 40");
 		}
-		if (tipoContenido == null || !TIPOS_PERMITIDOS.contains(tipoContenido)) {
+		boolean xmlDeFactura = TIPO_XML.equals(tipoContenido) && CARPETA_FACTURAS.equals(carpeta);
+		if (tipoContenido == null || !(TIPOS_PERMITIDOS.contains(tipoContenido) || xmlDeFactura)) {
 			throw new IllegalArgumentException("Solo se guardan imágenes JPEG, PNG o WebP, PDF y video MP4");
 		}
 		if (contenido == null || contenido.length == 0) {
