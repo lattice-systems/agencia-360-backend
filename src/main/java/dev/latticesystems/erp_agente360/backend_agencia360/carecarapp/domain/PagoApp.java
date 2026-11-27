@@ -4,9 +4,11 @@ import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
+import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
+import jakarta.persistence.OneToOne;
 import jakarta.persistence.Table;
 import java.math.BigDecimal;
 import java.time.Duration;
@@ -118,6 +120,9 @@ public class PagoApp {
 	@Column(name = "actualizado_en", nullable = false)
 	private Instant actualizadoEn;
 
+	@OneToOne(mappedBy = "pago", fetch = FetchType.LAZY)
+	private FacturaApp factura;
+
 	protected PagoApp() {
 		// Requerido por JPA
 	}
@@ -164,6 +169,29 @@ public class PagoApp {
 		return pago;
 	}
 
+	/**
+	 * Un intento con una billetera simulada (V2-M08.03): sin marca, últimos 4 ni
+	 * vencimiento, como crédito para la forma de pago 04, y nunca se guarda como
+	 * tarjeta.
+	 *
+	 * @param billetera
+	 *            la tarjeta de prueba de la billetera, de
+	 *            {@link TarjetaDePrueba#deBilletera(MedioPago)}
+	 */
+	public static PagoApp conBilletera(Cobrable orden, String procesador, String intencionId, String llave,
+			MedioPago medio, TarjetaDePrueba billetera, Long perfilFiscalId, Instant ahora) {
+		if (medio != MedioPago.APPLE_PAY && medio != MedioPago.GOOGLE_PAY) {
+			throw new IllegalArgumentException("Las billeteras son Apple Pay y Google Pay");
+		}
+		PagoApp pago = new PagoApp(orden, procesador, intencionId, medio, ahora);
+		pago.llaveIdempotencia = Objects.requireNonNull(llave, "llave");
+		pago.tipoTarjeta = billetera.tipo();
+		pago.tokenProcesador = billetera.token();
+		pago.perfilFiscalId = perfilFiscalId;
+		pago.estado = EstadoPago.PENDIENTE;
+		return pago;
+	}
+
 	/** La orden que el personal cobró en el mostrador: nace pagada. */
 	public static PagoApp enCaja(Cobrable orden, String intencionId, String referencia, Long registradoPor,
 			Instant ahora) {
@@ -200,6 +228,32 @@ public class PagoApp {
 			autenticacion = AutenticacionPago.RECHAZADA;
 		}
 		actualizadoEn = ahora;
+	}
+
+	/**
+	 * Los datos fiscales con que se facturó el pago, si al pagar no se eligieron
+	 * (V2-M08.06).
+	 */
+	public void elegirPerfilFiscal(Long perfilFiscalId, Instant ahora) {
+		this.perfilFiscalId = Objects.requireNonNull(perfilFiscalId, "perfilFiscalId");
+		this.actualizadoEn = ahora;
+	}
+
+	/**
+	 * Se puede facturar desde la app: está pagado, no se pagó en caja (se factura
+	 * en la agencia) y aún no tiene factura.
+	 */
+	public boolean facturable() {
+		return estado == EstadoPago.PAGADO && medio != MedioPago.CAJA && factura == null;
+	}
+
+	/** La factura timbrada del pago; {@code null} si aún no tiene. */
+	public FacturaApp getFactura() {
+		return factura;
+	}
+
+	void ligarFactura(FacturaApp factura) {
+		this.factura = factura;
 	}
 
 	/** La tarjeta con que se pagó quedó guardada. */

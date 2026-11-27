@@ -37,6 +37,24 @@ public record TarjetaDePrueba(String token, String marca, String ultimos4, TipoT
 		return TODAS.stream().filter(tarjeta -> tarjeta.token().equals(token)).findFirst();
 	}
 
+	/**
+	 * La billetera simulada (V2-M08.03) como la ve el procesador: crédito, sin
+	 * marca ni últimos 4, y siempre aprobada sin 3-D Secure. No está en
+	 * {@link #todas()}, así que su token no sirve como tarjeta.
+	 *
+	 * @throws IllegalArgumentException
+	 *             si no es Apple Pay ni Google Pay
+	 */
+	public static TarjetaDePrueba deBilletera(MedioPago medio) {
+		return switch (medio) {
+			case APPLE_PAY ->
+				new TarjetaDePrueba("tok_sim_apple_pay", null, null, TipoTarjeta.CREDITO, Escenario.APROBADA);
+			case GOOGLE_PAY ->
+				new TarjetaDePrueba("tok_sim_google_pay", null, null, TipoTarjeta.CREDITO, Escenario.APROBADA);
+			default -> throw new IllegalArgumentException("Paga con Apple Pay o Google Pay");
+		};
+	}
+
 	/** Si el banco simulado pide confirmar con 3-D Secure antes de cobrar. */
 	public boolean pideAutenticacion() {
 		return escenario == Escenario.PIDE_AUTENTICACION || escenario == Escenario.AUTENTICACION_FALLA;
