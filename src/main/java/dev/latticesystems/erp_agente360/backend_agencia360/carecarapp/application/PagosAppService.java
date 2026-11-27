@@ -2,6 +2,7 @@ package dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.applicati
 
 import dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.application.ProcesadorPagos.Resultado;
 import dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.domain.EstadoPago;
+import dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.domain.MedioPago;
 import dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.domain.MetodoPago;
 import dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.domain.MotivoFalloPago;
 import dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.domain.PagoApp;
@@ -38,13 +39,13 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * Pagos de órdenes de servicio y de pedidos de la tienda desde la app y
- * tarjetas guardadas (V2-M08.02, V2-M08.04, V2-M08.07 y V2-M14.04), con el
- * procesador simulado de la ADR 0009. Cada intento lleva su llave de
- * idempotencia: repetirla devuelve el mismo intento y no cobra dos veces. Una
- * orden se paga una sola vez y el personal también la puede marcar pagada en
- * caja. Un pedido también se paga una sola vez y su candado es el de su fila.
- * Lo ajeno responde 404.
+ * Pagos de órdenes de servicio y de pedidos de la tienda desde la app, con
+ * tarjeta o billetera, y tarjetas guardadas (V2-M08.02, V2-M08.03, V2-M08.04,
+ * V2-M08.07 y V2-M14.04), con el procesador simulado de la ADR 0009. Cada
+ * intento lleva su llave de idempotencia: repetirla devuelve el mismo intento y
+ * no cobra dos veces. Una orden se paga una sola vez y el personal también la
+ * puede marcar pagada en caja. Un pedido también se paga una sola vez y su
+ * candado es el de su fila. Lo ajeno responde 404.
  */
 @Service
 public class PagosAppService {
@@ -126,7 +127,7 @@ public class PagosAppService {
 	@Transactional
 	public Cobro pagar(Long clienteId, Long ordenId, String llave, NuevoPago nuevo) {
 		String llaveLimpia = llave(llave);
-		exigirUnaTarjeta(nuevo);
+		exigirUnMedio(nuevo);
 		pagos.bloquear(PREFIJO_ORDEN | ordenId);
 		Optional<PagoApp> repetido = pagos.findByClienteIdAndLlaveIdempotencia(clienteId, llaveLimpia);
 		if (repetido.isPresent()) {
@@ -155,7 +156,7 @@ public class PagosAppService {
 	@Transactional
 	public Cobro pagarPedido(Long clienteId, Long pedidoId, String llave, NuevoPago nuevo) {
 		String llaveLimpia = llave(llave);
-		exigirUnaTarjeta(nuevo);
+		exigirUnMedio(nuevo);
 		if (!pedidos.existsByIdAndClienteId(pedidoId, clienteId)) {
 			throw new RecursoNoEncontradoException(SIN_PEDIDO + pedidoId);
 		}
@@ -178,6 +179,14 @@ public class PagosAppService {
 	private Cobro cobrar(Long clienteId, Cobrable orden, String llaveLimpia, NuevoPago nuevo, Instant ahora) {
 		cerrarPendiente(orden, ahora, null);
 		Long perfilFiscalId = perfilFiscal(clienteId, nuevo.perfilFiscalId());
+		if (nuevo.billetera() != null) {
+			TarjetaDePrueba billetera = TarjetaDePrueba.deBilletera(nuevo.billetera());
+			PagoApp pago = PagoApp.conBilletera(orden, procesador.nombre(), procesador.nuevaIntencion(), llaveLimpia,
+					nuevo.billetera(), billetera, perfilFiscalId, ahora);
+			pagos.saveAndFlush(pago);
+			aplicar(pago, billetera, procesador.cobrar(pago.getIntencionId(), billetera, orden.monto()), ahora);
+			return new Cobro(PagoVista.de(pago), true);
+		}
 		Long metodoPagoId = null;
 		TarjetaDePrueba tarjeta;
 		YearMonth vence;
@@ -525,13 +534,19 @@ public class PagosAppService {
 		return YearMonth.from(reloj.instant().atZone(zona));
 	}
 
-	private static void exigirUnaTarjeta(NuevoPago nuevo) {
+	private static void exigirUnMedio(NuevoPago nuevo) {
 		if (nuevo == null) {
 			throw new IllegalArgumentException("Falta con qué pagar");
 		}
 		boolean conToken = nuevo.token() != null && !nuevo.token().isBlank();
-		if (conToken == (nuevo.metodoPagoId() != null)) {
-			throw new IllegalArgumentException("Paga con una tarjeta nueva o con una guardada, no con las dos");
+		int medios = (conToken ? 1 : 0) + (nuevo.metodoPagoId() != null ? 1 : 0) + (nuevo.billetera() != null ? 1 : 0);
+		if (medios != 1) {
+			throw new IllegalArgumentException(
+					"Paga con una tarjeta nueva, una guardada o una billetera: solo una de las tres");
+		}
+		if (nuevo.billetera() != null && nuevo.billetera() != MedioPago.APPLE_PAY
+				&& nuevo.billetera() != MedioPago.GOOGLE_PAY) {
+			throw new IllegalArgumentException("Las billeteras son Apple Pay y Google Pay");
 		}
 	}
 
