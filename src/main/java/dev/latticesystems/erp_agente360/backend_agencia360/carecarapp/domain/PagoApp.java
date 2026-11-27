@@ -16,10 +16,11 @@ import java.util.Objects;
 
 /**
  * Un intento de pagar una orden de servicio (V2-M08.02, tabla {@code pago_app}
- * de la ficha). Nace {@code PENDIENTE} con su llave de idempotencia y queda
- * {@code PAGADO} o {@code FALLIDO}; ninguno se borra. El de caja nace pagado.
- * Los ids de otros módulos (orden, vehículo, cliente, perfil fiscal y usuario)
- * solo se mapean como ids para no cruzar módulos.
+ * de la ficha) o un pedido de la tienda (V2-M14.04). Nace {@code PENDIENTE} con
+ * su llave de idempotencia y queda {@code PAGADO} o {@code FALLIDO}. Ninguno se
+ * borra. El de caja nace pagado. Los ids de otros módulos (orden, vehículo,
+ * cliente, perfil fiscal y usuario) solo se mapean como ids para no cruzar
+ * módulos.
  */
 @Entity
 @Table(name = "pago_app")
@@ -31,10 +32,13 @@ public class PagoApp {
 	@GeneratedValue(strategy = GenerationType.IDENTITY)
 	private Long id;
 
-	@Column(name = "orden_servicio_id", nullable = false, updatable = false)
+	@Column(name = "orden_servicio_id", updatable = false)
 	private Long ordenId;
 
-	@Column(name = "vehiculo_cliente_id", nullable = false, updatable = false)
+	@Column(name = "pedido_app_id", updatable = false)
+	private Long pedidoId;
+
+	@Column(name = "vehiculo_cliente_id", updatable = false)
 	private Long vehiculoId;
 
 	@Column(name = "cliente_id", nullable = false, updatable = false)
@@ -119,8 +123,9 @@ public class PagoApp {
 	}
 
 	private PagoApp(Cobrable orden, String procesador, String intencionId, MedioPago medio, Instant ahora) {
-		this.ordenId = Objects.requireNonNull(orden.ordenId(), "ordenId");
-		this.vehiculoId = Objects.requireNonNull(orden.vehiculoId(), "vehiculoId");
+		this.ordenId = orden.ordenId();
+		this.pedidoId = orden.pedidoId();
+		this.vehiculoId = orden.vehiculoId();
 		this.clienteId = Objects.requireNonNull(orden.clienteId(), "clienteId");
 		this.monto = Objects.requireNonNull(orden.monto(), "monto");
 		this.moneda = MONEDA;
@@ -231,8 +236,14 @@ public class PagoApp {
 		return id;
 	}
 
+	/** {@code null} si es el pago de un pedido. */
 	public Long getOrdenId() {
 		return ordenId;
+	}
+
+	/** {@code null} si es el pago de una orden (V2-M14.04). */
+	public Long getPedidoId() {
+		return pedidoId;
 	}
 
 	public Long getVehiculoId() {
@@ -325,8 +336,30 @@ public class PagoApp {
 	}
 
 	/**
-	 * Lo que se cobra de una orden: de quién es y cuánto, con IVA incluido.
+	 * Lo que se cobra de una orden o de un pedido: de quién es y cuánto, con IVA
+	 * incluido. Lleva la orden con su vehículo o el pedido, nunca los dos.
 	 */
-	public record Cobrable(Long ordenId, Long vehiculoId, Long clienteId, BigDecimal monto) {
+	public record Cobrable(Long ordenId, Long vehiculoId, Long clienteId, BigDecimal monto, Long pedidoId) {
+
+		public Cobrable {
+			if ((ordenId == null) == (pedidoId == null)) {
+				throw new IllegalArgumentException("Se cobra una orden o un pedido, no los dos");
+			}
+			if (ordenId != null) {
+				Objects.requireNonNull(vehiculoId, "vehiculoId");
+			}
+			Objects.requireNonNull(clienteId, "clienteId");
+			Objects.requireNonNull(monto, "monto");
+		}
+
+		/** Una orden de servicio, con el vehículo que se atendió. */
+		public Cobrable(Long ordenId, Long vehiculoId, Long clienteId, BigDecimal monto) {
+			this(ordenId, vehiculoId, clienteId, monto, null);
+		}
+
+		/** Un pedido de la tienda (V2-M14.04), sin vehículo. */
+		public static Cobrable dePedido(Long pedidoId, Long clienteId, BigDecimal monto) {
+			return new Cobrable(null, null, clienteId, monto, pedidoId);
+		}
 	}
 }
