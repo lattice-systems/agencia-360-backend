@@ -7,6 +7,7 @@ import dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.domain.Ent
 import dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.domain.EstadoPedido;
 import dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.domain.MotivoCancelacionPedido;
 import dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.domain.PedidoApp;
+import dev.latticesystems.erp_agente360.backend_agencia360.shared.exception.CodigosError;
 import dev.latticesystems.erp_agente360.backend_agencia360.shared.exception.ConflictoException;
 import java.math.BigDecimal;
 import java.time.Duration;
@@ -59,5 +60,48 @@ class PedidoAppTest {
 		assertThatThrownBy(() -> pedido.cancelar(MotivoCancelacionPedido.CLIENTE, AHORA))
 				.isInstanceOf(ConflictoException.class);
 		assertThatThrownBy(() -> pedido.instalarEn(null, AHORA)).isInstanceOf(ConflictoException.class);
+	}
+
+	@Test
+	void seVuelvePagableAbiertoSinVencerConTotalYSinPagar() {
+		PedidoApp pedido = pedido(AHORA.plus(DOS_DIAS));
+		assertThat(pedido.pagable(AHORA)).isTrue();
+		assertThat(pedido.pagable(AHORA.plus(DOS_DIAS))).isFalse();
+		assertThatThrownBy(() -> pedido.exigirPagable(AHORA.plus(DOS_DIAS))).isInstanceOf(ConflictoException.class)
+				.extracting("codigo").isEqualTo(CodigosError.PEDIDO_NO_PAGABLE);
+
+		PedidoApp sinTotal = PedidoApp.apartar(1L, "llave-de-prueba", null, AHORA.plus(DOS_DIAS));
+		assertThat(sinTotal.pagable(AHORA)).isFalse();
+
+		PedidoApp listo = pedido(AHORA.plus(DOS_DIAS));
+		listo.marcarListo(AHORA, DOS_DIAS);
+		assertThat(listo.pagable(AHORA)).isTrue();
+
+		PedidoApp cancelado = pedido(AHORA.plus(DOS_DIAS));
+		cancelado.cancelar(MotivoCancelacionPedido.CLIENTE, AHORA);
+		assertThat(cancelado.pagable(AHORA)).isFalse();
+		assertThatThrownBy(() -> cancelado.marcarPagado(AHORA)).isInstanceOf(ConflictoException.class)
+				.extracting("codigo").isEqualTo(CodigosError.PEDIDO_NO_PAGABLE);
+	}
+
+	@Test
+	void pagadoYaNoVenceNiSeCancelaDesdeLaAppPeroSiCambiaDeInstalacion() {
+		PedidoApp pedido = pedido(AHORA.plus(DOS_DIAS));
+		pedido.marcarPagado(AHORA);
+
+		assertThat(pedido.getPagadoEn()).isEqualTo(AHORA);
+		assertThat(pedido.pagable(AHORA)).isFalse();
+		assertThat(pedido.vencido(AHORA.plus(Duration.ofDays(30)))).isFalse();
+		assertThatThrownBy(() -> pedido.marcarPagado(AHORA)).isInstanceOf(ConflictoException.class)
+				.extracting("codigo").isEqualTo(CodigosError.PEDIDO_NO_PAGABLE);
+		assertThatThrownBy(() -> pedido.cancelar(MotivoCancelacionPedido.CLIENTE, AHORA))
+				.isInstanceOf(ConflictoException.class).extracting("codigo").isEqualTo(CodigosError.PEDIDO_PAGADO);
+		assertThatThrownBy(() -> pedido.cancelar(MotivoCancelacionPedido.VENCIDO, AHORA))
+				.isInstanceOf(ConflictoException.class).extracting("codigo").isEqualTo(CodigosError.PEDIDO_PAGADO);
+
+		pedido.instalarEn(null, AHORA.plus(DOS_DIAS));
+		assertThat(pedido.getEntrega()).isEqualTo(EntregaPedido.MOSTRADOR);
+		pedido.cancelar(MotivoCancelacionPedido.AGENCIA, AHORA);
+		assertThat(pedido.getEstado()).isEqualTo(EstadoPedido.CANCELADO);
 	}
 }
