@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 # Carga los datos de ejemplo de TEC-3 en la API local: usuarios por rol,
 # vehículos, refacciones con sus recepciones y prospectos en todas las etapas.
+# Desde V2-T05.10 también los de los módulos de la app v2: taller en vivo,
+# garantías y campañas, tienda, pagos y facturas, lealtad y bitácora.
 # Los datos y lo que demuestra cada uno están en docs/datos-de-ejemplo.md.
 #
 # SOLO PARA DESARROLLO: las contraseñas están en este archivo y en el README.
@@ -42,7 +44,8 @@ ruta_para_curl() {
 }
 
 # Hace una petición a la API. Deja el código HTTP en CODIGO y el cuerpo en
-# RESPUESTA. $1 método, $2 ruta, $3 token (vacío si no hay), $4 cuerpo JSON.
+# RESPUESTA. $1 método, $2 ruta, $3 token (vacío si no hay), $4 cuerpo JSON,
+# $5 un encabezado más (opcional, como "Idempotency-Key: ...").
 # El cuerpo va en un archivo y no como argumento: en Windows los argumentos
 # pierden los acentos (por ejemplo "Daniela León") y la API responde 400.
 pedir() {
@@ -53,6 +56,9 @@ pedir() {
   if [ $# -ge 4 ]; then
     printf '%s' "$4" >"$CUERPO_TMP"
     argumentos+=(-H 'Content-Type: application/json' --data-binary "@$(ruta_para_curl "$CUERPO_TMP")")
+  fi
+  if [ $# -ge 5 ] && [ -n "$5" ]; then
+    argumentos+=(-H "$5")
   fi
   if ! CODIGO=$(curl "${argumentos[@]}"); then
     echo "No hubo respuesta de la API en $API. ¿Está corriendo?" >&2
@@ -591,14 +597,47 @@ echo "Manuales de propietario (Gerente de marketing):"
 # tablero, mantenimiento, seguridad y la foto del coche. Un manual es único por marca,
 # modelo y año, y la API reemplaza el que ya exista, así que repetir la carga no duplica.
 # Con MANUALES_DIR se usan PDF ya generados en otra carpeta.
+# Si no se pueden generar (sin Python 3 o sin Chrome), se omiten y la carga sigue.
 DIR_SCRIPT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 MANUALES_DIR="${MANUALES_DIR:-$DIR_SCRIPT/manuales-generados}"
+
+# Escribe el Python 3 que de verdad corre. En Windows «python3» puede ser solo el
+# atajo a la Microsoft Store, así que se prueban python3, python y py -3.
+python_disponible() {
+  local comando
+  for comando in python3 python "py -3"; do
+    if $comando -c 'import sys; sys.exit(0 if sys.version_info >= (3, 8) else 1)' >/dev/null 2>&1; then
+      printf '%s' "$comando"
+      return 0
+    fi
+  done
+  return 1
+}
+
+# En Windows, Chrome no está en /usr/bin: si no se pasó CHROME, se busca donde
+# lo instala Google y se pasa con la ruta que entiende Python.
+if [ -z "${CHROME:-}" ] && command -v cygpath >/dev/null 2>&1; then
+  for chrome in "${PROGRAMFILES:-}/Google/Chrome/Application/chrome.exe" \
+    "${PROGRAMFILES:-} (x86)/Google/Chrome/Application/chrome.exe" \
+    "${LOCALAPPDATA:-}/Google/Chrome/Application/chrome.exe"; do
+    if [ -f "$(cygpath -u "$chrome" 2>/dev/null)" ]; then
+      CHROME="$(cygpath -m "$chrome")"
+      export CHROME
+      break
+    fi
+  done
+fi
+
 if [ ! -f "$MANUALES_DIR/indice.txt" ]; then
-  python3 "$DIR_SCRIPT/generar-manuales.py" --salida "$MANUALES_DIR" >/dev/null \
-    || fallar "generar los manuales (necesita python3 y Google Chrome)"
+  if PYTHON=$(python_disponible); then
+    $PYTHON "$(ruta_para_curl "$DIR_SCRIPT/generar-manuales.py")" --salida "$(ruta_para_curl "$MANUALES_DIR")" >/dev/null ||
+      echo "  omitidos    no se pudieron generar los manuales (necesita Google Chrome; pásalo con CHROME=...)"
+  else
+    echo "  omitidos    no hay Python 3 para generar los manuales (o pasa MANUALES_DIR con PDF ya generados)"
+  fi
 fi
 SUBIDOS=0
-while IFS='|' read -r modelo anio archivo; do
+[ -f "$MANUALES_DIR/indice.txt" ] && while IFS='|' read -r modelo anio archivo; do
   [ -n "$modelo" ] || continue
   if ! CODIGO=$(curl -sS -o "$RESPUESTA_TMP" -w '%{http_code}' -X POST "$API/api/v1/manuales" \
     -H "Authorization: Bearer $TOKEN_GERENTE" -F marca=Nissan -F "modelo=$modelo" -F "anio=$anio" \
@@ -613,7 +652,9 @@ while IFS='|' read -r modelo anio archivo; do
   fi
   SUBIDOS=$((SUBIDOS + 1))
 done <"$MANUALES_DIR/indice.txt"
-echo "  subidos     $SUBIDOS manuales de propietario (Nissan, título «Manual de propietario»)"
+if [ "$SUBIDOS" -gt 0 ]; then
+  echo "  subidos     $SUBIDOS manuales de propietario (Nissan, título «Manual de propietario»)"
+fi
 
 # Catálogo de la app (APP-4.1). $1 modelo, $2 versión, $3 precio desde, $4 descripción.
 agregar_al_catalogo() {
@@ -711,6 +752,436 @@ else
   else
     echo "  ya existía  la valuación de Laura"
   fi
+fi
+
+# ── Módulos de la app v2 (V2-T05.10) ──
+# Garantías y campañas (M10), la tienda (M14), el taller en vivo (M04), pagos y
+# facturas simulados (M08), puntos, canjes y referidos (M12), bitácora de
+# gastos (M18), direcciones para la recolección (M17) y una prueba de manejo
+# (M16). Lo hace el personal por sus rutas y cada cliente por la API de la app
+# con CLIENTES_CONTRASENA, como desde el celular. A Laura solo le llega la
+# campaña de su March: su primer ingreso sigue pendiente para la demostración.
+# Si un cliente ya no entra con esa contraseña, se omiten sus datos. No
+# duplica al repetirse.
+
+# Fecha dentro de $1 días, AAAA-MM-DD (GNU date o BSD/macOS date).
+fecha_en_dias() {
+  date -d "+$1 days" +%Y-%m-%d 2>/dev/null || date -v+"$1"d +%Y-%m-%d
+}
+
+# Mañana a las $1 horas en la hora de la agencia, como la pide el taller.
+manana_a_las() {
+  date -d '+1 day' +%Y-%m-%dT"$1":00:00 2>/dev/null || date -v+1d +%Y-%m-%dT"$1":00:00
+}
+
+# Escribe el token de la app del cliente, o nada si no entra con esa
+# contraseña. $1 correo, $2 contraseña.
+token_de_la_app() {
+  pedir POST /api/v1/app/auth/login "" "{\"correo\":\"$1\",\"contrasena\":\"$2\"}"
+  printf '%s' "$RESPUESTA" | sed -n 's/.*"accessToken":"\([^"]*\)".*/\1/p'
+}
+
+# Id del vehículo del cliente con esas placas. Usa la respuesta de
+# GET /api/v1/app/vehiculos que dejó pedir. $1 placas.
+vehiculo_por_placas() {
+  printf '%s' "$RESPUESTA" | sed 's/},{/}\n{/g' | grep -F "\"placas\":\"$1\"" | head -1 |
+    sed -n 's/^\[\{0,1\}{"id":\([0-9][0-9]*\),.*/\1/p'
+}
+
+# Id del primer objeto de una lista que empieza con ese texto después del id,
+# por ejemplo el de una refacción por su código. $1 texto (como "codigo":"REF-005").
+id_en_la_lista() {
+  printf '%s' "$RESPUESTA" | grep -o "{\"id\":[0-9][0-9]*,$1" | head -1 | sed 's/{"id":\([0-9][0-9]*\),.*/\1/'
+}
+
+# Abre una orden en el taller y deja su id en ORDEN_ID. Si el vehículo ya tiene
+# una orden abierta, no la toca y deja ORDEN_ID vacío. $1 token del cliente,
+# $2 id del vehículo, $3 kilometraje.
+abrir_orden() {
+  ORDEN_ID=""
+  pedir GET /api/v1/app/ordenes/activas "$1"
+  [ "$CODIGO" = 200 ] || fallar "ver las órdenes abiertas"
+  if grep -q "\"vehiculoId\":$2," <<<"$RESPUESTA"; then
+    return
+  fi
+  pedir POST /api/v1/taller/ordenes "$TOKEN_TALLER" \
+    "{\"vehiculoId\":$2,\"kilometraje\":$3,\"entregaEstimada\":\"$(manana_a_las 18)\"}"
+  [ "$CODIGO" = 201 ] || fallar "abrir la orden del vehículo $2"
+  ORDEN_ID=$(id_de_la_respuesta)
+}
+
+# $1 orden, $2 MANO_DE_OBRA o REFACCION, $3 concepto, $4 cantidad, $5 precio con IVA.
+agregar_renglon() {
+  pedir POST "/api/v1/taller/ordenes/$1/renglones" "$TOKEN_TALLER" \
+    "{\"tipo\":\"$2\",\"concepto\":\"$3\",\"cantidad\":$4,\"precioUnitario\":$5}"
+  [ "$CODIGO" = 201 ] || fallar "agregar «$3» a la orden $1"
+}
+
+# $1 orden, $2 etapa, $3 nota para el cliente.
+avanzar_orden() {
+  pedir POST "/api/v1/taller/ordenes/$1/etapas" "$TOKEN_TALLER" "{\"etapa\":\"$2\",\"nota\":\"$3\"}"
+  [ "$CODIGO" = 200 ] || fallar "pasar la orden $1 a $2"
+}
+
+# $1 orden, $2 punto, $3 VERDE, AMARILLO o ROJO, $4 comentario.
+revisar_punto() {
+  pedir POST "/api/v1/taller/ordenes/$1/inspeccion" "$TOKEN_TALLER" \
+    "{\"punto\":\"$2\",\"resultado\":\"$3\",\"comentario\":\"$4\"}"
+  [ "$CODIGO" = 200 ] || fallar "revisar «$2» en la orden $1"
+}
+
+# Paga una orden desde la app con su llave de idempotencia. $1 token del
+# cliente, $2 orden, $3 cuerpo de NuevoPago.
+pagar_orden() {
+  pedir POST "/api/v1/app/ordenes/$2/pagos" "$1" "$3" "Idempotency-Key: datos-de-ejemplo-orden-$2"
+  case "$CODIGO" in
+    200 | 201) ;;
+    *) fallar "pagar la orden $2" ;;
+  esac
+  grep -q '"estado":"PAGADO"' <<<"$RESPUESTA" || fallar "pagar la orden $2 (no quedó pagada)"
+}
+
+# Da de alta un perfil fiscal si el cliente no tiene ninguno y deja en
+# PERFIL_ID el predeterminado. $1 token, $2 cuerpo de EntradaPerfilFiscal.
+perfil_fiscal() {
+  pedir GET /api/v1/app/perfiles-fiscales "$1"
+  [ "$CODIGO" = 200 ] || fallar "ver los datos fiscales"
+  if [ "$RESPUESTA" = "[]" ]; then
+    pedir POST /api/v1/app/perfiles-fiscales "$1" "$2"
+    case "$CODIGO" in
+      200 | 201) ;;
+      *) fallar "agregar los datos fiscales" ;;
+    esac
+    echo "              + datos fiscales"
+  fi
+  PERFIL_ID=$(printf '%s' "$RESPUESTA" | sed -n 's/^\[\{0,1\}{"id":\([0-9][0-9]*\),.*/\1/p')
+  [ -n "$PERFIL_ID" ] || fallar "leer el id de los datos fiscales"
+}
+
+# Espera a que el saldo de puntos llegue a $2 (se suman en segundo plano al
+# pagar). $1 token.
+esperar_puntos() {
+  local saldo
+  for _ in 1 2 3 4 5 6 7 8 9 10; do
+    pedir GET /api/v1/app/lealtad "$1"
+    saldo=$(printf '%s' "$RESPUESTA" | sed -n 's/^{"saldo":\([0-9][0-9]*\).*/\1/p')
+    if [ -n "$saldo" ] && [ "$saldo" -ge "$2" ]; then
+      return 0
+    fi
+    sleep 1
+  done
+  return 1
+}
+
+TOKEN_TALLER=$(iniciar_sesion servicio1 Servicio123 ERP)
+TOKEN_INVENTARIO=$(iniciar_sesion inventario1 Inventario123 ERP)
+TOKEN_CARLOS=$(token_de_la_app carlos.ramirez@example.com "$CLIENTES_CONTRASENA")
+TOKEN_ANA=$(token_de_la_app ana.torres@example.com "$CLIENTES_CONTRASENA")
+TOKEN_DIEGO=$(token_de_la_app diego.castillo@example.com "$CLIENTES_CONTRASENA")
+TOKEN_SOFIA=$(token_de_la_app sofia.morales@example.com "$CLIENTES_CONTRASENA")
+
+echo "Campañas de seguridad (Servicio):"
+# $1 código, $2 título, $3 descripción, $4 qué hacer, $5 gravedad, $6 modelo,
+# $7 año desde, $8 año hasta.
+publicar_campana() {
+  pedir POST /api/v1/campanas "$TOKEN_TALLER" \
+    "{\"codigo\":\"$1\",\"titulo\":\"$2\",\"descripcion\":\"$3\",\"queHacer\":\"$4\",\"gravedad\":\"$5\",\"modelo\":\"$6\",\"anioDesde\":$7,\"anioHasta\":$8}"
+  case "$CODIGO" in
+    201) echo "  publicada   $1 $2 ($6 $7 a $8)" ;;
+    400)
+      grep -q "Ya existe la campa" <<<"$RESPUESTA" || fallar "publicar la campaña $1"
+      echo "  ya existía  $1 $2"
+      ;;
+    *) fallar "publicar la campaña $1" ;;
+  esac
+}
+publicar_campana RC-26-101 "Bolsa de aire del conductor" \
+  "El inflador de la bolsa de aire del conductor puede activarse con menos fuerza de la debida." \
+  "Agenda una cita: se reemplaza el módulo sin costo en unos 60 minutos." ALTA March 2023 2026
+publicar_campana RC-26-102 "Sensor de presión de llantas" \
+  "El sensor puede dejar de avisar cuando una llanta pierde presión." \
+  "Agenda una cita para actualizar el sensor sin costo; mientras, revisa la presión cada semana." \
+  MEDIA Kicks 2021 2022
+
+echo "Garantías (Servicio):"
+# $1 token del cliente, $2 vehículo, $3 componente, $4 descripción, $5 inicia
+# (AAAA-MM-DD), $6 vence, $7 km límite o null.
+registrar_garantia() {
+  pedir GET "/api/v1/app/vehiculos/$2/garantia" "$1"
+  [ "$CODIGO" = 200 ] || fallar "ver la garantía del vehículo $2"
+  if grep -qF "\"componente\":\"$3\"" <<<"$RESPUESTA"; then
+    echo "  ya existía  $3 del vehículo $2"
+    return
+  fi
+  pedir POST /api/v1/garantias "$TOKEN_TALLER" \
+    "{\"vehiculoId\":$2,\"componente\":\"$3\",\"descripcion\":\"$4\",\"iniciaEn\":\"$5\",\"venceEn\":\"$6\",\"kmLimite\":$7}"
+  [ "$CODIGO" = 201 ] || fallar "registrar la garantía $3 del vehículo $2"
+  echo "  registrada  $3 del vehículo $2"
+}
+if [ -n "$TOKEN_DIEGO" ]; then
+  pedir GET /api/v1/app/vehiculos "$TOKEN_DIEGO"
+  [ "$CODIGO" = 200 ] || fallar "listar los vehículos de Diego"
+  ID_FRONTIER_DIEGO=$(vehiculo_por_placas GTO-501-S)
+  [ -n "$ID_FRONTIER_DIEGO" ] || fallar "encontrar la Frontier de Diego"
+  registrar_garantia "$TOKEN_DIEGO" "$ID_FRONTIER_DIEGO" "Garantía de fábrica" \
+    "Defensa a defensa: motor, transmisión, suspensión y sistema eléctrico." \
+    "$(fecha_hace_dias 120)" "$(fecha_en_dias 975)" 60000
+  registrar_garantia "$TOKEN_DIEGO" "$ID_FRONTIER_DIEGO" "Batería" \
+    "Batería de origen; vence en unas semanas para ver el aviso de garantía por vencer." \
+    "$(fecha_hace_dias 330)" "$(fecha_en_dias 35)" null
+else
+  echo "  omitidas    Diego no inicia sesión con CLIENTES_CONTRASENA"
+fi
+if [ -n "$TOKEN_CARLOS" ]; then
+  pedir GET /api/v1/app/vehiculos "$TOKEN_CARLOS"
+  [ "$CODIGO" = 200 ] || fallar "listar los vehículos de Carlos"
+  ID_KICKS_CARLOS=$(vehiculo_por_placas GTO-309-D)
+  [ -n "$ID_KICKS_CARLOS" ] || fallar "encontrar el Kicks de Carlos"
+  registrar_garantia "$TOKEN_CARLOS" "$ID_KICKS_CARLOS" "Tren motriz" \
+    "Motor, transmisión y diferencial." "$(fecha_hace_dias 200)" "$(fecha_en_dias 1625)" 100000
+fi
+
+echo "Productos de la tienda (Inventario):"
+pedir GET /api/v1/refacciones "$TOKEN_INVENTARIO"
+[ "$CODIGO" = 200 ] || fallar "listar las refacciones"
+REFACCIONES="$RESPUESTA"
+# Publica una refacción en la tienda (siempre deja la misma publicación).
+# $1 código, $2 categoría, $3 descripción, $4 universal (true o false), $5
+# compatibilidad en JSON.
+publicar_en_tienda() {
+  local id
+  RESPUESTA="$REFACCIONES"
+  id=$(id_en_la_lista "\"codigo\":\"$1\"")
+  [ -n "$id" ] || fallar "encontrar la refacción $1"
+  pedir PUT "/api/v1/tienda/productos/$id" "$TOKEN_INVENTARIO" \
+    "{\"publicada\":true,\"categoria\":\"$2\",\"descripcion\":\"$3\",\"fotoUrl\":null,\"universal\":$4,\"compatibilidad\":$5}"
+  [ "$CODIGO" = 200 ] || fallar "publicar $1 en la tienda"
+  echo "  publicada   $1 ($2)"
+}
+COMPATIBLES_COMPACTOS='[{"modelo":"March","anioDesde":2018,"anioHasta":2026},
+  {"modelo":"Versa","anioDesde":2018,"anioHasta":2026},{"modelo":"Kicks","anioDesde":2018,"anioHasta":2026},
+  {"modelo":"Sentra","anioDesde":2018,"anioHasta":2026}]'
+publicar_en_tienda REF-005 ACCESORIO "Par de plumas limpiaparabrisas de silicón para todo clima." true '[]'
+publicar_en_tienda REF-006 CUIDADO "Aceite sintético 5W-30, el que usa el taller en tu servicio." true '[]'
+publicar_en_tienda REF-001 REFACCION "Filtro de aceite original para motores de 1.6 y 2.0 litros." false \
+  "$COMPATIBLES_COMPACTOS"
+publicar_en_tienda REF-007 REFACCION "Batería de 12 V libre de mantenimiento con instalación en el taller." false \
+  "$COMPATIBLES_COMPACTOS"
+publicar_en_tienda REF-008 REFACCION "Amortiguador delantero de gas para X-Trail." false \
+  '[{"modelo":"X-Trail","anioDesde":2019,"anioHasta":2026}]'
+
+echo "Carlos Ramírez: orden entregada, pagada con tarjeta, facturada y con un canje (app):"
+if [ -z "$TOKEN_CARLOS" ]; then
+  echo "  omitido     Carlos no inicia sesión con CLIENTES_CONTRASENA"
+else
+  perfil_fiscal "$TOKEN_CARLOS" \
+    '{"rfc":"RACC880704H33","razonSocial":"CARLOS RAMIREZ","regimenFiscal":"612","codigoPostal":"37160","usoCfdi":"G03","correo":"carlos.ramirez@example.com","predeterminado":true}'
+  pedir GET /api/v1/app/pagos "$TOKEN_CARLOS"
+  [ "$CODIGO" = 200 ] || fallar "ver los pagos de Carlos"
+  if grep -q '"totalElementos":0' <<<"$RESPUESTA"; then
+    pedir GET /api/v1/app/vehiculos "$TOKEN_CARLOS"
+    [ "$CODIGO" = 200 ] || fallar "listar los vehículos de Carlos"
+    ID_SENTRA_CARLOS=$(vehiculo_por_placas GTO-482-B)
+    [ -n "$ID_SENTRA_CARLOS" ] || fallar "encontrar el Sentra de Carlos"
+    abrir_orden "$TOKEN_CARLOS" "$ID_SENTRA_CARLOS" 20150
+    if [ -n "$ORDEN_ID" ]; then
+      agregar_renglon "$ORDEN_ID" MANO_DE_OBRA "Servicio de 20,000 km" 1 2450.00
+      agregar_renglon "$ORDEN_ID" REFACCION "Filtro de aceite" 1 149.00
+      agregar_renglon "$ORDEN_ID" REFACCION "Aceite sintético 5W-30 (litro)" 4 239.00
+      agregar_renglon "$ORDEN_ID" REFACCION "Filtro de aire" 1 199.00
+      avanzar_orden "$ORDEN_ID" DIAGNOSTICO "Revisamos niveles, frenos y suspensión."
+      revisar_punto "$ORDEN_ID" "Frenos" VERDE "Balatas al 70 %."
+      revisar_punto "$ORDEN_ID" "Llantas" VERDE "Presión y desgaste correctos."
+      avanzar_orden "$ORDEN_ID" EN_REPARACION "Cambiamos aceite y filtros."
+      avanzar_orden "$ORDEN_ID" CONTROL_DE_CALIDAD "Prueba de manejo sin observaciones."
+      avanzar_orden "$ORDEN_ID" LISTO_PARA_ENTREGA "Tu Sentra está listo."
+      pagar_orden "$TOKEN_CARLOS" "$ORDEN_ID" \
+        "{\"tarjeta\":{\"token\":\"tok_sim_visa\",\"mesVence\":12,\"anioVence\":2030},\"guardarTarjeta\":true,\"perfilFiscalId\":$PERFIL_ID}"
+      avanzar_orden "$ORDEN_ID" ENTREGADO "Gracias por tu visita."
+      echo "  pagada      orden $ORDEN_ID del Sentra GTO-482-B con la Visa de prueba (factura simulada en camino)"
+    else
+      echo "  ya existía  una orden abierta del Sentra GTO-482-B"
+    fi
+  else
+    echo "  ya existían los pagos de Carlos"
+  fi
+  pedir GET /api/v1/app/lealtad/canjes "$TOKEN_CARLOS"
+  [ "$CODIGO" = 200 ] || fallar "ver los canjes de Carlos"
+  if [ "$RESPUESTA" = "[]" ]; then
+    if esperar_puntos "$TOKEN_CARLOS" 300; then
+      pedir GET /api/v1/app/lealtad/recompensas "$TOKEN_CARLOS"
+      [ "$CODIGO" = 200 ] || fallar "ver las recompensas"
+      ID_LAVADO=$(id_en_la_lista '"nombre":"Lavado expr')
+      [ -n "$ID_LAVADO" ] || fallar "encontrar la recompensa Lavado exprés"
+      pedir POST /api/v1/app/lealtad/canjes "$TOKEN_CARLOS" "{\"recompensaId\":$ID_LAVADO}"
+      case "$CODIGO" in
+        200 | 201) echo "  canjeado    Lavado exprés (300 puntos)" ;;
+        *) fallar "canjear el lavado exprés" ;;
+      esac
+    else
+      echo "  omitido     el canje: los puntos del pago aún no llegan (vuelve a correr el script)"
+    fi
+  else
+    echo "  ya existía  el canje de Carlos"
+  fi
+  pedir GET /api/v1/app/lealtad/referidos "$TOKEN_CARLOS"
+  [ "$CODIGO" = 200 ] || fallar "ver los referidos de Carlos"
+  if [ "$RESPUESTA" = "[]" ]; then
+    pedir POST /api/v1/app/lealtad/referidos "$TOKEN_CARLOS" \
+      '{"nombre":"Mario Pérez","telefono":"4775550199","correo":null,"consentimiento":true}'
+    [ "$CODIGO" = 201 ] || fallar "referir a Mario Pérez"
+    echo "  referido    Mario Pérez (477 555 0199)"
+  else
+    echo "  ya existía  el referido de Carlos"
+  fi
+fi
+
+echo "Ana Torres: pago con Google Pay simulado y datos fiscales que el timbrado rechaza (app):"
+if [ -z "$TOKEN_ANA" ]; then
+  echo "  omitida     Ana no inicia sesión con CLIENTES_CONTRASENA"
+else
+  perfil_fiscal "$TOKEN_ANA" \
+    '{"rfc":"TAS150310QW3","razonSocial":"TORRES Y ASOCIADOS SA DE CV","regimenFiscal":"601","codigoPostal":"37500","usoCfdi":"G03","correo":"ana.torres@example.com","predeterminado":true}'
+  pedir GET /api/v1/app/pagos "$TOKEN_ANA"
+  [ "$CODIGO" = 200 ] || fallar "ver los pagos de Ana"
+  if grep -q '"totalElementos":0' <<<"$RESPUESTA"; then
+    pedir GET /api/v1/app/vehiculos "$TOKEN_ANA"
+    [ "$CODIGO" = 200 ] || fallar "listar los vehículos de Ana"
+    ID_KICKS_ANA=$(vehiculo_por_placas GTO-157-F)
+    [ -n "$ID_KICKS_ANA" ] || fallar "encontrar el Kicks de Ana"
+    abrir_orden "$TOKEN_ANA" "$ID_KICKS_ANA" 51600
+    if [ -n "$ORDEN_ID" ]; then
+      agregar_renglon "$ORDEN_ID" MANO_DE_OBRA "Cambio de balatas delanteras" 1 650.00
+      agregar_renglon "$ORDEN_ID" REFACCION "Balatas delanteras" 1 890.00
+      avanzar_orden "$ORDEN_ID" EN_REPARACION "Cambiamos las balatas delanteras."
+      avanzar_orden "$ORDEN_ID" LISTO_PARA_ENTREGA "Tu Kicks está listo."
+      pagar_orden "$TOKEN_ANA" "$ORDEN_ID" '{"billetera":"GOOGLE_PAY","perfilFiscalId":null}'
+      avanzar_orden "$ORDEN_ID" ENTREGADO "Gracias por tu visita."
+      echo "  pagada      orden $ORDEN_ID del Kicks GTO-157-F con Google Pay, sin factura todavía"
+    else
+      echo "  ya existía  una orden abierta del Kicks GTO-157-F"
+    fi
+  else
+    echo "  ya existían los pagos de Ana"
+  fi
+fi
+
+echo "Diego Castillo: orden lista para entrega, por pagar en la app:"
+if [ -z "$TOKEN_DIEGO" ]; then
+  echo "  omitido     Diego no inicia sesión con CLIENTES_CONTRASENA"
+else
+  pedir GET /api/v1/app/pagos "$TOKEN_DIEGO"
+  [ "$CODIGO" = 200 ] || fallar "ver los pagos de Diego"
+  if grep -q '"totalElementos":0' <<<"$RESPUESTA"; then
+    pedir GET /api/v1/app/vehiculos "$TOKEN_DIEGO"
+    [ "$CODIGO" = 200 ] || fallar "listar los vehículos de Diego"
+    ID_MARCH_DIEGO=$(vehiculo_por_placas GTO-218-T)
+    [ -n "$ID_MARCH_DIEGO" ] || fallar "encontrar el March de Diego"
+    abrir_orden "$TOKEN_DIEGO" "$ID_MARCH_DIEGO" 27900
+    if [ -n "$ORDEN_ID" ]; then
+      agregar_renglon "$ORDEN_ID" MANO_DE_OBRA "Afinación mayor" 1 2350.00
+      agregar_renglon "$ORDEN_ID" REFACCION "Bujía de iridio" 4 259.00
+      avanzar_orden "$ORDEN_ID" DIAGNOSTICO "Revisamos encendido e inyectores."
+      revisar_punto "$ORDEN_ID" "Bujías" ROJO "Desgaste fuerte; se cambian en la afinación."
+      revisar_punto "$ORDEN_ID" "Batería" AMARILLO "Al 60 %; conviene cambiarla en tu siguiente servicio."
+      revisar_punto "$ORDEN_ID" "Luces" VERDE ""
+      avanzar_orden "$ORDEN_ID" EN_REPARACION "Hacemos la afinación mayor."
+      avanzar_orden "$ORDEN_ID" LAVADO "Lavado de cortesía."
+      avanzar_orden "$ORDEN_ID" LISTO_PARA_ENTREGA "Tu March está listo; puedes pagar desde la app."
+      echo "  lista       orden $ORDEN_ID del March GTO-218-T, por pagar"
+    else
+      echo "  ya existía  la orden del March GTO-218-T"
+    fi
+  else
+    echo "  ya existían los pagos de Diego"
+  fi
+fi
+
+echo "Sofía Morales: orden en el taller con un trabajo adicional, apartado, gastos y más (app):"
+if [ -z "$TOKEN_SOFIA" ]; then
+  echo "  omitida     Sofía no inicia sesión con CLIENTES_CONTRASENA"
+else
+  pedir GET /api/v1/app/vehiculos "$TOKEN_SOFIA"
+  [ "$CODIGO" = 200 ] || fallar "listar los vehículos de Sofía"
+  ID_KICKS_SOFIA=$(vehiculo_por_placas NMR-48-19)
+  ID_VERSA_SOFIA=$(vehiculo_por_placas GTO-127-P)
+  [ -n "$ID_KICKS_SOFIA" ] && [ -n "$ID_VERSA_SOFIA" ] || fallar "encontrar los vehículos de Sofía"
+  abrir_orden "$TOKEN_SOFIA" "$ID_KICKS_SOFIA" 48100
+  if [ -n "$ORDEN_ID" ]; then
+    agregar_renglon "$ORDEN_ID" MANO_DE_OBRA "Diagnóstico de frenos y suspensión" 1 450.00
+    avanzar_orden "$ORDEN_ID" DIAGNOSTICO "Revisamos frenos, suspensión y llantas."
+    revisar_punto "$ORDEN_ID" "Frenos traseros" ROJO "Balatas traseras al 15 %."
+    revisar_punto "$ORDEN_ID" "Llantas" AMARILLO "Desgaste parejo; cambiarlas en unos 5,000 km."
+    revisar_punto "$ORDEN_ID" "Suspensión" VERDE "Sin ruidos ni fugas."
+    revisar_punto "$ORDEN_ID" "Niveles de fluidos" VERDE ""
+    avanzar_orden "$ORDEN_ID" ESPERANDO_APROBACION "Esperamos tu respuesta sobre las balatas traseras."
+    pedir POST "/api/v1/taller/ordenes/$ORDEN_ID/adicionales" "$TOKEN_TALLER" \
+      '{"concepto":"Cambio de balatas traseras","manoDeObra":650.00,"refacciones":890.00}'
+    [ "$CODIGO" = 201 ] || fallar "proponer el cambio de balatas traseras"
+    echo "  en taller   orden $ORDEN_ID del Kicks NMR-48-19, con un trabajo adicional por aprobar"
+  else
+    echo "  ya existía  la orden del Kicks NMR-48-19"
+  fi
+
+  pedir GET /api/v1/app/tienda/pedidos "$TOKEN_SOFIA"
+  [ "$CODIGO" = 200 ] || fallar "ver los pedidos de Sofía"
+  if grep -q '"totalElementos":0' <<<"$RESPUESTA"; then
+    RESPUESTA="$REFACCIONES"
+    ID_PLUMAS=$(id_en_la_lista '"codigo":"REF-005"')
+    ID_ACEITE=$(id_en_la_lista '"codigo":"REF-006"')
+    pedir POST /api/v1/app/tienda/pedidos "$TOKEN_SOFIA" \
+      "{\"renglones\":[{\"productoId\":$ID_PLUMAS,\"cantidad\":1},{\"productoId\":$ID_ACEITE,\"cantidad\":4}],\"entrega\":\"mostrador\",\"citaId\":null}" \
+      "Idempotency-Key: datos-de-ejemplo-apartado-sofia"
+    case "$CODIGO" in
+      200 | 201) echo "  apartado    plumas y 4 litros de aceite, para recoger en mostrador (vence en 48 h)" ;;
+      *) fallar "apartar en la tienda" ;;
+    esac
+  else
+    echo "  ya existía  el apartado de Sofía"
+  fi
+
+  pedir GET "/api/v1/app/vehiculos/$ID_VERSA_SOFIA/gastos" "$TOKEN_SOFIA"
+  [ "$CODIGO" = 200 ] || fallar "ver los gastos del Versa de Sofía"
+  if grep -q '"totalElementos":0' <<<"$RESPUESTA"; then
+    # $1 cuerpo de NuevoGasto.
+    registrar_gasto() {
+      pedir POST "/api/v1/app/vehiculos/$ID_VERSA_SOFIA/gastos" "$TOKEN_SOFIA" "$1"
+      case "$CODIGO" in
+        200 | 201) ;;
+        *) fallar "registrar un gasto del Versa" ;;
+      esac
+    }
+    registrar_gasto "{\"tipo\":\"GASOLINA\",\"monto\":850.00,\"litros\":36.5,\"km\":15600,\"fecha\":\"$(fecha_hace_dias 20)\",\"descripcion\":\"Tanque lleno\"}"
+    registrar_gasto "{\"tipo\":\"CASETAS\",\"monto\":245.00,\"litros\":null,\"km\":null,\"fecha\":\"$(fecha_hace_dias 12)\",\"descripcion\":\"León-Querétaro\"}"
+    registrar_gasto "{\"tipo\":\"GASOLINA\",\"monto\":780.00,\"litros\":33.2,\"km\":16050,\"fecha\":\"$(fecha_hace_dias 5)\",\"descripcion\":null}"
+    registrar_gasto "{\"tipo\":\"LAVADO\",\"monto\":150.00,\"litros\":null,\"km\":null,\"fecha\":\"$(fecha_hace_dias 2)\",\"descripcion\":null}"
+    echo "  registrados 4 gastos del Versa GTO-127-P (2 cargas de gasolina, casetas y lavado)"
+  else
+    echo "  ya existían los gastos del Versa GTO-127-P"
+  fi
+
+  pedir GET /api/v1/app/direcciones "$TOKEN_SOFIA"
+  [ "$CODIGO" = 200 ] || fallar "ver las direcciones de Sofía"
+  if [ "$RESPUESTA" = "[]" ]; then
+    pedir POST /api/v1/app/direcciones "$TOKEN_SOFIA" \
+      '{"alias":"Casa","calle":"Blvd. Campestre 1520","colonia":"Jardines del Moral","cp":"37160","ciudad":"León","lat":21.1520,"lng":-101.7105}'
+    [ "$CODIGO" = 201 ] || fallar "guardar la dirección de Sofía"
+    echo "  guardada    dirección Casa, para pedir la recolección"
+  else
+    echo "  ya existía  la dirección de Sofía"
+  fi
+
+  pedir GET /api/v1/app/catalogo "$TOKEN_SOFIA"
+  [ "$CODIGO" = 200 ] || fallar "ver el catálogo"
+  ID_XTRAIL=$(id_en_la_lista '"marca":"Nissan","modelo":"X-Trail"')
+  [ -n "$ID_XTRAIL" ] || fallar "encontrar la X-Trail en el catálogo"
+  pedir POST /api/v1/app/estreno/solicitudes "$TOKEN_SOFIA" \
+    "{\"tipo\":\"PRUEBA_MANEJO\",\"modeloCatalogoId\":$ID_XTRAIL,\"preferenciaFecha\":\"$(fecha_en_dias 3)\",\"preferenciaFranja\":\"MANANA\"}"
+  case "$CODIGO" in
+    201) echo "  pedida      prueba de manejo de la X-Trail (llega al CRM como prospecto de la app)" ;;
+    409) echo "  ya existía  la prueba de manejo de la X-Trail" ;;
+    *) fallar "pedir la prueba de manejo" ;;
+  esac
 fi
 
 echo
