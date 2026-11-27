@@ -14,6 +14,16 @@ public interface EnvioCorreos {
 	void enviarRecuperacion(String correo, String nombre, String enlace, String codigo);
 
 	/**
+	 * Manda el código de 6 dígitos que confirma un correo nuevo (V2-M01.07).
+	 *
+	 * <p>
+	 * Va <b>al correo nuevo</b>, que es el único destino que prueba algo: mandarlo
+	 * al correo viejo confirmaría que la cuenta autorizó el cambio, no que el
+	 * correo nuevo sea suyo.
+	 */
+	void enviarCodigoDeContacto(String correoNuevo, String nombre, String codigo);
+
+	/**
 	 * Manda la bienvenida con la contraseña temporal de la cuenta nueva (CRM-1.3).
 	 * El cliente la cambia en su primer ingreso.
 	 */

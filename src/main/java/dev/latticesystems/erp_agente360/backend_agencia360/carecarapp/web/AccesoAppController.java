@@ -1,6 +1,7 @@
 package dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.web;
 
 import dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.application.AccesoAppService;
+import dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.application.CambioDeContactoService;
 import dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.application.PerfilApp;
 import dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.application.RecuperacionContrasenaService;
 import dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.application.SesionActivaApp;
@@ -16,6 +17,7 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -34,10 +36,13 @@ public class AccesoAppController {
 
 	private final AccesoAppService accesoAppService;
 	private final RecuperacionContrasenaService recuperacionService;
+	private final CambioDeContactoService cambioDeContactoService;
 
-	public AccesoAppController(AccesoAppService accesoAppService, RecuperacionContrasenaService recuperacionService) {
+	public AccesoAppController(AccesoAppService accesoAppService, RecuperacionContrasenaService recuperacionService,
+			CambioDeContactoService cambioDeContactoService) {
 		this.accesoAppService = accesoAppService;
 		this.recuperacionService = recuperacionService;
+		this.cambioDeContactoService = cambioDeContactoService;
 	}
 
 	@PostMapping("/auth/login")
@@ -103,6 +108,32 @@ public class AccesoAppController {
 		} else {
 			throw new IllegalArgumentException("Manda el token del enlace o el correo con el código");
 		}
+	}
+
+	@PatchMapping("/perfil")
+	@PreAuthorize("hasRole('CLIENTE_CARECAR')")
+	@ResponseStatus(HttpStatus.ACCEPTED)
+	@Operation(summary = "Pedir el cambio del correo", description = "V2-M01.07 · No cambia nada todavía: crea una "
+			+ "verificación y manda un código de 6 dígitos al correo nuevo. Pide la contraseña actual porque el "
+			+ "correo es la identidad con la que se entra. Responde 400 con CREDENCIALES_INVALIDAS si la "
+			+ "contraseña no coincide (400 y no 401 a propósito), 400 con DATOS_INVALIDOS si el correo no tiene "
+			+ "formato, y 409 si ese correo ya es de otro cliente.")
+	public CambioDeContactoService.VerificacionCreada pedirCambioDeCorreo(
+			@Valid @RequestBody CambioDeCorreoRequest request, @AuthenticationPrincipal UsuarioAutenticado cliente) {
+		return cambioDeContactoService.pedirCambioDeCorreo(cliente.id(), request.correo(), request.contrasenaActual());
+	}
+
+	@PostMapping("/perfil/verificaciones/{id}/confirmar")
+	@PreAuthorize("hasRole('CLIENTE_CARECAR')")
+	@Operation(summary = "Confirmar el cambio con el código", description = "V2-M01.07 · Aplica el cambio y "
+			+ "devuelve el perfil ya actualizado. Al cambiar el correo cambia también cuenta_app.usuario "
+			+ "(V2-T05.03). El código vence a los 15 minutos y sirve una sola vez: equivocado, usado y vencido "
+			+ "responden igual (400 con CODIGO_INVALIDO), porque responder distinto permitiría averiguar qué "
+			+ "códigos existen. Una verificación ajena responde 404, nunca 403.")
+	public PerfilApp confirmarVerificacion(@PathVariable Long id,
+			@Valid @RequestBody ConfirmarVerificacionRequest request,
+			@AuthenticationPrincipal UsuarioAutenticado cliente) {
+		return cambioDeContactoService.confirmar(cliente.id(), id, request.codigo());
 	}
 
 	@GetMapping("/sesiones")

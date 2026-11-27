@@ -44,6 +44,22 @@ public class CorreoSmtp implements EnvioCorreos {
 	}
 
 	@Override
+	public void enviarCodigoDeContacto(String correoNuevo, String nombre, String codigo) {
+		enviar(correoNuevo, "Confirma tu correo nuevo en CareCar", """
+				Hola, %s:
+
+				Para confirmar este correo en la app CareCar, escribe este codigo:
+
+				%s
+
+				Vence en 15 minutos y sirve una sola vez.
+
+				Si no pediste cambiar tu correo, ignora este mensaje: tu cuenta no cambia
+				hasta que alguien escriba el codigo, y para pedirlo hace falta tu contrasena.
+				""".formatted(nombre, codigo));
+	}
+
+	@Override
 	public void enviarCuentaNueva(String correo, String nombre, String contrasenaTemporal) {
 		enviar(correo, "Tu cuenta de la app CareCar", """
 				Hola, %s:
