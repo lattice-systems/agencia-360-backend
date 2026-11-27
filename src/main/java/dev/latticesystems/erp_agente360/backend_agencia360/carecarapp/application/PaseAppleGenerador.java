@@ -51,18 +51,35 @@ public class PaseAppleGenerador {
 	private static final DateTimeFormatter ISO = DateTimeFormatter.ISO_OFFSET_DATE_TIME;
 
 	private final ConfiguracionWallet configuracion;
+	private final TokenPaseApple tokens;
 	private final ObjectMapper json = new ObjectMapper();
 
-	@Autowired
+	/** Sin servicio de actualización: el pase no lleva {@code webServiceURL}. */
 	public PaseAppleGenerador(ConfiguracionWallet configuracion) {
+		this(configuracion, null);
+	}
+
+	@Autowired
+	public PaseAppleGenerador(ConfiguracionWallet configuracion, TokenPaseApple tokens) {
 		this.configuracion = configuracion;
+		this.tokens = tokens;
 	}
 
 	/** @return los bytes del {@code .pkpass} firmado */
 	public byte[] generar(DatosPase datos) {
+		return generar(datos, false);
+	}
+
+	/**
+	 * @param anulado
+	 *            si la cita se canceló: el pase lleva {@code voided} y Wallet lo
+	 *            muestra como inválido (V2-M25.06)
+	 * @return los bytes del {@code .pkpass} firmado
+	 */
+	public byte[] generar(DatosPase datos, boolean anulado) {
 		try {
 			Map<String, byte[]> archivos = new LinkedHashMap<>();
-			archivos.put("pass.json", passJson(datos));
+			archivos.put("pass.json", passJson(datos, anulado));
 			archivos.put("icon.png", icono(29));
 			archivos.put("icon@2x.png", icono(58));
 			byte[] manifiesto = manifiesto(archivos);
@@ -75,7 +92,7 @@ public class PaseAppleGenerador {
 		}
 	}
 
-	private byte[] passJson(DatosPase datos) throws JsonProcessingException {
+	private byte[] passJson(DatosPase datos, boolean anulado) throws JsonProcessingException {
 		Map<String, Object> pase = new LinkedHashMap<>();
 		pase.put("formatVersion", 1);
 		pase.put("passTypeIdentifier", configuracion.applePassTypeId());
@@ -87,6 +104,13 @@ public class PaseAppleGenerador {
 		pase.put("foregroundColor", "rgb(255, 255, 255)");
 		pase.put("relevantDate", datos.inicio().format(ISO));
 		pase.put("expirationDate", datos.fin().format(ISO));
+		if (anulado) {
+			pase.put("voided", true);
+		}
+		if (tokens != null && configuracion.appleActualizable()) {
+			pase.put("webServiceURL", configuracion.appleWebServiceUrl());
+			pase.put("authenticationToken", tokens.de(datos.citaId()));
+		}
 		pase.put("barcodes", List.of(
 				Map.of("format", "PKBarcodeFormatQR", "message", datos.codigoQr(), "messageEncoding", "iso-8859-1")));
 		List<Map<String, String>> secundarios = new ArrayList<>();

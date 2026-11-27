@@ -206,6 +206,17 @@ class CancelacionIntegrationTest extends AbstractIntegrationTest {
 				""", cuenta,
 				UUID.randomUUID().toString().replace("-", "") + UUID.randomUUID().toString().replace("-", ""));
 
+		// V2-M06.02: el token de push y los avisos son datos del cliente y se van con
+		// la cuenta.
+		jdbc.update("""
+				insert into dispositivo_push (cuenta_app_id, instalacion_id, token_fcm, plataforma)
+				values (?, ?, ?, 'android')
+				""", cuenta, "instalacion-" + UUID.randomUUID(), "token-" + UUID.randomUUID());
+		jdbc.update("""
+				insert into notificacion (cliente_id, categoria, titulo, cuerpo, destino, evento)
+				values (?, 'taller', 'Tu auto está listo', 'Ya puedes pasar por él.', '/taller/1', 'orden')
+				""", id);
+
 		long solicitudArco = jdbc.queryForObject("""
 				insert into solicitud_arco (cliente_id, tipo, estado, archivo_url, creada_en, resuelta_en)
 				values (?, 'ACCESO', 'RESUELTA', '/api/v1/app/privacidad/arco/0/archivo', now(), now()) returning id
@@ -244,6 +255,9 @@ class CancelacionIntegrationTest extends AbstractIntegrationTest {
 				Integer.class, ana.id())).isZero();
 		assertThat(jdbc.queryForObject("select count(*) from token_recuperacion where cuenta_app_id = "
 				+ "(select id from cuenta_app where cliente_id = ?)", Integer.class, ana.id())).isZero();
+		assertThat(jdbc.queryForObject("select count(*) from dispositivo_push where cuenta_app_id = "
+				+ "(select id from cuenta_app where cliente_id = ?)", Integer.class, ana.id())).isZero();
+		assertThat(contar("notificacion", "cliente_id", ana.id())).isZero();
 
 		// El cliente: sin nombre, correo ni teléfono; la fila sigue.
 		Map<String, Object> cliente = jdbc.queryForMap("select nombre, correo, telefono from cliente where id = ?",
@@ -478,6 +492,9 @@ class CancelacionIntegrationTest extends AbstractIntegrationTest {
 						n("select count(*) from orden_servicio where vehiculo_cliente_id in " + deSusVehiculos)),
 				Map.entry("sesiones", n("select count(*) from sesion_app where cuenta_id in " + deSuCuenta)),
 				Map.entry("tokens", n("select count(*) from token_recuperacion where cuenta_app_id in " + deSuCuenta)),
+				Map.entry("dispositivos",
+						n("select count(*) from dispositivo_push where cuenta_app_id in " + deSuCuenta)),
+				Map.entry("notificaciones", n("select count(*) from notificacion where cliente_id = " + cliente)),
 				Map.entry("aceptaciones",
 						n("select count(*) from aceptacion_aviso where cuenta_app_id in " + deSuCuenta)),
 				Map.entry("solicitudesArco", n("select count(*) from solicitud_arco where cliente_id = " + cliente)),

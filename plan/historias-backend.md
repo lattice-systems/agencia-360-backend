@@ -464,7 +464,7 @@ Recordatorio del próximo servicio, en `carecarapp`. Migración `V46`.
 
 **Supuestos sobre trabajo de otras personas (para reconciliar)**
 
-- **Push (V2-M06.02 y V2-M06.07, Jael):** no existe el servicio único de envío. Este job publica el evento de dominio `AvisoAlCliente`; cuando el módulo `notificaciones` escuche ese evento, el recordatorio llegará como push **sin cambiar este código**. Falta que M06.07 decida el texto y la preferencia del cliente («elegir qué avisos recibir», V2-M06.05): hasta entonces el aviso solo llega por SSE a quien tenga la app abierta.
+- **Push (V2-M06.02 y V2-M06.07, ayudó Juan Pablo):** el módulo `notificaciones` ya escucha el evento (ver «Diseño de V2-M06.07 y V2-M06.02»). Este job publica el evento de dominio `AvisoAlCliente`; cuando el módulo `notificaciones` escuche ese evento, el recordatorio llegará como push **sin cambiar este código**. Falta que M06.07 decida el texto y la preferencia del cliente («elegir qué avisos recibir», V2-M06.05): hasta entonces el aviso solo llega por SSE a quien tenga la app abierta.
 - **Configurable por cliente:** la historia dice «configurable»; aquí lo es por entorno (servidor). Un umbral por cliente depende de las preferencias de V2-M06.05.
 - **Vehículos sin lecturas** no reciben recordatorio por tiempo; se resuelve si V2-M05.02 empieza a estimar con la fecha de compra o de la última orden.
 - La migración `V46` es la siguiente libre de `main` al escribir esto; si otro PR la toma antes, renumerar al integrar.
@@ -479,6 +479,52 @@ Detalle: [`carecar-mobile/plan/modulos/M06-notificaciones.md`](https://github.co
 | V2-M06.04 | Como cliente quiero una bandeja con todos mis avisos | Paginada · no leídos con contador en el ícono · marcar todas como leídas | Jael |
 | V2-M06.05 | Como cliente quiero elegir qué avisos recibir y un horario silencioso | Por categoría · respetado por el backend al enviar | Jael |
 | V2-M06.07 | Como equipo queremos un servicio único de envío en el backend | Módulo `notificaciones` en Modulith escucha eventos de dominio (cita, orden, documento…) | Jael |
+
+#### Diseño de V2-M06.07 y V2-M06.02 (push) — tomadas por Juan Pablo (R6) para destrabar V2-M05.05
+
+**Alcance.** Solo lo que piden los criterios de estas dos historias: el servicio único de envío, el registro del token FCM y el push de los avisos que el backend ya publica. La bandeja con sus endpoints (V2-M06.04) y las preferencias (V2-M06.05) **no** se hacen aquí; sí se crea la tabla `notificacion` porque la ficha la nombra y cada push se guarda en ella (así M06.04 solo agrega la lectura).
+
+**Módulo.** `notificaciones` (nuevo, Spring Modulith). Depende solo de `shared`. **No** depende de `carecarapp`: lo contrario provocaría un ciclo, porque `carecarapp` ya publica `AvisoAlCliente` y el módulo de avisos necesita saber qué cuenta es de qué cliente. La dirección es `carecarapp → notificaciones`:
+
+| Pieza | Dónde | Qué hace |
+| --- | --- | --- |
+| `EntregaDeAvisos` | `notificaciones` (API pública del módulo) | `avisar(clienteId, evento, datos)`; nunca lanza |
+| `PuenteDeAvisosPush` | `carecarapp.application` | `@TransactionalEventListener(fallbackExecution = true)` de `AvisoAlCliente` y de `OrdenServicioCambiada`; llama a `EntregaDeAvisos`. Es el único archivo de `carecarapp` que cambia |
+| `RedactorDeAvisos` | `notificaciones.application` | Función pura: evento + datos → categoría, título, cuerpo y destino en español. Un evento sin texto (por ejemplo `traslado.ubicacion`, que llega cada pocos segundos) no genera push |
+| `AvisosService` | `notificaciones.application` | Guarda la `notificacion`, busca los dispositivos activos del cliente y manda a cada uno por `EnvioPush` |
+| `EnvioPush` | `notificaciones.application` | Interfaz del canal: `enviar(MensajePush) → ResultadoEnvio` (`ENVIADO`, `TOKEN_INVALIDO`, `NO_CONFIGURADO`, `FALLO`) |
+| `EnvioPushFcm` | `notificaciones.infrastructure` | FCM HTTP v1 con token OAuth de cuenta de servicio (JWT bearer), mismo patrón que `ActualizadorDePasesGoogle` y una `LlamadaHttp` propia para probar sin red |
+| `EnvioPushFake` | pruebas | Guarda lo que se «enviaría» |
+
+**Transacciones.** El listener corre después de confirmar la transacción de origen. Guardar la `notificacion` y mandar el push están envueltos en un `try/catch` que solo registra: **un fallo de FCM o de la base de avisos nunca revierte ni rompe lo que causó el aviso**. El guardado usa su propia transacción corta (`REQUIRES_NEW`), porque en `AFTER_COMMIT` la original ya no admite escrituras.
+
+**Credenciales (R8).** Solo por entorno: `app.push.fcm.project-id` (`PUSH_FCM_PROJECT_ID`) y `app.push.fcm.service-account-json-base64` (`PUSH_FCM_SERVICE_ACCOUNT_JSON_BASE64`). Sin ellas `EnvioPushFcm` responde `NO_CONFIGURADO` y no hace ninguna llamada; el arranque nunca falla. La bandeja se guarda igual.
+
+**Migración `V60__crear_dispositivo_push_y_notificacion.sql`** (número fijo asignado; si al integrar `main` ya la tomó otra, se renombra la nuestra):
+
+| Tabla | Campos | Notas |
+| --- | --- | --- |
+| `dispositivo_push` | `id`, `cuenta_app_id` (FK `cuenta_app`), `token_fcm`, `plataforma` (`android` o `ios`), `idioma`, `actualizado_en` de la ficha/plan; añadidos: `instalacion_id`, `activo`, `creado_en` | Una fila por instalación (`instalacion_id` único). `token_fcm` único: si el mismo token aparece con otra instalación se borra la fila vieja (reinstalación). `activo` pasa a falso cuando FCM responde que el token no existe |
+| `notificacion` | `id`, `cliente_id` (FK `cliente`), `categoria`, `titulo`, `cuerpo`, `destino`, `leida_en`, `creada_en` de la ficha/plan; añadidos: `evento`, `datos` (`jsonb`) | Índice `(cliente_id, creada_en desc)` para la bandeja de M06.04. `datos` guarda solo ids (nunca nombres, VIN, placas ni montos) |
+
+`preferencia_notificacion` **no** se crea: sus criterios son de V2-M06.05.
+
+**Categorías** (las del módulo M06): `taller` (orden), `citas` (traslados, asistencia), `mantenimiento` (recordatorio, garantía, campañas), `documentos` (factura, ARCO), `promociones` (puntos, valuación, pedido) y `mensajes`. La categoría ya viaja en `notificacion` para que M06.05 filtre sin migrar.
+
+**Endpoints** (`/api/v1/app`, rol `CLIENTE_CARECAR`; contrato en `docs/api/agencia360-api-app-v2.yaml`):
+
+| Método | Ruta | Respuestas |
+| --- | --- | --- |
+| PUT | `/dispositivos/{instalacionId}` | 204 registra o actualiza (`tokenFcm` ≤ 4096, `plataforma` `android`/`ios`, `idioma` opcional ≤ 10). 400 `DATOS_INVALIDOS`; 401; 403 `CUENTA_DESACTIVADA` |
+| DELETE | `/dispositivos/{instalacionId}` | 204 siempre que sea suya o no exista (idempotente); la instalación de otra cuenta se ignora, no se revela. 401; 403 |
+
+La app registra tras iniciar sesión y da de baja **antes** de `/auth/cerrar-sesion`, porque ese endpoint no lleva access token y la baja sí lo necesita. Si la instalación pasa a otra cuenta (otro cliente entra en el mismo teléfono) el `PUT` la reasigna.
+
+**Payload sin datos sensibles.** El push lleva `titulo` y `cuerpo` genéricos y, en `data`, solo `evento`, `destino` (ruta de la app) y los ids del recurso. Los textos no mencionan nombre, VIN, placa, montos ni direcciones.
+
+**Pruebas.** `RedactorDeAvisosTest` (un caso por evento y la ausencia de datos sensibles), `AvisosServiceTest` (envía a los activos, desactiva `TOKEN_INVALIDO`, un fallo no se propaga), `EnvioPushFcmTest` (JWT bearer, URL v1, 404 `UNREGISTERED`, sin credenciales no llama), `DispositivosIntegrationTest` con la base real (alta, actualización, reasignación, baja, 400, 401), `AvisosPushIntegrationTest` (un `AvisoAlCliente` de `mantenimiento.recordatorio` guarda la notificación y manda el push con el texto correcto; un fallo del canal no revierte la transacción) y `ModularityTests`.
+
+**Lo que falta para push real.** Credenciales FCM del proyecto de Firebase en el entorno del servidor y, del lado de la app, `firebase_messaging` con `google-services.json` y `GoogleService-Info.plist` fuera de git (ver `plan/modulos/M06-notificaciones.md` de la app).
 
 ### M07 · Mensajería con el asesor — H4 — módulo `mensajeria (nuevo)`
 
@@ -598,6 +644,17 @@ Detalle: [`carecar-mobile/plan/modulos/M09-documentos-y-vencimientos.md`](https:
 | V2-M09.02 | Como cliente quiero fotografiar un documento y guardarlo | Recorte de bordes · compresión · máx. tamaño · progreso | Haziel |
 | V2-M09.03 | Como cliente quiero ver los documentos que me dio la agencia | Factura de compra y póliza de garantía cargadas por la agencia aparecen solas | Haziel |
 | V2-M09.04 | Como cliente quiero alertas antes de que venza un documento | Push 30, 7 y 1 día antes · configurable | Haziel |
+
+#### Diseño de V2-M09.01 (documentos del vehículo con su estado) — en curso
+
+- **Migración (`V61`):** `documento_vehiculo` (id, vehiculo_cliente_id, tipo, archivo_url, vence_en, origen, creado_en: los campos de la ficha, sin renombrar ninguno). Campos añadidos (R1 lo permite): `titulo` (nombre libre; obligatorio para `OTRO`), `numero` (folio, número de póliza o de placa), `emitido_en`, `aseguradora` y `telefono_aseguradora` (solo la póliza; destraban V2-M11.02, que llama a la aseguradora desde «Asistencia»). `archivo_url` queda opcional: V2-M09.02 sube el archivo; mientras tanto el documento existe solo como registro con fechas. Checks: `tipo` y `origen` en su lista, `vence_en >= emitido_en`, `titulo` obligatorio con `OTRO`. Índice por `vehiculo_cliente_id`.
+- **Tipos fijos + otro:** `POLIZA`, `TARJETA_CIRCULACION`, `VERIFICACION`, `TENENCIA` (tenencia y refrendo), `LICENCIA`, `GARANTIA`, `FACTURA` (factura de compra) y `OTRO`. `origen` es `CLIENTE` o `AGENCIA`.
+- **Estado calculado en el servidor** con la fecha de la agencia (`America/Mexico_City`), no la del teléfono: `SIN_FECHA` (no tiene `vence_en`; p. ej. la factura de compra), `VENCIDO` (`vence_en` anterior a hoy), `POR_VENCER` (vence hoy o en los siguientes 30 días) y `VIGENTE` (más de 30 días). Cada documento trae `diasRestantes` (negativo si ya venció; `null` sin fecha).
+- **Endpoint:** `GET /vehiculos/{id}/documentos` (rol `CLIENTE_CARECAR`). Devuelve `[]` si no hay documentos; orden por `vence_en` ascendente con los que no tienen fecha al final, y por `id`. No expone `archivo_url` (el archivo se pedirá con URL firmada en V2-M09.02/V2-M09.03): solo `tieneArchivo`. Errores: 401, 403 (cuenta desactivada) y 404 si el vehículo no existe o no es del cliente (no se distingue, para no revelar qué ids existen).
+- **Módulos:** todo en `carecarapp` (`domain/DocumentoVehiculo`, `TipoDocumento`, `OrigenDocumento`, `EstadoDocumento`; `application/DocumentosAppService`, `DocumentoApp`; `infrastructure/DocumentoVehiculoRepository`; `web/DocumentosAppController`). El catálogo de Modulith de `plan/README.md` lista `documentos (nuevo)`; se mantiene dentro de `carecarapp` mientras no haya alertas (V2-M09.04) que justifiquen un módulo propio. Ese movimiento es mecánico y se hará con esa historia.
+- **Datos de ejemplo:** la migración siembra, para los vehículos de ejemplo que ya existan por placas (la Frontier GTO-501-S y el March GTO-218-T de Diego Castillo), póliza, tarjeta de circulación, verificación y factura con fechas relativas a la migración, de modo que haya uno por vencer, uno vencido, uno vigente y uno sin fecha. Una base nueva no tiene vehículos al migrar, así que `scripts/documentos-de-ejemplo.sql` repite la siembra (idempotente) y se corre después de `cargar-datos-de-ejemplo.sh`.
+- **Fuera de alcance:** subir o borrar documentos y la URL firmada del archivo (V2-M09.02), documentos de la agencia (V2-M09.03), alertas (V2-M09.04).
+- **Pruebas:** `DocumentoVehiculoTest` (estado por fecha y límites), `DocumentosAppServiceTest` (vehículo ajeno 404, reloj fijo en la zona de la agencia, orden) y `DocumentosAppIntegrationTest` (migración, 401 y 404).
 
 ### M10 · Garantía y campañas de seguridad — H3 — módulo `carecarapp`
 
@@ -1153,6 +1210,7 @@ Detalle: [`carecar-mobile/plan/modulos/M25-widgets-y-wallet.md`](https://github.
 | --- | --- | --- | --- |
 | V2-M25.03 | Como cliente quiero guardar mi cita en Wallet para presentarla en recepción | `GET /citas/{id}/pase?plataforma=apple\|google` firma el pase con el QR del comprobante (V2-M02.11) · certificados fuera del repo (R8) · al cancelar la cita el pase queda vencido | Juan Pablo |
 | V2-M25.05 | Como cliente de iPhone quiero ver el estado del taller en la pantalla bloqueada para seguir mi servicio | Push de ActivityKit (APNs) en cada cambio de etapa de la orden abierta y al cerrarla · llaves de APNs fuera del repo (R8) | Juan Pablo |
+| V2-M25.06 | Como cliente quiero que el pase de Wallet de mi cita se anule o cambie de fecha solo si la cancelo o la reprogramo | Google: `EXPIRED` o horario nuevo por PATCH · Apple: `voided` o fecha nueva por el servicio web de pases y push de APNs vacío · sin credenciales no hace nada · nunca revierte la cancelación | Juan Pablo |
 
 
 #### Diseño de V2-M25.03: pase de Wallet de la cita
@@ -1168,17 +1226,35 @@ Detalle: [`carecar-mobile/plan/modulos/M25-widgets-y-wallet.md`](https://github.
 
 #### Diseño técnico — V2-M25.06 (parte B de Juan Pablo)
 
-El pase de Wallet de una cita cancelada o reprogramada deja de servir. **Google quedó hecho; Apple queda diseñado, sin implementar.**
+El pase de Wallet de una cita cancelada o reprogramada deja de servir. **Google y Apple quedaron hechos; Apple está implementado con fakes y sin probar contra Apple (ver Supuestos).**
 
 - **Evento** `CambioDePaseDeCita` (`citaId`, `tipo` `CANCELADA` o `REPROGRAMADA`, `inicio`, `fin`, `vehiculoNombre`): lo publica `AgendaAppService.cancelar` y `.reprogramar` dentro de su transacción. La agenda no conoce Wallet.
 - **Google** (`ActualizadorDePasesGoogle`, escucha el evento): obtiene un token de la cuenta de servicio (JWT bearer, alcance `wallet_object.issuer`) y hace `PATCH …/genericObject/{issuer}.carecar_cita_{id}`: cancelada → `state: EXPIRED`; reprogramada → `validTimeInterval` y módulo «Fecha y hora» nuevos. Un 404 (el cliente nunca guardó el pase) no es error; cualquier otro fallo se registra y **nunca** revierte la cancelación. Sin credenciales (`app.wallet.google.*`) no hace nada. Llamadas HTTP detrás de `LlamadaHttp` para probarlo sin red.
-- **Apple (pendiente, diseño):** hay que (1) agregar `webServiceURL` y `authenticationToken` al `pass.json` de `PaseAppleGenerador`; (2) tabla `registro_pase_apple` (`dispositivo`, `push_token`, `serial` = id de cita) y los endpoints que Apple exige (`POST/DELETE /v1/devices/{dev}/registrations/{passType}/{serial}`, `GET /v1/devices/{dev}/registrations/{passType}?passesUpdatedSince=`, `GET /v1/passes/{passType}/{serial}`, `POST /v1/log`), fuera de `/api/v1/app` y con el token del pase; (3) al llegar `CambioDePaseDeCita`, marcar el pase `voided: true` o con la fecha nueva y mandar un push vacío por APNs a los `push_token` registrados. Requiere el certificado del Pass Type ID (R8: solo en el ambiente) y un dominio HTTPS público, que hoy no tenemos (proyecto solo local).
+- **Apple (implementado con fakes; sin probar contra Apple):**
+  - `pass.json` lleva `webServiceURL` (de `app.wallet.apple.web-service-url`, sin `/v1`) y `authenticationToken` (`TokenPaseApple`: HMAC-SHA256 hexadecimal de `pase-apple:<citaId>` con el secreto `app.citas.qr-secreto`, sin tabla ni valor por cita que guardar). Sin URL pública HTTPS, o sin credenciales, el pase se genera igual que en V2-M25.03.
+  - **Migración `V62__crear_pases_apple_y_actividades_en_vivo.sql`**: `registro_pase_apple` (`dispositivo`, `push_token`, `pass_type_id`, `serial` = `cita-<id>`, `cita_id` FK a `cita`; único por dispositivo + pass type + serial). El estado del pase **no se guarda**: se arma al vuelo desde la cita (cancelada → `voided: true`; reprogramada → fecha nueva) y `cita.updated_at` es la marca de actualización (`lastUpdated` = milisegundos del último cambio; `Last-Modified` en segundos).
+  - **Rutas fuera de `/api/v1/app`** (Apple las fija), en `PasesAppleController`: `POST` y `DELETE /v1/devices/{dispositivo}/registrations/{passType}/{serial}` (201 si es nuevo, 200 si ya existía o se dio de baja, 401 con token ajeno, 404 si el servicio está apagado o el serial no es nuestro), `GET /v1/devices/{dispositivo}/registrations/{passType}?passesUpdatedSince=` (200 con `serialNumbers` y `lastUpdated`, o 204), `GET /v1/passes/{passType}/{serial}` (`application/vnd.apple.pkpass`, `Last-Modified`, 304 con `If-Modified-Since`, 401 sin token) y `POST /v1/log` (siempre 200; el texto se limpia y se acota antes de registrarlo). La autenticación es `Authorization: ApplePass <token>` validado en `PasesAppleService` en tiempo constante; la lista de pases por dispositivo no lleva token porque Apple no lo manda ahí.
+  - **Seguridad**: `SecurityConfig` abre solo `/v1/devices/**`, `/v1/passes/**` y `/v1/log`; cualquier otra ruta (incluida `/v1/otra-cosa`) y toda `/api/v1/app` siguen pidiendo sesión (cubierto en `PasesAppleIntegrationTest`). nginx pasa `/v1/` al backend.
+  - **Aviso**: `ActualizadorDePasesApple` escucha `CambioDePaseDeCita` (después de confirmar) y manda por `EnvioApns` un push vacío `{}` (`apns-push-type: background`, prioridad 5, topic = pass type id, siempre al APNs de producción) a cada dispositivo registrado; Wallet vuelve a pedir el pase. Un 410 `Unregistered` o `BadDeviceToken` borra ese registro en una transacción propia (la de la cita ya terminó). Cualquier fallo se registra y **nunca** revierte la cancelación; sin credenciales de APNs o sin URL pública no hace nada.
+- **APNs (`EnvioApns`)**: interfaz con `EnvioApnsReal` (token JWT ES256 firmado con la llave `.p8`, `app.apns.key-id`, `app.apns.team-id`, `app.apns.key-p8-base64`; el token se reutiliza 40 minutos porque Apple limita las renovaciones) y `EnvioApnsFake` en pruebas. **Decisión HTTP/2**: APNs solo habla HTTP/2; el cliente del JDK lo negocia por ALPN, así que se reutiliza `LlamadaHttp` (con `HttpClient.Version.HTTP_2` explícito) en lugar de agregar una librería. Todo es opcional por variable de entorno (R8) y sin ellas los pushes se desactivan sin fallar.
 
 **Supuestos y lo que falta**
 
-- **Apple no se puede probar** sin cuenta de desarrollador, certificado y dominio público; por eso queda como diseño. El pase de Apple de una cita cancelada **sigue sirviendo** hasta que se implemente; la recepción lo rechaza igual porque valida el QR contra la cita (`FirmaCitas`), que ya no está confirmada.
+- **Apple no se pudo probar** sin cuenta de desarrollador, certificado del Pass Type ID, llave `.p8` de APNs y un dominio HTTPS público: todo se probó con un envío falso, un transporte HTTP falso y llamadas a las rutas con los encabezados que Apple documenta. Antes de entregar hay que probar con un iPhone real: guardar el pase, ver que Wallet se registra, cancelar la cita y ver el pase `voided`.
+- **Supuestos sin verificar contra Apple**: que el push de un pase use `apns-push-type: background` con prioridad 5 (si Apple lo rechaza, probar `alert`); que los pases siempre usen el APNs de producción aunque la app sea de desarrollo; y que no haga falta `If-Modified-Since` exacto al segundo (una reprogramación en el mismo segundo que la última descarga no se vería).
 - **Google tampoco se probó contra Google**: solo con un transporte falso. Probar con una cuenta de servicio real antes de entregar.
-- Los pases guardados antes de reprogramar no se actualizan si el cliente no los tenía guardados (404, se ignora).
+- Los pases guardados antes de configurar `web-service-url` no tienen `webServiceURL` y no se actualizan: solo vencen por `expirationDate`; recepción los rechaza igual porque valida el QR contra la cita.
+
+#### Diseño técnico — V2-M25.05: Live Activity del taller (parte B de Juan Pablo)
+
+Implementado con fakes; sin probar contra APNs.
+
+- **Registro**: `PUT /api/v1/app/ordenes/{ordenId}/actividad-en-vivo` con `{"pushToken": "<hex, máx. 300>"}` y `DELETE` (con `?pushToken=` quita solo esa actividad; sin él, todas las del cliente en la orden), solo `CLIENTE_CARECAR`, `204`. Orden ajena o inexistente → `404`; orden ya entregada → `409 ORDEN_CERRADA`; token no hexadecimal o vacío → `400 DATOS_INVALIDOS`. Es idempotente y un token dado de baja se reactiva. Contrato en `docs/api/agencia360-api-app-v2.yaml` (sin cambiar `version`).
+- **Tabla** `actividad_en_vivo` (`cliente_id`, `orden_servicio_id`, `push_token`, `activa`; único por orden + token) en la migración V62. Varios dispositivos pueden tener actividad en la misma orden.
+- **Push**: `ActualizadorDeActividadesEnVivo` escucha `OrdenServicioCambiada` (el mismo evento que alimenta el SSE de V2-M04.03) y solo reacciona a los motivos `APERTURA`, `ETAPA`, `ADICIONAL` y `RESPUESTA`. Lee la orden con `TallerEnVivo` y manda a cada actividad activa un push `apns-push-type: liveactivity` (topic `<bundleId>.push-type.liveactivity`, prioridad 10, sandbox según `app.apns.sandbox`) con `aps.event: update`, `timestamp` y `content-state` `{etapa, estatus, avance, adicionalesPendientes, entregaEstimada?}`. Las fechas van como segundos desde 1970 (número) porque ActivityKit decodifica con el formato de fecha por omisión de Swift. Un cambio de etapa agrega `alert` en español; un adicional no alerta.
+- **Fin**: al entregar el auto (`ENTREGADO`) manda `event: end` con el estado final y `dismissal-date` a 15 minutos y marca las actividades como inactivas. Un token muerto (410, `BadDeviceToken`) también la desactiva.
+- **Seguridad de la operación**: corre después de confirmar la transacción de Servicio, nunca la revierte y sin `app.apns.*` ni `app.apns.bundle-id` no hace nada. Las llaves solo viven en el ambiente (R8).
+- **Qué no se pudo probar**: el push real a APNs, que el `content-state` lo decodifique la app iOS (el Swift no se compiló, ver el módulo M25 de la app) y los límites de presupuesto de actualizaciones de Apple.
 
 ### M26 · Valuación y toma a cuenta avanzada — H5 — módulo `carecarapp`
 

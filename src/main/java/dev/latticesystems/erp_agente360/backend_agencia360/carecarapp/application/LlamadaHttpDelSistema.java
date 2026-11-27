@@ -15,7 +15,8 @@ import org.springframework.stereotype.Component;
 @Component
 class LlamadaHttpDelSistema implements LlamadaHttp {
 
-	private final HttpClient cliente = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(5)).build();
+	private final HttpClient cliente = HttpClient.newBuilder().version(HttpClient.Version.HTTP_2)
+			.connectTimeout(Duration.ofSeconds(5)).build();
 
 	@Override
 	public RespuestaHttp enviar(String metodo, String url, Map<String, String> cabeceras, String cuerpo) {

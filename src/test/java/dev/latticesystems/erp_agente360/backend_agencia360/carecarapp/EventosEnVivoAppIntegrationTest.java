@@ -76,6 +76,7 @@ class EventosEnVivoAppIntegrationTest extends AbstractIntegrationTest {
 			conexion.close();
 		}
 		for (Long clienteId : clientes) {
+			jdbcTemplate.update("delete from notificacion where cliente_id = ?", clienteId);
 			jdbcTemplate.update("delete from cuenta_app where cliente_id = ?", clienteId);
 			jdbcTemplate.update("delete from cliente where id = ?", clienteId);
 		}

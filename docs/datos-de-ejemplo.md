@@ -162,6 +162,7 @@ Lo carga el final del script: el personal por sus rutas (`servicio1` en el talle
 | Bitácora (M18) | Versa GTO-127-P de Sofía con 4 gastos: 2 cargas de gasolina (15,600 y 16,050 km), casetas y lavado | Sofía: rendimiento y gasto del mes |
 | Recolección (M17) | Dirección «Casa» de Sofía (Blvd. Campestre 1520, León) | Sofía pide la recolección de un auto |
 | Estreno (M16) | Prueba de manejo de la X-Trail para dentro de 3 días en la mañana; llega al CRM como prospecto con origen de la app | Sofía la ve en sus solicitudes; el Gerente de marketing, en el CRM |
+| Documentos (M09) | Frontier GTO-501-S de Diego: póliza de «Seguros Ejemplo» (+52 800 000 1234) que vence en 30 días (por vencer), tarjeta de circulación vigente, verificación vencida hace 35 días y factura de compra de la agencia sin fecha. March GTO-218-T: tarjeta de circulación vigente. Los siembra la migración V61 si los vehículos ya existen; en una base nueva, `docker compose exec -T postgres psql -U agencia360 -d agencia360 < scripts/documentos-de-ejemplo.sql` después de cargar los datos | Diego ve los cuatro estados; con la póliza, «Asistencia» ofrece llamar a la aseguradora (V2-M11.02) |
 
 Datos fiscales de prueba (RFC con dígito verificador válido, no son de personas reales):
 

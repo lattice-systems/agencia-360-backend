@@ -92,4 +92,52 @@ class PaseAppleGeneradorTest {
 				.verify(new JcaSimpleSignerInfoVerifierBuilder().build(credenciales.certificadoFirmante())))
 				.isInstanceOf(CMSSignerDigestMismatchException.class);
 	}
+
+	private static final String SECRETO = "secreto-de-prueba-con-mas-de-32-caracteres";
+
+	private static ConfiguracionWallet conServicioWeb(ConfiguracionWallet base, String url) {
+		return new ConfiguracionWallet(base.applePassTypeId(), base.appleTeamId(), base.appleCertP12Base64(),
+				base.appleCertPassword(), base.appleWwdrPemBase64(), "", "", url);
+	}
+
+	@Test
+	void conServicioWebElPaseLlevaLaUrlYElTokenDeLaCita() throws Exception {
+		ConfiguracionWallet configuracion = conServicioWeb(CredencialesWalletDePrueba.nuevas().configuracion(),
+				"https://api.carecar.mx/");
+		TokenPaseApple token = new TokenPaseApple(SECRETO);
+
+		byte[] pkpass = new PaseAppleGenerador(configuracion, token).generar(datos());
+
+		JsonNode pase = json.readTree(descomprimir(pkpass).get("pass.json"));
+		assertThat(pase.path("webServiceURL").asText()).isEqualTo("https://api.carecar.mx");
+		assertThat(pase.path("authenticationToken").asText()).isEqualTo(token.de(42L));
+		assertThat(pase.has("voided")).isFalse();
+	}
+
+	@Test
+	void sinUrlPublicaElPaseSeGeneraComoAntesSinServicioWeb() throws Exception {
+		ConfiguracionWallet configuracion = conServicioWeb(CredencialesWalletDePrueba.nuevas().configuracion(), "");
+
+		byte[] pkpass = new PaseAppleGenerador(configuracion, new TokenPaseApple(SECRETO)).generar(datos());
+
+		JsonNode pase = json.readTree(descomprimir(pkpass).get("pass.json"));
+		assertThat(pase.has("webServiceURL")).isFalse();
+		assertThat(pase.has("authenticationToken")).isFalse();
+	}
+
+	@Test
+	void unPaseAnuladoSeMarcaVoidedYSigueFirmado() throws Exception {
+		CredencialesWalletDePrueba credenciales = CredencialesWalletDePrueba.nuevas();
+		ConfiguracionWallet configuracion = conServicioWeb(credenciales.configuracion(), "https://api.carecar.mx");
+
+		byte[] pkpass = new PaseAppleGenerador(configuracion, new TokenPaseApple(SECRETO)).generar(datos(), true);
+
+		Map<String, byte[]> archivos = descomprimir(pkpass);
+		assertThat(json.readTree(archivos.get("pass.json")).path("voided").asBoolean()).isTrue();
+		CMSSignedData firma = new CMSSignedData(new CMSProcessableByteArray(archivos.get("manifest.json")),
+				archivos.get("signature"));
+		SignerInformation firmante = firma.getSignerInfos().getSigners().iterator().next();
+		assertThat(firmante.verify(new JcaSimpleSignerInfoVerifierBuilder().build(credenciales.certificadoFirmante())))
+				.isTrue();
+	}
 }

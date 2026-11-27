@@ -23,4 +23,14 @@ class ModularityTests {
 	void archivosEsUnModuloDeLaV2() {
 		assertThat(modules.getModuleByName("archivos")).isPresent();
 	}
+
+	@Test
+	void notificacionesEsUnModuloQueNoDependeDeCarecarapp() {
+		assertThat(modules.getModuleByName("notificaciones")).isPresent();
+		// La dirección es carecarapp -> notificaciones; lo contrario sería un ciclo.
+		assertThat(modules.getModuleByName("notificaciones").orElseThrow()
+				.getDirectDependencies(modules, org.springframework.modulith.core.DependencyType.values()).stream()
+				.map(dependencia -> dependencia.getTargetModule().getIdentifier().toString()))
+				.doesNotContain("carecarapp");
+	}
 }
