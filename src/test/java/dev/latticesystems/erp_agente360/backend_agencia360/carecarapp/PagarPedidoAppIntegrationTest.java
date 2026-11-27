@@ -119,10 +119,9 @@ class PagarPedidoAppIntegrationTest extends AbstractIntegrationTest {
 				insert into refaccion (codigo, descripcion, costo, precio, existencia, minimo, created_at, updated_at)
 				values (?, ?, 1, 850.00, 10, 0, now(), now()) returning id
 				""", Long.class, ("PAG" + unico).toUpperCase(Locale.ROOT), "Tapetes " + unico);
-		como(almacen,
-				json(put(PERSONAL + "/productos/{id}", tapetes),
-						"{\"publicada\":true,\"categoria\":\"ACCESORIO\",\"universal\":true,\"compatibilidad\":[]}"))
-				.andExpect(status().isOk());
+		String publicada = "{\"publicada\":true,\"categoria\":\"ACCESORIO\",\"universal\":true,"
+				+ "\"compatibilidad\":[]}";
+		como(almacen, json(put(PERSONAL + "/productos/{id}", tapetes), publicada)).andExpect(status().isOk());
 	}
 
 	@AfterEach
