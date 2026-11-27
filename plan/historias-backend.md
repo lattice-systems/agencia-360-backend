@@ -759,7 +759,9 @@ Ninguna columna de la ficha se quita ni se renombra (R1).
 
 **Derechos ARCO:** la copia de mis datos agrega `pedido_app_id` a cada pago.
 
-Pruebas: `PedidoAppTest`, `PagoAppTest`, `PagosAppServiceTest`, `LealtadAppServiceTest` y `PagarPedidoAppIntegrationTest`.
+Pruebas: `PedidoAppTest`, `PagoAppTest`, `PagosDePedidoServiceTest`, `TiendaPedidoPagadoTest`, `LealtadAppServiceTest` y `PagarPedidoAppIntegrationTest`.
+
+**Estado.** Implementada. Pendientes: el PO confirma el supuesto de IVA del precio y `plan/cumplimiento-ficha.md` de carecar-mobile anota las columnas nuevas de `pago_app` y `pedido_app`.
 
 ### M15 · Encuestas y NPS — H4 — módulo `encuestas (nuevo)`
 
