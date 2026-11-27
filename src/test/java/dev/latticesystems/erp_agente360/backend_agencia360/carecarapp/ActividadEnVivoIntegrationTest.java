@@ -96,11 +96,11 @@ class ActividadEnVivoIntegrationTest extends AbstractIntegrationTest {
 				rolRepository.findByNombre("SERVICIO").orElseThrow()));
 		tokenDeServicio = jwtService.generateToken(asesor.getId(), asesor.getUsuario(), List.of(Role.SERVICIO));
 		LocalDateTime manana = LocalDate.now(ZONA_AGENCIA).plusDays(1).atTime(18, 0);
+		String cuerpoDeOrden = "{\"vehiculoId\":" + march + ",\"kilometraje\":15200,\"entregaEstimada\":\"" + manana
+				+ ":00\"}";
 		String abierta = mockMvc
 				.perform(post("/api/v1/taller/ordenes").header(HttpHeaders.AUTHORIZATION, "Bearer " + tokenDeServicio)
-						.contentType(MediaType.APPLICATION_JSON)
-						.content("{\"vehiculoId\":" + march + ",\"kilometraje\":15200,\"entregaEstimada\":\"" + manana
-								+ ":00\"}"))
+						.contentType(MediaType.APPLICATION_JSON).content(cuerpoDeOrden))
 				.andExpect(status().isCreated()).andReturn().getResponse().getContentAsString();
 		ordenDeAna = ((Number) JsonPath.read(abierta, "$.id")).longValue();
 	}
