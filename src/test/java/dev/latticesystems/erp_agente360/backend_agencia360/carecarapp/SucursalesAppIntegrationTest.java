@@ -1,5 +1,7 @@
 package dev.latticesystems.erp_agente360.backend_agencia360.carecarapp;
 
+import static org.hamcrest.Matchers.contains;
+import static org.hamcrest.Matchers.nullValue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -24,7 +26,10 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.transaction.annotation.Transactional;
 
-/** V2-M27.02: sucursales con ubicación y horarios, con la migración sembrada y base real. */
+/**
+ * V2-M27.02: sucursales con ubicación y horarios, con la migración sembrada y
+ * base real.
+ */
 @AutoConfigureMockMvc
 @Transactional
 class SucursalesAppIntegrationTest extends AbstractIntegrationTest {
@@ -79,7 +84,8 @@ class SucursalesAppIntegrationTest extends AbstractIntegrationTest {
 		mockMvc.perform(get("/api/v1/app/sucursales").header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
 				.andExpect(status().isOk()).andExpect(jsonPath("$[?(@.nombre == 'Cerrada')]").isEmpty())
 				.andExpect(jsonPath("$[-1:].nombre").value("Anexo Sur"))
-				.andExpect(jsonPath("$[-1:].abiertaAhora").value(false)).andExpect(jsonPath("$[-1:].telefono").isEmpty());
+				.andExpect(jsonPath("$[-1:].abiertaAhora").value(false))
+				.andExpect(jsonPath("$[-1:].telefono", contains(nullValue())));
 	}
 
 	@Test
