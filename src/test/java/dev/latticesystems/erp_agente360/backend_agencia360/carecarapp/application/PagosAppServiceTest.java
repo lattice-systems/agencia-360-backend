@@ -12,10 +12,12 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.domain.EstadoPago;
+import dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.domain.MedioPago;
 import dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.domain.MetodoPago;
 import dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.domain.MotivoFalloPago;
 import dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.domain.PagoApp;
 import dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.domain.TarjetaDePrueba;
+import dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.domain.TipoTarjeta;
 import dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.infrastructure.MetodoPagoRepository;
 import dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.infrastructure.PagoAppRepository;
 import dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.infrastructure.PedidoAppRepository;
@@ -53,8 +55,8 @@ import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.test.util.ReflectionTestUtils;
 
 /**
- * Reglas del cobro simulado (V2-M08.02 y V2-M08.04) con el procesador simulado
- * real y lo demás de mentira.
+ * Reglas del cobro simulado (V2-M08.02, V2-M08.03 y V2-M08.04) con el
+ * procesador simulado real y lo demás de mentira.
  */
 class PagosAppServiceTest {
 
@@ -189,6 +191,40 @@ class PagosAppServiceTest {
 				.isEqualTo(EstadoPago.PAGADO);
 		assertThatThrownBy(() -> servicio.pagar(CLIENTE, ORDEN, "llave-5678", tarjeta("4242424242424242", false)))
 				.isInstanceOf(IllegalArgumentException.class);
+	}
+
+	@Test
+	void unaBilleteraSimuladaPagaSinTresDeSecureYNoSeGuarda() {
+		PagosAppService.Cobro cobro = servicio.pagar(CLIENTE, ORDEN, "llave-billetera",
+				new NuevoPago(null, null, null, null, true, null, MedioPago.GOOGLE_PAY));
+
+		assertThat(cobro.pago().estado()).isEqualTo(EstadoPago.PAGADO);
+		assertThat(cobro.pago().medio()).isEqualTo(MedioPago.GOOGLE_PAY);
+		assertThat(cobro.pago().tipoTarjeta()).isEqualTo(TipoTarjeta.CREDITO);
+		assertThat(cobro.pago().marca()).isNull();
+		assertThat(cobro.pago().ultimos4()).isNull();
+		assertThat(cobro.pago().requiereAutenticacion()).isFalse();
+		assertThat(cobro.pago().metodoPagoId()).isNull();
+		assertThat(cobro.pago().facturable()).isTrue();
+		assertThat(cobro.pago().factura()).isNull();
+		verify(metodos, never()).saveAndFlush(any(MetodoPago.class));
+		assertThat(publicados.getFirst()).isInstanceOf(PagoConfirmado.class);
+	}
+
+	@Test
+	void seMandaExactamenteUnMedioDePago() {
+		assertThatThrownBy(() -> servicio.pagar(CLIENTE, ORDEN, "llave-1234",
+				new NuevoPago("tok_sim_visa", 12, 2028, null, false, null, MedioPago.APPLE_PAY)))
+				.isInstanceOf(IllegalArgumentException.class);
+		assertThatThrownBy(() -> servicio.pagar(CLIENTE, ORDEN, "llave-1234",
+				new NuevoPago(null, null, null, 5L, false, null, MedioPago.APPLE_PAY)))
+				.isInstanceOf(IllegalArgumentException.class);
+		assertThatThrownBy(() -> servicio.pagar(CLIENTE, ORDEN, "llave-1234",
+				new NuevoPago(null, null, null, null, false, null, null))).isInstanceOf(IllegalArgumentException.class);
+		assertThatThrownBy(() -> servicio.pagar(CLIENTE, ORDEN, "llave-1234",
+				new NuevoPago(null, null, null, null, false, null, MedioPago.CAJA)))
+				.isInstanceOf(IllegalArgumentException.class);
+		verify(pagos, never()).saveAndFlush(any(PagoApp.class));
 	}
 
 	@Test

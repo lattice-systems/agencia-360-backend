@@ -10,6 +10,7 @@ import jakarta.persistence.Table;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.Objects;
+import org.hibernate.annotations.SQLRestriction;
 
 /**
  * Factura de la venta de una unidad (ERP-1.3), con folio interno y PDF, sin
@@ -20,9 +21,14 @@ import java.util.Objects;
  * <p>
  * El prospecto, la venta y la unidad se guardan solo como id para no cruzar
  * módulos; las llaves foráneas viven en la base.
+ *
+ * <p>
+ * La tabla también guarda las facturas de los pagos de la app (V2-M08.06), con
+ * otro {@code tipo}; esta entidad solo ve las de la venta de una unidad.
  */
 @Entity
 @Table(name = "factura")
+@SQLRestriction("tipo = 'VENTA_UNIDAD'")
 public class Factura extends Auditable {
 
 	@Id

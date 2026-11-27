@@ -93,6 +93,18 @@ public final class CodigosError {
 	public static final String PEDIDO_NO_PAGABLE = "PEDIDO_NO_PAGABLE";
 	/** V2-M14.04: el pedido ya se pagó en la app y se cancela en mostrador. */
 	public static final String PEDIDO_PAGADO = "PEDIDO_PAGADO";
+	/** V2-M08.06: el pago ya tiene factura. */
+	public static final String YA_FACTURADO = "YA_FACTURADO";
+	/**
+	 * V2-M08.06: el pago no está pagado o se pagó en caja y se factura en la
+	 * agencia.
+	 */
+	public static final String PAGO_NO_FACTURABLE = "PAGO_NO_FACTURABLE";
+	/**
+	 * V2-M08.06: el timbrado (simulado) rechazó los datos fiscales; el error trae
+	 * {@code campos} con qué corregir del perfil.
+	 */
+	public static final String TIMBRADO_RECHAZADO = "TIMBRADO_RECHAZADO";
 
 	private CodigosError() {
 	}

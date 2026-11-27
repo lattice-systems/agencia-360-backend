@@ -12,6 +12,7 @@ import static org.mockito.Mockito.when;
 
 import dev.latticesystems.erp_agente360.backend_agencia360.archivos.AlmacenArchivos.Archivo;
 import dev.latticesystems.erp_agente360.backend_agencia360.archivos.AlmacenArchivos.ArchivoGuardado;
+import java.nio.charset.StandardCharsets;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.ZoneOffset;
@@ -46,6 +47,18 @@ class ArchivosServiceTest {
 
 		assertThat(guardado.tipoContenido()).isEqualTo("video/mp4");
 		verify(deposito).guardar(guardado.clave(), "video/mp4", video);
+	}
+
+	@Test
+	void elXmlSoloSeGuardaEnLaCarpetaDeFacturas() {
+		byte[] xml = "<cfdi:Comprobante/>".getBytes(StandardCharsets.UTF_8);
+
+		ArchivoGuardado guardado = service.guardar("facturas", "application/xml", xml);
+
+		assertThat(guardado.clave()).startsWith("facturas/");
+		verify(deposito).guardar(guardado.clave(), "application/xml", xml);
+		assertThatThrownBy(() -> service.guardar("evidencias", "application/xml", xml))
+				.isInstanceOf(IllegalArgumentException.class);
 	}
 
 	@Test

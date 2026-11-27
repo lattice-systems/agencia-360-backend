@@ -7,10 +7,16 @@ import dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.domain.Pag
 import java.math.BigDecimal;
 import java.time.Duration;
 import java.time.Instant;
+import java.time.LocalDateTime;
 import java.time.YearMonth;
+import java.util.List;
+import java.util.UUID;
 import org.junit.jupiter.api.Test;
 
-/** Estados de un pago y las tarjetas de prueba (V2-M08.02 y V2-M08.04). */
+/**
+ * Estados de un pago, las tarjetas de prueba, las billeteras y la factura
+ * (V2-M08.02, V2-M08.03, V2-M08.04 y V2-M08.06).
+ */
 class PagoAppTest {
 
 	private static final Instant AHORA = Instant.parse("2026-11-26T18:00:00Z");
@@ -131,5 +137,57 @@ class PagoAppTest {
 				.isInstanceOf(IllegalArgumentException.class);
 		assertThatThrownBy(() -> new Cobrable(41L, null, 3L, BigDecimal.TEN, null))
 				.isInstanceOf(NullPointerException.class);
+	}
+
+	@Test
+	void unaBilleteraSimuladaEsCreditoSinMarcaNiVencimientoYNoSeGuarda() {
+		PagoApp pago = PagoApp.conBilletera(ORDEN, "SIMULADO", "sim_pi_3", "llave-billetera", MedioPago.APPLE_PAY,
+				TarjetaDePrueba.deBilletera(MedioPago.APPLE_PAY), 10L, AHORA);
+
+		assertThat(pago.getMedio()).isEqualTo(MedioPago.APPLE_PAY);
+		assertThat(pago.getTipoTarjeta()).isEqualTo(TipoTarjeta.CREDITO);
+		assertThat(pago.getMarca()).isNull();
+		assertThat(pago.getUltimos4()).isNull();
+		assertThat(pago.getVence()).isNull();
+		assertThat(pago.isGuardarTarjeta()).isFalse();
+		assertThat(pago.getTokenProcesador()).isEqualTo("tok_sim_apple_pay");
+		assertThat(pago.getPerfilFiscalId()).isEqualTo(10L);
+		assertThat(TarjetaDePrueba.deBilletera(MedioPago.GOOGLE_PAY).token()).isEqualTo("tok_sim_google_pay");
+		assertThat(TarjetaDePrueba.deToken("tok_sim_apple_pay")).isEmpty();
+		assertThatThrownBy(() -> TarjetaDePrueba.deBilletera(MedioPago.TARJETA))
+				.isInstanceOf(IllegalArgumentException.class);
+		assertThatThrownBy(() -> PagoApp.conBilletera(ORDEN, "SIMULADO", "sim_pi_4", "llave-billetera",
+				MedioPago.TARJETA, TarjetaDePrueba.deBilletera(MedioPago.APPLE_PAY), null, AHORA))
+				.isInstanceOf(IllegalArgumentException.class);
+	}
+
+	@Test
+	void soloSeFacturaUnPagoPagadoQueNoEsDeCaja() {
+		PagoApp pago = conTarjeta("tok_sim_visa", false);
+		assertThat(pago.facturable()).isFalse();
+
+		pago.aprobar(AHORA);
+		assertThat(pago.facturable()).isTrue();
+		pago.elegirPerfilFiscal(10L, AHORA);
+		assertThat(pago.getPerfilFiscalId()).isEqualTo(10L);
+
+		Comprobante comprobante = new Comprobante("A", 124, LocalDateTime.of(2026, 11, 26, 12, 0),
+				new Comprobante.Emisor("EKU9003173C9", "ESCUELA KEMPER URGATE", "601", "42501"),
+				new Comprobante.Receptor("GODE561231GR8", "DOLORES GÓMEZ", "37000", "612", "G03"),
+				List.of(Comprobante.Concepto.manoDeObra("Afinación", 1, new BigDecimal("1650.00"))),
+				Comprobante.FORMA_CREDITO);
+		UUID uuid = UUID.randomUUID();
+		FacturaApp factura = FacturaApp.timbrada(pago, 10L, comprobante, uuid, AHORA, "facturas/xml", "facturas/pdf");
+		assertThat(pago.getFactura()).isSameAs(factura);
+		assertThat(pago.facturable()).isFalse();
+		assertThat(factura.getTipo()).isEqualTo(ObjetoFacturado.SERVICIO);
+		assertThat(factura.getFolio()).isEqualTo("A-000124");
+		assertThat(factura.getTotal()).isEqualByComparingTo("1650.00");
+		assertThat(factura.getSubtotal().add(factura.getIva())).isEqualByComparingTo("1650.00");
+		assertThat(factura.getUuidFiscal()).isEqualTo(uuid);
+		assertThat(factura.getReceptorRfc()).isEqualTo("GODE561231GR8");
+
+		PagoApp enCaja = PagoApp.enCaja(ORDEN, "caja_1", "CAJA-1", 7L, AHORA);
+		assertThat(enCaja.facturable()).isFalse();
 	}
 }
