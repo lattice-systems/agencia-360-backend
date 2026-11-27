@@ -62,7 +62,7 @@ La agencia automotriz no tiene sus sistemas centralizados. El proyecto los centr
 | Base de datos | PostgreSQL |
 | Seguridad | Spring Security + JWT (`io.jsonwebtoken`/jjwt), roles vía `ROLE_*`; el principal de cada petición es `UsuarioAutenticado(id, usuario, roles)` |
 | Contrato de API | springdoc-openapi (Swagger UI en `/swagger-ui.html`) — de aquí se generan los clientes TypeScript (React) y Dart (Flutter) con openapi-generator |
-| Notificaciones push | Firebase Cloud Messaging (consumido desde el módulo que corresponda, pendiente de definir) |
+| Notificaciones push | Firebase Cloud Messaging HTTP v1, desde el módulo `notificaciones` (V2-M06.07): escucha los avisos de `carecarapp`, los guarda en la bandeja y los manda a los dispositivos registrados con `PUT /api/v1/app/dispositivos/{instalacionId}` |
 | Nube objetivo | Microsoft Azure (Container Apps, Database for PostgreSQL, Blob Storage, Key Vault — ver sección 5 del PDF; servicios aún no confirmados) |
 | Repositorio y CI/CD | GitHub + GitHub Actions: build/pruebas, lint (Spotless + Checkstyle), CodeQL + Dependency Review y publicación a GitHub Packages (ver `docs/workflows-ci-cd.md`) |
 | Pruebas | JUnit 5, Mockito, Testcontainers, Spring Modulith tests |
@@ -335,6 +335,7 @@ La API lee su configuración de variables de entorno. Si no defines ninguna, usa
 | `CITAS_QR_SECRETO` | Valor de solo-desarrollo | Llave que firma el QR del comprobante de la cita (V2-M02.11); al menos 32 caracteres |
 | `WALLET_APPLE_PASS_TYPE_ID`, `WALLET_APPLE_TEAM_ID`, `WALLET_APPLE_CERT_P12_BASE64`, `WALLET_APPLE_CERT_PASSWORD`, `WALLET_APPLE_WWDR_PEM_BASE64` | Vacío | Pase de Apple Wallet de la cita (V2-M25.03): Pass Type ID, Team ID, certificado `.p12` en base64 con su contraseña y certificado WWDR en PEM base64. Opcionales: sin ellas el arranque sigue y `GET /citas/{id}/pase?plataforma=apple` responde 503 `WALLET_NO_CONFIGURADO` |
 | `WALLET_GOOGLE_ISSUER_ID`, `WALLET_GOOGLE_SERVICE_ACCOUNT_JSON_BASE64` | Vacío | Pase de Google Wallet: ID de emisor y JSON de la cuenta de servicio en base64. Opcionales, igual que las de Apple |
+| `PUSH_FCM_PROJECT_ID`, `PUSH_FCM_SERVICE_ACCOUNT_JSON_BASE64` | Vacío | Push por FCM HTTP v1 (V2-M06.07): ID del proyecto de Firebase y JSON de su cuenta de servicio en base64. Opcionales: sin ellas el aviso solo queda en la bandeja |
 | `RECOLECCION_CENTRO_LAT`, `RECOLECCION_CENTRO_LNG`, `RECOLECCION_RADIO_KM` | `21.1250`, `-101.6860`, `15` | Zona de cobertura de la recolección a domicilio (V2-M17): centro (León, Gto.) y radio en km. Una dirección fuera de ella responde 422 `FUERA_DE_COBERTURA` |
 | `RECOLECCION_TARIFA_BASE`, `RECOLECCION_TARIFA_POR_KM` | `80`, `8` | Costo de cada traslado en pesos: base más tarifa por km en línea recta al centro |
 | `RECOLECCION_VENTANA_INICIO`, `RECOLECCION_VENTANA_FIN`, `ENTREGA_VENTANA_INICIO`, `ENTREGA_VENTANA_FIN` | `07:00`, `09:00`, `17:00`, `19:00` | Franjas del día para recoger y para entregar (hora local de la agencia) |
