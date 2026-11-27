@@ -15,6 +15,7 @@ import dev.latticesystems.erp_agente360.backend_agencia360.shared.exception.Soli
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -47,6 +48,12 @@ public class CambioDeContactoService {
 	private final EnvioCorreos envioCorreos;
 	private final Clock reloj;
 
+	/**
+	 * Hay dos constructores -el otro recibe el reloj, para las pruebas-, así que
+	 * Spring necesita que se le diga cuál usar: sin esto busca uno sin argumentos y
+	 * no arranca el contexto. Igual que {@code AccesoAppService}.
+	 */
+	@Autowired
 	public CambioDeContactoService(DirectorioClientes directorioClientes, CuentaAppRepository cuentaRepository,
 			VerificacionContactoRepository verificacionRepository, PasswordEncoder passwordEncoder,
 			EnvioCorreos envioCorreos) {
