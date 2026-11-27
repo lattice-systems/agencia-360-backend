@@ -101,6 +101,14 @@ public class GlobalExceptionHandler {
 				ex.getMessage(), request.getRequestURI(), ex.getCodigo()));
 	}
 
+	@ExceptionHandler(CamposNoProcesablesException.class)
+	public ResponseEntity<ApiError> handleCamposNoProcesables(CamposNoProcesablesException ex,
+			HttpServletRequest request) {
+		return ResponseEntity.status(HttpStatus.UNPROCESSABLE_ENTITY)
+				.body(ApiError.conCampos(HttpStatus.UNPROCESSABLE_ENTITY.value(), "Unprocessable Entity",
+						ex.getMessage(), request.getRequestURI(), ex.getCodigo(), ex.getCampos()));
+	}
+
 	@ExceptionHandler(NoProcesableException.class)
 	public ResponseEntity<ApiError> handleNoProcesable(NoProcesableException ex, HttpServletRequest request) {
 		return ResponseEntity.status(HttpStatus.UNPROCESSABLE_ENTITY)
