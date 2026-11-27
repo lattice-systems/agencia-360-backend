@@ -92,8 +92,8 @@ class PedidoAppTest {
 		assertThat(pedido.getPagadoEn()).isEqualTo(AHORA);
 		assertThat(pedido.pagable(AHORA)).isFalse();
 		assertThat(pedido.vencido(AHORA.plus(Duration.ofDays(30)))).isFalse();
-		assertThatThrownBy(() -> pedido.marcarPagado(AHORA)).isInstanceOf(ConflictoException.class)
-				.extracting("codigo").isEqualTo(CodigosError.PEDIDO_NO_PAGABLE);
+		assertThatThrownBy(() -> pedido.marcarPagado(AHORA)).isInstanceOf(ConflictoException.class).extracting("codigo")
+				.isEqualTo(CodigosError.PEDIDO_NO_PAGABLE);
 		assertThatThrownBy(() -> pedido.cancelar(MotivoCancelacionPedido.CLIENTE, AHORA))
 				.isInstanceOf(ConflictoException.class).extracting("codigo").isEqualTo(CodigosError.PEDIDO_PAGADO);
 		assertThatThrownBy(() -> pedido.cancelar(MotivoCancelacionPedido.VENCIDO, AHORA))
