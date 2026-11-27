@@ -124,7 +124,11 @@ Qué se puede probar:
 
 ## Lo que no incluye todavía
 
-Ventas, pagos, facturas, clientes y órdenes de servicio: llegan en S2 a S4. Las citas ya existen, pero el script no las crea: solo el cliente puede agendarlas con su token, y su contraseña temporal solo está en Mailpit. El criterio de TEC-3 los pide, pero se agregan al script cuando existan sus endpoints.
+- **Laura Méndez** se queda sin órdenes, pagos ni puntos: su primer ingreso, con la contraseña temporal de Mailpit, es parte de la demostración. Sus citas y su valuación se cargan solo si ya entra con `LAURA_CONTRASENA`.
+- **Asistencia en el camino y traslados** (M11 y M17): los pide el cliente desde la app con su ubicación y el personal los avanza en vivo, así que se demuestran en el momento. El script deja una dirección guardada para pedir la recolección.
+- **Asistente** (M24): necesita la llave de IA por variable de entorno.
+- **Derechos ARCO y cancelación de cuenta** (M22): se piden desde la app al demostrarlos.
+- **Parámetros de toma a cuenta**: sin API todavía (ver «Valuación formal»).
 
 ## Clientes de la app con vehículos
 
@@ -142,4 +146,31 @@ El script también da de alta 5 clientes más de la app CareCar (además de Laur
 
 `scripts/generar-manuales.py` genera un PDF de 12 páginas por cada modelo y año (portada con la foto del coche, índice, ficha técnica de referencia, identificación con VIN y placas, tablero, mantenimiento, fluidos y llantas, seguridad, conducción eficiente, solución de problemas, garantía y contacto). Arma un HTML y lo imprime con Google Chrome headless (`/usr/bin/google-chrome`, variable `CHROME`), usa las fotos de `carecar-mobile/assets/autos/`, buscando ese repo clonado junto a este (se cambia con la variable `FOTOS_AUTOS` o con `--fotos`) y deja los PDF en `scripts/manuales-generados/` (ignorada por git) junto con `indice.txt`.
 
-Cubre la unión de los vehículos de `cargar-datos-de-ejemplo.sh` y los 22 modelos del catálogo en 2026 (42 manuales). `cargar-datos-de-ejemplo.sh` los genera si faltan y los sube como Gerente de marketing; la API reemplaza el manual de la misma marca, modelo y año, así que se puede repetir. Los datos técnicos son valores de referencia, y el contacto (+52 000 000 0000, contacto@agencia.example.com) es de ejemplo. Para regenerar: `python3 scripts/generar-manuales.py --forzar`.
+Cubre la unión de los vehículos de `cargar-datos-de-ejemplo.sh` y los 22 modelos del catálogo en 2026 (42 manuales). `cargar-datos-de-ejemplo.sh` los genera si faltan y los sube como Gerente de marketing; la API reemplaza el manual de la misma marca, modelo y año, así que se puede repetir. Busca Python 3 como `python3`, `python` o `py -3` (en Windows, `python3` puede ser solo el atajo a la Microsoft Store) y, en Git Bash, Chrome donde lo instala Google si no se pasa `CHROME`. Si no hay Python 3 o Chrome, dice que omitió los manuales y la carga sigue con lo demás. Los datos técnicos son valores de referencia, y el contacto (+52 000 000 0000, contacto@agencia.example.com) es de ejemplo. Para regenerar: `python3 scripts/generar-manuales.py --forzar`.
+
+## Módulos de la app v2 (V2-T05.10)
+
+Lo carga el final del script: el personal por sus rutas (`servicio1` en el taller, garantías y campañas; `inventario1` en la tienda) y cada cliente por la API de la app con `CLIENTES_CONTRASENA`, como desde el celular. Así pasa por las mismas reglas: estados del taller, idempotencia del pago, timbrado simulado, puntos y existencias. Si un cliente ya no entra con esa contraseña, sus datos se omiten y el script lo dice. Al repetirlo no duplica nada.
+
+| Módulo | Qué deja | Con quién se prueba |
+|---|---|---|
+| Garantías y campañas (M10) | Campaña `RC-26-101` «Bolsa de aire del conductor» (ALTA) para March 2023 a 2026 y `RC-26-102` «Sensor de presión de llantas» (MEDIA) para Kicks 2021 y 2022. Garantía de fábrica y batería de la Frontier GTO-501-S de Diego (la batería vence en 35 días: aviso de garantía por vencer) y tren motriz del Kicks GTO-309-D de Carlos | Diego (March GTO-218-T y Frontier), Laura (su March 2026 recibe la campaña), Ana y Sofía (sus Kicks), Carlos |
+| Tienda (M14) | Publicadas REF-005 plumas limpiaparabrisas (accesorio, universal), REF-006 aceite 5W-30 (cuidado, universal), REF-001 filtro de aceite y REF-007 batería (March, Versa, Kicks y Sentra 2018 a 2026) y REF-008 amortiguador (X-Trail 2019 a 2026) | Cualquier cliente; Sofía tiene un apartado para mostrador (plumas y 4 litros de aceite) que vence a las 48 horas |
+| Taller en vivo (M04) | Kicks NMR-48-19 de Sofía en el taller: diagnóstico, inspección con frenos traseros en rojo, llantas en amarillo y dos puntos en verde, esperando aprobación de un trabajo adicional («Cambio de balatas traseras», $1,540). March GTO-218-T de Diego listo para entrega con afinación mayor ($3,386) | Sofía aprueba o rechaza el adicional con su firma; Diego ve que su auto está listo |
+| Pagos y facturas (M08) | Carlos pagó la orden de su Sentra GTO-482-B ($3,754) con la Visa de prueba 4242, guardó la tarjeta y tenía datos fiscales: la factura simulada se timbra sola (serie A, PDF y XML). Ana pagó su Kicks GTO-157-F ($1,540) con Google Pay simulado y sin factura; sus datos fiscales son de persona moral con «SA DE CV» en la razón social. La orden de Diego queda por pagar | Carlos descarga el PDF y el XML; Ana toca «Facturar» y ve el rechazo del timbrado (`TIMBRADO_RECHAZADO`, razón social); Diego paga desde la app con cualquier tarjeta de prueba o con la billetera |
+| Lealtad (M12) | Carlos ganó 375 puntos por su servicio, canjeó «Lavado exprés» (300 puntos, con su código) y refirió a Mario Pérez. Ana ganó 154 puntos | Carlos: saldo, movimientos, canje y referido |
+| Bitácora (M18) | Versa GTO-127-P de Sofía con 4 gastos: 2 cargas de gasolina (15,600 y 16,050 km), casetas y lavado | Sofía: rendimiento y gasto del mes |
+| Recolección (M17) | Dirección «Casa» de Sofía (Blvd. Campestre 1520, León) | Sofía pide la recolección de un auto |
+| Estreno (M16) | Prueba de manejo de la X-Trail para dentro de 3 días en la mañana; llega al CRM como prospecto con origen de la app | Sofía la ve en sus solicitudes; el Gerente de marketing, en el CRM |
+
+Datos fiscales de prueba (RFC con dígito verificador válido, no son de personas reales):
+
+| Cliente | RFC | Razón social | Régimen y uso |
+|---|---|---|---|
+| Carlos Ramírez | `RACC880704H33` | CARLOS RAMIREZ | 612 y G03 |
+| Ana Torres | `TAS150310QW3` | TORRES Y ASOCIADOS SA DE CV | 601 y G03 |
+
+Notas:
+- La factura de Carlos y sus puntos se generan en segundo plano al confirmarse el pago; el script espera hasta 10 segundos a que lleguen los puntos para el canje. Si no llegaron, lo dice y el canje se hace al volver a correrlo.
+- Las órdenes de Carlos y Ana quedan entregadas: pasan a su historial con su ticket.
+- Para empezar de cero: `./scripts/limpiar-datos.sh`.
