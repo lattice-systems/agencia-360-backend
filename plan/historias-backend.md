@@ -1373,6 +1373,16 @@ Detalle: [`carecar-mobile/plan/modulos/M27-ayuda-y-sucursales.md`](https://githu
 | V2-M27.02 | Como cliente quiero ver sucursales en un mapa con horarios | "Abierto ahora" calculado · cómo llegar abre la app de mapas | Haziel |
 | V2-M27.04 | Como cliente quiero reportar un problema de la app | Formulario con versión, sistema y equipo (sin datos personales extra) | Haziel |
 
+#### Diseño de V2-M27.02 (sucursales y horarios) — en curso
+
+- **Migración (`V59`; `V58` la tomó la facturación de pagos):** `sucursal` (id, nombre, direccion, lat numeric(9,6), lng numeric(9,6), telefono, correo, horarios jsonb, activa boolean, orden int, created_at, updated_at). Los nombres de la ficha (sección 23) se respetan tal cual; `activa`, `orden` y las marcas de tiempo son campos añadidos (R1 permite agregar). Check de rango en `lat` (-90 a 90) y `lng` (-180 a 180). Siembra una sucursal de ejemplo en León, Gto. (21.1250, -101.6860) para que la app y los datos de ejemplo tengan algo que mostrar; la agencia la reemplaza por la real.
+- **`horarios`:** lista de `{departamento, dias, abre, cierra}`. `departamento` es `VENTAS`, `SERVICIO` o `REFACCIONES`; `dias` son números ISO 1 (lunes) a 7 (domingo); `abre` y `cierra` son `HH:mm` en la zona de la agencia (`America/Mexico_City`) y `abre` < `cierra` (no se admiten horarios que crucen la medianoche). Un departamento puede aparecer en varias filas (p. ej. lunes a viernes y sábado). Un departamento sin fila está cerrado.
+- **«Abierto ahora» lo calcula el servidor** con el reloj y la zona de la agencia, no el teléfono: la persona puede estar de viaje con otra zona horaria y la agencia sigue cerrando a la misma hora. Cada horario trae `abiertoAhora` y la sucursal trae `abiertaAhora` (alguno de sus departamentos abierto). La app refresca al abrir la pantalla y con el reintento.
+- **Endpoint:** `GET /sucursales` (rol `CLIENTE_CARECAR`), solo las `activa`, por `orden` y `id`. Devuelve `[]` si no hay ninguna. Errores: 401 y 403 (cuenta desactivada) como el resto de la app; no hay 404 ni 400 porque no recibe parámetros.
+- **Módulos:** todo en `carecarapp` (`domain/Sucursal`, `domain/HorarioSucursal`, `application/SucursalesAppService`, `infrastructure/SucursalRepository`, `web/SucursalesAppController`); sin eventos ni cruce con otros módulos.
+- **Fuera de alcance:** alta y edición de sucursales desde el ERP o el CRM (congelados, R9): por ahora se editan por migración. Descubierto: una historia de administración llegará cuando se descongele el ERP.
+- **Pruebas:** `HorarioSucursalTest` (días, límites de hora, validaciones), `SucursalesAppServiceTest` (reloj fijo: abierto, cerrado y domingo) y `SucursalesAppIntegrationTest` (migración sembrada, solo activas, orden, 401 sin token).
+
 ### T05 · Contrato API v2 y backend de la app — H1 — módulo `varios`
 
 Detalle: [`carecar-mobile/plan/modulos/T05-contrato-api-v2.md`](https://github.com/lattice-systems/carecar-mobile/blob/main/plan/modulos/T05-contrato-api-v2.md)
