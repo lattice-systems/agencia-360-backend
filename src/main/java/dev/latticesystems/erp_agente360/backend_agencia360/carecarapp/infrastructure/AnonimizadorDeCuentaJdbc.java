@@ -96,6 +96,11 @@ public class AnonimizadorDeCuentaJdbc implements AnonimizadorDeCuenta {
 		jdbc.update("update pago_app set token_procesador = null where cliente_id = ?", clienteId);
 		jdbc.update("delete from metodo_pago where cliente_id = ?", clienteId);
 
+		// Avisos y tokens de push (V2-M06): son datos del cliente y su teléfono ya no
+		// debe recibir nada de esta cuenta.
+		jdbc.update("delete from dispositivo_push where cuenta_app_id in " + DE_SU_CUENTA, clienteId);
+		jdbc.update("delete from notificacion where cliente_id = ?", clienteId);
+
 		// Ya no se entra ni se recupera la cuenta.
 		jdbc.update("delete from sesion_app where cuenta_id in " + DE_SU_CUENTA, clienteId);
 		jdbc.update("delete from token_recuperacion where cuenta_app_id in " + DE_SU_CUENTA, clienteId);
