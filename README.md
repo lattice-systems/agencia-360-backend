@@ -361,7 +361,9 @@ La base empieza vacía. Para probar el ERP y el CRM en local hay un juego de dat
 - 8 refacciones con sus recepciones;
 - 12 prospectos repartidos en las 7 etapas;
 - una clienta de la app CareCar con 2 vehículos, sus servicios en el expediente y el manual de uno de ellos,
-- una solicitud de valuación formal de esa clienta, si hay parámetros de toma a cuenta para su auto.
+- una solicitud de valuación formal de esa clienta, si hay parámetros de toma a cuenta para su auto;
+- 5 clientes más de la app con 3 a 5 vehículos cada uno y contraseña `CareCar2026!`;
+- datos de los módulos de la app v2 (V2-T05.10): órdenes en el taller en vivo, garantías y campañas, productos de la tienda con un apartado, pagos con tarjeta y con billetera con su factura simulada, puntos con un canje y un referido, gastos de la bitácora, una dirección y una prueba de manejo.
 
 Qué contiene y qué demuestra cada dato está en [`docs/datos-de-ejemplo.md`](docs/datos-de-ejemplo.md).
 
