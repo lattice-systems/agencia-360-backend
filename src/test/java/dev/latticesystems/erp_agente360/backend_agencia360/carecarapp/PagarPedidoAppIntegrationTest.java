@@ -9,6 +9,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.jayway.jsonpath.JsonPath;
 import dev.latticesystems.erp_agente360.backend_agencia360.acceso.domain.Usuario;
 import dev.latticesystems.erp_agente360.backend_agencia360.acceso.infrastructure.RolRepository;
@@ -16,12 +17,14 @@ import dev.latticesystems.erp_agente360.backend_agencia360.acceso.infrastructure
 import dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.application.AvisoAlCliente;
 import dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.application.CuentasAppService;
 import dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.application.EnvioCorreos;
+import dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.application.ExportadorDeDatos;
 import dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.application.VencimientoDeApartados;
 import dev.latticesystems.erp_agente360.backend_agencia360.clientes.application.NuevoCliente;
 import dev.latticesystems.erp_agente360.backend_agencia360.clientes.application.RegistroClientesService;
 import dev.latticesystems.erp_agente360.backend_agencia360.shared.AbstractIntegrationTest;
 import dev.latticesystems.erp_agente360.backend_agencia360.shared.security.JwtService;
 import dev.latticesystems.erp_agente360.backend_agencia360.shared.security.Role;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.ArrayList;
@@ -86,6 +89,12 @@ class PagarPedidoAppIntegrationTest extends AbstractIntegrationTest {
 
 	@Autowired
 	private ApplicationEvents eventos;
+
+	@Autowired
+	private ExportadorDeDatos exportador;
+
+	@Autowired
+	private ObjectMapper mapeador;
 
 	@MockitoBean
 	private EnvioCorreos envioCorreos;
@@ -297,6 +306,17 @@ class PagarPedidoAppIntegrationTest extends AbstractIntegrationTest {
 					.isInstanceOf(DataIntegrityViolationException.class).hasMessageContaining("ck_pago_app");
 		}
 		jdbc.update(insertar.formatted("null", pedido), ana.id(), "sim_pi_p" + unico, "p-" + unico);
+	}
+
+	@Test
+	void laCopiaDeMisDatosDiceQuePedidoPague() throws Exception {
+		long pedido = apartado(ana, 1);
+		pagar(ana, pedido, "arco-" + unico, tarjeta("tok_sim_visa")).andExpect(status().isCreated());
+
+		var copia = mapeador.readTree(exportador.exportar(ana.id(), Instant.now()));
+
+		assertThat(copia.at("/pagos/0/pedido_app_id").asLong()).isEqualTo(pedido);
+		assertThat(copia.at("/pagos/0/orden_servicio_id").isNull()).isTrue();
 	}
 
 	private Cliente cliente(String nombre) {

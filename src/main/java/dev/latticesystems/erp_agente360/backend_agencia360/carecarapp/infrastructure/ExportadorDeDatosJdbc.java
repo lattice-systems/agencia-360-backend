@@ -60,8 +60,8 @@ public class ExportadorDeDatosJdbc implements ExportadorDeDatos {
 					"""), Seccion.lista("direcciones", "select * from direccion_cliente where cliente_id = :c"),
 			Seccion.lista("perfilesFiscales", "select * from perfil_fiscal where cliente_id = :c"),
 			Seccion.lista("pagos", """
-					select id, orden_servicio_id, monto, moneda, procesador, intencion_id, metodo, marca, ultimos4,
-					  estado, motivo_fallo, pagado_en, creado_en
+					select id, orden_servicio_id, pedido_app_id, monto, moneda, procesador, intencion_id, metodo, marca,
+					  ultimos4, estado, motivo_fallo, pagado_en, creado_en
 					from pago_app where cliente_id = :c
 					"""), Seccion.lista("tarjetasGuardadas", """
 					select id, marca, ultimos4, mes_vence, anio_vence, tipo, predeterminado, creado_en
