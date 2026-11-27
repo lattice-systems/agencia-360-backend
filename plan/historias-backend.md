@@ -34,7 +34,7 @@ Detalle: [`carecar-mobile/plan/modulos/M01-acceso-y-perfil.md`](https://github.c
 
 **Solo la mitad del correo.** El criterio pide confirmar con un código **enviado al dato nuevo**, y para el teléfono eso exige un SMS: en el backend no hay nada de eso —ni proveedor ni configuración, solo SMTP—. Mandar el código del teléfono al correo verificaría que el dueño de la cuenta autorizó el cambio, no que ese teléfono sea suyo, que es justo para lo que sirve la verificación. **La mitad del teléfono queda bloqueada hasta que el equipo decida el SMS**, y la tabla se diseña para los dos tipos para que entonces no haya que rehacer nada.
 
-**Migración** `V55__crear_verificacion_contacto.sql`, con los campos que nombra la ficha:
+**Migración** `V57__crear_verificacion_contacto.sql`, con los campos que nombra la ficha. Nació como V55 y hubo que renumerarla: mientras esta historia se construía entraron a `main` otra V55 (pagos) y una V56, y Flyway no arranca con dos migraciones del mismo número. **El número se toma al final, y «al final» es después de rebasar justo antes de integrar.**
 
 ```sql
 create table verificacion_contacto (
