@@ -120,10 +120,11 @@ class PasesAppleIntegrationTest extends AbstractIntegrationTest {
 		LocalDate fecha = dia;
 		Long franja = franjaHorarioRepository.findByActivaTrueOrderByDiaSemanaAscHoraInicioAsc().stream()
 				.filter(candidata -> candidata.esDe(fecha)).map(FranjaHorario::getId).findFirst().orElseThrow();
-		MvcResult creada = mockMvc.perform(post("/api/v1/app/citas")
-				.header(HttpHeaders.AUTHORIZATION, "Bearer " + tokenDeAna).contentType(MediaType.APPLICATION_JSON)
-				.content(
-						"{\"vehiculoId\": %d, \"franjaId\": %d, \"fecha\": \"%s\"}".formatted(vehiculo, franja, fecha)))
+		String cuerpoDeCita = "{\"vehiculoId\": %d, \"franjaId\": %d, \"fecha\": \"%s\"}".formatted(vehiculo, franja,
+				fecha);
+		MvcResult creada = mockMvc
+				.perform(post("/api/v1/app/citas").header(HttpHeaders.AUTHORIZATION, "Bearer " + tokenDeAna)
+						.contentType(MediaType.APPLICATION_JSON).content(cuerpoDeCita))
 				.andExpect(status().isCreated()).andReturn();
 		citaId = JsonPath.<Number>read(creada.getResponse().getContentAsString(), "$.id").longValue();
 		serial = "cita-" + citaId;
