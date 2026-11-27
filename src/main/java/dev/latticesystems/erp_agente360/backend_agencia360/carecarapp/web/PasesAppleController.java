@@ -97,10 +97,10 @@ public class PasesAppleController {
 			@RequestHeader(value = HttpHeaders.IF_MODIFIED_SINCE, required = false) String modificadoDesde) {
 		RespuestaPase respuesta = servicio.pase(passTypeId, serial, token(autorizacion), fecha(modificadoDesde));
 		if (respuesta instanceof RespuestaPase.Entrega entrega) {
+			String ultimaModificacion = DateTimeFormatter.RFC_1123_DATE_TIME
+					.format(entrega.modificado().atZone(ZoneOffset.UTC));
 			return ResponseEntity.ok().contentType(MediaType.parseMediaType(TIPO_PKPASS))
-					.header(HttpHeaders.LAST_MODIFIED,
-							DateTimeFormatter.RFC_1123_DATE_TIME.format(entrega.modificado().atZone(ZoneOffset.UTC)))
-					.body(entrega.pkpass());
+					.header(HttpHeaders.LAST_MODIFIED, ultimaModificacion).body(entrega.pkpass());
 		}
 		return switch ((RespuestaPase.Sin) respuesta) {
 			case NO_AUTORIZADO -> ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
