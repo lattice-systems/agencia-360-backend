@@ -185,10 +185,14 @@ public class LealtadAppService {
 	/**
 	 * Puntos por un servicio pagado, en la app o en caja (V2-M08.02 y V2-M12.02):
 	 * lo que pase primero entre pagar y entregar suma, y la orden suma una sola
-	 * vez.
+	 * vez. Un pedido de la tienda (V2-M14.04) no suma, porque los puntos son por
+	 * servicio.
 	 */
 	@ApplicationModuleListener
 	void alConfirmarPago(PagoConfirmado pago) {
+		if (pago.ordenId() == null) {
+			return;
+		}
 		sumarPorServicio(pago.clienteId(), pago.ordenId());
 	}
 
