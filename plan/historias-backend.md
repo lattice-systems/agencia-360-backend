@@ -671,7 +671,7 @@ Detalle: [`carecar-mobile/plan/modulos/M14-tienda.md`](https://github.com/lattic
 
 #### Diseño de M14 (V2-M14.01, V2-M14.02, V2-M14.03 y V2-M14.05)
 
-V2-M14.04 (pagar en la app) queda fuera: reusa el cobro de V2-M08.02, que no está integrado. Mientras tanto el pedido se paga en caja.
+V2-M14.04 (pagar en la app) tiene su diseño propio más abajo y reusa el cobro de V2-M08.02.
 
 **Reparto entre módulos.** El catálogo publicado y las existencias viven en `inventario`, que ya es dueño de `refaccion` y de `movimiento_inventario`. Los pedidos viven en `carecarapp`, junto con las citas. `carecarapp` usa dos interfaces públicas de `inventario` (`CatalogoDeTienda` y `ApartadoDeRefacciones`). Para que el taller vea el pedido en la orden, `servicio` declara la interfaz `PiezasPorInstalar` y `carecarapp` la implementa, así `servicio` no depende de la app.
 
@@ -717,9 +717,51 @@ V2-M14.04 (pagar en la app) queda fuera: reusa el cobro de V2-M08.02, que no est
 
 - **PO:** confirmar la vigencia de 48 horas, los límites contra el acaparamiento y que `refaccion.precio` incluye IVA.
 - **Push (V2-M06.07):** `pedido.estado` ya es un `AvisoAlCliente`.
-- **Pago en la app (V2-M14.04):** espera a V2-M08.02.
+- **Pago en la app (V2-M14.04):** implementado, ver su diseño abajo.
 - **Privacidad:** la descarga ARCO todavía no incluye los pedidos.
 - **Taller:** instalar la pieza no agrega un renglón a la orden. Si el taller lo agrega con `POST .../renglones`, hoy no se descuenta dos veces porque ese renglón no mueve inventario.
+
+#### Diseño técnico de V2-M14.04 (Cristian)
+
+Reusa todo V2-M08.02: el `ProcesadorSimulado` y sus tarjetas de prueba, la `Idempotency-Key`, el 3-D Secure, las tarjetas guardadas, el perfil fiscal y el aviso `pago.confirmado`. El cobro sigue en `PagosAppService`, que ahora cobra una orden o un pedido.
+
+**Reglas.**
+
+- Se paga el total del pedido (la suma de los precios de sus renglones), con el mismo supuesto de IVA que el pedido, pendiente del PO.
+- Un pedido se puede pagar si es del cliente (si no, 404), está `APARTADO` o `LISTO`, no ha vencido, su total es mayor que cero y no tiene un pago `PAGADO`. Si no, 409 `PEDIDO_NO_PAGABLE` (código nuevo). Un intento `PENDIENTE` (3-D Secure) bloquea otro con 409 `PAGO_EN_CURSO`, igual que en la orden.
+- Un pedido pagado ya no vence: el vencimiento salta los que tienen `pagado_en`. Mientras hay un intento `PENDIENTE` vigente (15 minutos como máximo) tampoco vence.
+- Un pedido pagado no se cancela desde la app: 409 `PEDIDO_PAGADO` (código nuevo). Se cancela en mostrador. Cambiar la instalación (cita o mostrador) sí se puede.
+- Pagar un pedido no suma puntos de lealtad, porque los puntos son por servicio: el listener de `PagoConfirmado` en `LealtadAppService` ignora los pagos sin orden.
+- La caja (`pagada-en-caja`) sigue siendo solo de órdenes.
+- Los cobros de un pedido se serializan con el candado de su fila (`select ... for update`), el mismo que toman cancelar, entregar y vencer.
+
+**Migración** `V56__pagar_pedido_app.sql`:
+
+| Tabla | Cambio |
+| --- | --- |
+| `pago_app` | `orden_servicio_id` pasa a nulo permitido. Nueva `pedido_app_id bigint references pedido_app (id)`. `ck_pago_app_objeto check ((orden_servicio_id is null) <> (pedido_app_id is null))`: uno u otro. `vehiculo_cliente_id` pasa a nulo permitido solo para los pagos de pedido (`ck_pago_app_vehiculo`), porque un pedido en mostrador no tiene vehículo |
+| `pago_app` (índices) | `ix_pago_app_pedido (pedido_app_id, id)`, `uq_pago_app_pedido_pagado (pedido_app_id) where estado = 'PAGADO'` y `uq_pago_app_pedido_pendiente (pedido_app_id) where estado = 'PENDIENTE'` |
+| `pedido_app` | `pagado_en timestamptz null` |
+
+Ninguna columna de la ficha se quita ni se renombra (R1).
+
+**API de la app** (contrato 2.25.0, etiquetas «Tienda» y «Pagos y facturas»):
+
+- `POST /pedidos/{pedidoId}/pagos` con `Idempotency-Key`: el mismo cuerpo (`NuevoPago`), las mismas respuestas (201 nuevo, 200 llave repetida, 400, 404, 409 `PEDIDO_NO_PAGABLE` o `PAGO_EN_CURSO`) y el mismo esquema `Pago` que `POST /ordenes/{ordenId}/pagos`. Una llave usada con otra orden o con otro pedido es 400.
+- `POST /pagos/{pagoId}/autenticacion` sirve igual para los dos.
+- Esquema `Pago`: `ordenId` y `vehiculoId` pasan a nulos permitidos y se agrega `pedidoId` (entero, nulo permitido). Exactamente uno de `ordenId` y `pedidoId` viene lleno.
+- Esquema `Pedido` (detalle y lista): se agregan `pagable` (booleano), `pago` (`Pago`, el pago con que quedó pagado) y `pagadoEn` (fecha y hora).
+- `POST /tienda/pedidos/{pedidoId}/cancelar`: 409 `PEDIDO_PAGADO` si ya está pagado, y `PAGO_EN_CURSO` si un intento espera el 3-D Secure.
+- Aviso SSE `pago.confirmado`: `ordenId` nulo permitido y nuevo `pedidoId` nulo permitido.
+- `GET /pagos` y `GET /pagos/{id}` traen también los pagos de pedidos.
+
+**Eventos:** `PagoConfirmado` suma `pedidoId` y su `ordenId` queda nulo en un pago de pedido.
+
+**Derechos ARCO:** la copia de mis datos agrega `pedido_app_id` a cada pago.
+
+Pruebas: `PedidoAppTest`, `PagoAppTest`, `PagosDePedidoServiceTest`, `TiendaPedidoPagadoTest`, `LealtadAppServiceTest` y `PagarPedidoAppIntegrationTest`.
+
+**Estado.** Implementada. Pendientes: el PO confirma el supuesto de IVA del precio y `plan/cumplimiento-ficha.md` de carecar-mobile anota las columnas nuevas de `pago_app` y `pedido_app`.
 
 ### M15 · Encuestas y NPS — H4 — módulo `encuestas (nuevo)`
 

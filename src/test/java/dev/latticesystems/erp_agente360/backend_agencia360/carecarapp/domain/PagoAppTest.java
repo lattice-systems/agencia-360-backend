@@ -113,4 +113,23 @@ class PagoAppTest {
 		return PagoApp.conTarjeta(ORDEN, "SIMULADO", "sim_pi_1", "llave-123",
 				TarjetaDePrueba.deToken(token).orElseThrow(), VENCE, null, guardar, null, AHORA);
 	}
+
+	@Test
+	void unPagoEsDeUnaOrdenODeUnPedidoYElDePedidoNoLlevaVehiculo() {
+		Cobrable pedido = Cobrable.dePedido(15L, 3L, new BigDecimal("201.00"));
+		PagoApp pago = PagoApp.conTarjeta(pedido, "SIMULADO", "sim_pi_2", "llave-1234",
+				TarjetaDePrueba.deToken("tok_sim_visa").orElseThrow(), VENCE, null, false, null, AHORA);
+
+		assertThat(pago.getPedidoId()).isEqualTo(15L);
+		assertThat(pago.getOrdenId()).isNull();
+		assertThat(pago.getVehiculoId()).isNull();
+		assertThat(pago.getMonto()).isEqualByComparingTo("201.00");
+		assertThat(ORDEN.pedidoId()).isNull();
+		assertThatThrownBy(() -> new Cobrable(41L, 9L, 3L, BigDecimal.TEN, 15L))
+				.isInstanceOf(IllegalArgumentException.class);
+		assertThatThrownBy(() -> new Cobrable(null, null, 3L, BigDecimal.TEN, null))
+				.isInstanceOf(IllegalArgumentException.class);
+		assertThatThrownBy(() -> new Cobrable(41L, null, 3L, BigDecimal.TEN, null))
+				.isInstanceOf(NullPointerException.class);
+	}
 }

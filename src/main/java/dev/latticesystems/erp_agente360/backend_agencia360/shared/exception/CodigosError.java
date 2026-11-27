@@ -86,6 +86,13 @@ public final class CodigosError {
 	public static final String PAGO_EN_CURSO = "PAGO_EN_CURSO";
 	/** V2-M08.02: el pago ya no espera el 3-D Secure. */
 	public static final String PAGO_NO_PENDIENTE = "PAGO_NO_PENDIENTE";
+	/**
+	 * V2-M14.04: el pedido no se puede pagar en la app: no está apartado ni listo,
+	 * ya venció, no tiene total o ya está pagado.
+	 */
+	public static final String PEDIDO_NO_PAGABLE = "PEDIDO_NO_PAGABLE";
+	/** V2-M14.04: el pedido ya se pagó en la app y se cancela en mostrador. */
+	public static final String PEDIDO_PAGADO = "PEDIDO_PAGADO";
 
 	private CodigosError() {
 	}

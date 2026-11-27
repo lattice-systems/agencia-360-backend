@@ -29,7 +29,8 @@ import org.hibernate.annotations.BatchSize;
 /**
  * Pedido de la tienda de la app (V2-M14). Nace apartado, con las piezas ya
  * fuera de la existencia, y vence si no se recoge. Mientras está abierto
- * (apartado o listo) siempre tiene fecha de vencimiento.
+ * (apartado o listo) siempre tiene fecha de vencimiento. Pagado en la app
+ * (V2-M14.04) ya no vence y solo lo cancela la agencia.
  */
 @Entity
 @Table(name = "pedido_app")
@@ -76,6 +77,9 @@ public class PedidoApp extends Auditable {
 	@Enumerated(EnumType.STRING)
 	@Column(name = "motivo_cancelacion", length = 10)
 	private MotivoCancelacionPedido motivoCancelacion;
+
+	@Column(name = "pagado_en")
+	private Instant pagadoEn;
 
 	@OneToMany(mappedBy = "pedido", cascade = CascadeType.ALL, orphanRemoval = true)
 	@OrderBy("id")
@@ -158,14 +162,20 @@ public class PedidoApp extends Auditable {
 	}
 
 	/**
-	 * Cancela un pedido abierto. Quien llama libera las piezas.
+	 * Cancela un pedido abierto. Quien llama libera las piezas. Uno pagado en la
+	 * app solo lo cancela la agencia, en mostrador.
 	 *
 	 * @throws ConflictoException
-	 *             con {@code PEDIDO_NO_CANCELABLE} si ya no está abierto
+	 *             con {@code PEDIDO_NO_CANCELABLE} si ya no está abierto o con
+	 *             {@code PEDIDO_PAGADO} si está pagado y no lo cancela la agencia
 	 */
 	public void cancelar(MotivoCancelacionPedido motivo, Instant ahora) {
 		if (!abierto()) {
 			throw new ConflictoException("El pedido ya no se puede cancelar", CodigosError.PEDIDO_NO_CANCELABLE);
+		}
+		if (pagado() && motivo != MotivoCancelacionPedido.AGENCIA) {
+			throw new ConflictoException("El pedido ya está pagado y se cancela en mostrador",
+					CodigosError.PEDIDO_PAGADO);
 		}
 		estado = EstadoPedido.CANCELADO;
 		motivoCancelacion = Objects.requireNonNull(motivo, "motivo");
@@ -183,8 +193,55 @@ public class PedidoApp extends Auditable {
 		return ABIERTOS.contains(estado);
 	}
 
+	/** Uno pagado ya no vence aunque pase su fecha. */
 	public boolean vencido(Instant ahora) {
-		return abierto() && !venceEn.isAfter(ahora);
+		return abierto() && !pagado() && !venceEn.isAfter(ahora);
+	}
+
+	public boolean pagado() {
+		return pagadoEn != null;
+	}
+
+	/**
+	 * Se puede pagar en la app: abierto, sin vencer, con total y sin pagar
+	 * (V2-M14.04).
+	 */
+	public boolean pagable(Instant ahora) {
+		return abierto() && !pagado() && venceEn.isAfter(ahora) && total.signum() > 0;
+	}
+
+	/**
+	 * @throws ConflictoException
+	 *             con {@code PEDIDO_NO_PAGABLE} si no se puede pagar en la app
+	 */
+	public void exigirPagable(Instant ahora) {
+		if (pagado()) {
+			throw new ConflictoException("El pedido ya está pagado", CodigosError.PEDIDO_NO_PAGABLE);
+		}
+		if (!abierto()) {
+			throw new ConflictoException("El pedido ya se entregó o se canceló", CodigosError.PEDIDO_NO_PAGABLE);
+		}
+		if (!venceEn.isAfter(ahora)) {
+			throw new ConflictoException("El apartado ya venció", CodigosError.PEDIDO_NO_PAGABLE);
+		}
+		if (total.signum() <= 0) {
+			throw new ConflictoException("El pedido no tiene nada que cobrar", CodigosError.PEDIDO_NO_PAGABLE);
+		}
+	}
+
+	/**
+	 * Quedó pagado en la app. No revisa el vencimiento, porque un intento que
+	 * esperaba el 3-D Secure detiene el vencimiento mientras sigue vigente.
+	 *
+	 * @throws ConflictoException
+	 *             con {@code PEDIDO_NO_PAGABLE} si ya no está abierto o ya está
+	 *             pagado
+	 */
+	public void marcarPagado(Instant ahora) {
+		if (!abierto() || pagado()) {
+			throw new ConflictoException("El pedido ya no se puede pagar", CodigosError.PEDIDO_NO_PAGABLE);
+		}
+		pagadoEn = Objects.requireNonNull(ahora, "ahora");
 	}
 
 	public static Set<EstadoPedido> estadosAbiertos() {
@@ -240,6 +297,10 @@ public class PedidoApp extends Auditable {
 
 	public MotivoCancelacionPedido getMotivoCancelacion() {
 		return motivoCancelacion;
+	}
+
+	public Instant getPagadoEn() {
+		return pagadoEn;
 	}
 
 	public List<PedidoRenglon> getRenglones() {
