@@ -6,10 +6,12 @@ import dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.domain.Met
 import dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.domain.MotivoFalloPago;
 import dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.domain.PagoApp;
 import dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.domain.PagoApp.Cobrable;
+import dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.domain.PedidoApp;
 import dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.domain.PerfilFiscal;
 import dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.domain.TarjetaDePrueba;
 import dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.infrastructure.MetodoPagoRepository;
 import dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.infrastructure.PagoAppRepository;
+import dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.infrastructure.PedidoAppRepository;
 import dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.infrastructure.PerfilFiscalRepository;
 import dev.latticesystems.erp_agente360.backend_agencia360.clientes.VehiculosDeClientes;
 import dev.latticesystems.erp_agente360.backend_agencia360.servicio.HistorialDeServicios;
@@ -28,6 +30,7 @@ import java.time.ZoneId;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.ApplicationEventPublisher;
@@ -35,11 +38,13 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * Pagos de órdenes de servicio desde la app y tarjetas guardadas (V2-M08.02,
- * V2-M08.04 y V2-M08.07), con el procesador simulado de la ADR 0009. Cada
- * intento lleva su llave de idempotencia: repetirla devuelve el mismo intento y
- * no cobra dos veces. Una orden se paga una sola vez; el personal también la
- * puede marcar pagada en caja. Lo ajeno responde 404.
+ * Pagos de órdenes de servicio y de pedidos de la tienda desde la app y
+ * tarjetas guardadas (V2-M08.02, V2-M08.04, V2-M08.07 y V2-M14.04), con el
+ * procesador simulado de la ADR 0009. Cada intento lleva su llave de
+ * idempotencia: repetirla devuelve el mismo intento y no cobra dos veces. Una
+ * orden se paga una sola vez y el personal también la puede marcar pagada en
+ * caja. Un pedido también se paga una sola vez y su candado es el de su fila.
+ * Lo ajeno responde 404.
  */
 @Service
 public class PagosAppService {
@@ -55,6 +60,8 @@ public class PagosAppService {
 	/** Separa las claves de bloqueo de los cobros de una orden. */
 	private static final long PREFIJO_ORDEN = 0x5041_474F_0000_0000L;
 
+	private static final String SIN_PEDIDO = "No existe el pedido ";
+
 	/** Separa las claves de bloqueo de las tarjetas de un cliente. */
 	private static final long PREFIJO_TARJETAS = 0x5441_524A_0000_0000L;
 
@@ -65,6 +72,7 @@ public class PagosAppService {
 	private final HistorialDeServicios historial;
 	private final TallerEnVivo taller;
 	private final VehiculosDeClientes vehiculos;
+	private final PedidoAppRepository pedidos;
 	private final ApplicationEventPublisher eventos;
 	private final Clock reloj;
 	private final ZoneId zona;
@@ -72,14 +80,15 @@ public class PagosAppService {
 	@Autowired
 	public PagosAppService(PagoAppRepository pagos, MetodoPagoRepository metodos, PerfilFiscalRepository perfiles,
 			ProcesadorPagos procesador, HistorialDeServicios historial, TallerEnVivo taller,
-			VehiculosDeClientes vehiculos, ApplicationEventPublisher eventos) {
-		this(pagos, metodos, perfiles, procesador, historial, taller, vehiculos, eventos, Clock.systemUTC(),
+			VehiculosDeClientes vehiculos, PedidoAppRepository pedidos, ApplicationEventPublisher eventos) {
+		this(pagos, metodos, perfiles, procesador, historial, taller, vehiculos, pedidos, eventos, Clock.systemUTC(),
 				ZoneId.of("America/Mexico_City"));
 	}
 
 	PagosAppService(PagoAppRepository pagos, MetodoPagoRepository metodos, PerfilFiscalRepository perfiles,
 			ProcesadorPagos procesador, HistorialDeServicios historial, TallerEnVivo taller,
-			VehiculosDeClientes vehiculos, ApplicationEventPublisher eventos, Clock reloj, ZoneId zona) {
+			VehiculosDeClientes vehiculos, PedidoAppRepository pedidos, ApplicationEventPublisher eventos, Clock reloj,
+			ZoneId zona) {
 		this.pagos = pagos;
 		this.metodos = metodos;
 		this.perfiles = perfiles;
@@ -87,6 +96,7 @@ public class PagosAppService {
 		this.historial = historial;
 		this.taller = taller;
 		this.vehiculos = vehiculos;
+		this.pedidos = pedidos;
 		this.eventos = eventos;
 		this.reloj = reloj;
 		this.zona = zona;
@@ -120,14 +130,53 @@ public class PagosAppService {
 		pagos.bloquear(PREFIJO_ORDEN | ordenId);
 		Optional<PagoApp> repetido = pagos.findByClienteIdAndLlaveIdempotencia(clienteId, llaveLimpia);
 		if (repetido.isPresent()) {
-			if (!repetido.get().getOrdenId().equals(ordenId)) {
+			if (!Objects.equals(repetido.get().getOrdenId(), ordenId)) {
 				throw new IllegalArgumentException("Esa llave Idempotency-Key ya se usó para pagar otra orden");
 			}
 			return new Cobro(PagoVista.de(repetido.get()), false);
 		}
 		Cobrable orden = cobrable(clienteId, ordenId);
+		return cobrar(clienteId, orden, llaveLimpia, nuevo, reloj.instant());
+	}
+
+	/**
+	 * Cobra el total de un pedido de la tienda (V2-M14.04) igual que una orden. Al
+	 * quedar pagado ya no vence y solo lo cancela la agencia.
+	 *
+	 * @throws RecursoNoEncontradoException
+	 *             si el pedido, la tarjeta guardada o el perfil fiscal no existen o
+	 *             son de otro cliente (404)
+	 * @throws ConflictoException
+	 *             con {@code PEDIDO_NO_PAGABLE} o {@code PAGO_EN_CURSO} (409)
+	 * @throws IllegalArgumentException
+	 *             si la llave, la tarjeta o el vencimiento no son válidos, o la
+	 *             llave ya pagó otra orden u otro pedido (400)
+	 */
+	@Transactional
+	public Cobro pagarPedido(Long clienteId, Long pedidoId, String llave, NuevoPago nuevo) {
+		String llaveLimpia = llave(llave);
+		exigirUnaTarjeta(nuevo);
+		if (!pedidos.existsByIdAndClienteId(pedidoId, clienteId)) {
+			throw new RecursoNoEncontradoException(SIN_PEDIDO + pedidoId);
+		}
+		PedidoApp pedido = pedidos.bloquear(pedidoId)
+				.orElseThrow(() -> new RecursoNoEncontradoException(SIN_PEDIDO + pedidoId));
+		Optional<PagoApp> repetido = pagos.findByClienteIdAndLlaveIdempotencia(clienteId, llaveLimpia);
+		if (repetido.isPresent()) {
+			if (!pedidoId.equals(repetido.get().getPedidoId())) {
+				throw new IllegalArgumentException(
+						"Esa llave Idempotency-Key ya se usó para pagar otra orden o pedido");
+			}
+			return new Cobro(PagoVista.de(repetido.get()), false);
+		}
 		Instant ahora = reloj.instant();
-		cerrarPendiente(ordenId, ahora, null);
+		pedido.exigirPagable(ahora);
+		return cobrar(clienteId, Cobrable.dePedido(pedidoId, clienteId, pedido.getTotal()), llaveLimpia, nuevo, ahora);
+	}
+
+	/** Lo común de cobrar una orden o un pedido, ya bajo su candado. */
+	private Cobro cobrar(Long clienteId, Cobrable orden, String llaveLimpia, NuevoPago nuevo, Instant ahora) {
+		cerrarPendiente(orden, ahora, null);
 		Long perfilFiscalId = perfilFiscal(clienteId, nuevo.perfilFiscalId());
 		Long metodoPagoId = null;
 		TarjetaDePrueba tarjeta;
@@ -164,9 +213,15 @@ public class PagosAppService {
 	 */
 	@Transactional
 	public PagoVista autenticar(Long clienteId, Long pagoId, boolean confirmada) {
-		Long ordenId = pagos.ordenDelPago(pagoId, clienteId)
-				.orElseThrow(() -> new RecursoNoEncontradoException("No existe el pago " + pagoId));
-		pagos.bloquear(PREFIJO_ORDEN | ordenId);
+		Long ordenId = pagos.ordenDelPago(pagoId, clienteId).orElse(null);
+		PedidoApp pedido = null;
+		if (ordenId != null) {
+			pagos.bloquear(PREFIJO_ORDEN | ordenId);
+		} else {
+			Long pedidoId = pagos.pedidoDelPago(pagoId, clienteId)
+					.orElseThrow(() -> new RecursoNoEncontradoException("No existe el pago " + pagoId));
+			pedido = pedidos.bloquear(pedidoId).orElseThrow();
+		}
 		PagoApp pago = pagos.findByIdAndClienteId(pagoId, clienteId).orElseThrow();
 		if (!pago.requiereAutenticacion()) {
 			throw new ConflictoException("El pago ya no espera la confirmación de tu banco",
@@ -176,6 +231,9 @@ public class PagosAppService {
 		if (pago.vencido(ahora, VIGENCIA_AUTENTICACION)) {
 			pago.fallar(MotivoFalloPago.AUTENTICACION_VENCIDA, ahora);
 			return PagoVista.de(pago);
+		}
+		if (pedido != null && !pedido.abierto()) {
+			throw new ConflictoException("La agencia ya canceló el pedido", CodigosError.PEDIDO_NO_PAGABLE);
 		}
 		TarjetaDePrueba tarjeta = procesador.tarjeta(pago.getTokenProcesador())
 				.orElseThrow(() -> new IllegalStateException("El procesador ya no reconoce la tarjeta del pago"));
@@ -296,9 +354,9 @@ public class PagosAppService {
 			throw new ConflictoException("La orden aún no está lista para cobrarse", CodigosError.ORDEN_NO_PAGABLE);
 		}
 		Instant ahora = reloj.instant();
-		cerrarPendiente(ordenId, ahora, MotivoFalloPago.PAGADA_EN_CAJA);
-		PagoApp pago = PagoApp.enCaja(new Cobrable(ordenId, detalle.vehiculoId(), clienteId, detalle.total()),
-				"caja_" + procesador.nuevaIntencion(), folio, usuarioId, ahora);
+		Cobrable orden = new Cobrable(ordenId, detalle.vehiculoId(), clienteId, detalle.total());
+		cerrarPendiente(orden, ahora, MotivoFalloPago.PAGADA_EN_CAJA);
+		PagoApp pago = PagoApp.enCaja(orden, "caja_" + procesador.nuevaIntencion(), folio, usuarioId, ahora);
 		pagos.saveAndFlush(pago);
 		confirmar(pago);
 		return PagoVista.de(pago);
@@ -342,20 +400,31 @@ public class PagosAppService {
 	}
 
 	private void confirmar(PagoApp pago) {
-		eventos.publishEvent(new PagoConfirmado(pago.getId(), pago.getOrdenId(), pago.getClienteId(), pago.getMonto()));
+		if (pago.getPedidoId() != null) {
+			pedidos.bloquear(pago.getPedidoId()).orElseThrow().marcarPagado(pago.getPagadoEn());
+		}
+		eventos.publishEvent(new PagoConfirmado(pago.getId(), pago.getOrdenId(), pago.getClienteId(), pago.getMonto(),
+				pago.getPedidoId()));
 		Map<String, Object> datos = new LinkedHashMap<>();
 		datos.put("pagoId", pago.getId());
-		datos.put("ordenId", pago.getOrdenId());
+		// El aviso no admite nulos: va la orden o el pedido.
+		if (pago.getOrdenId() != null) {
+			datos.put("ordenId", pago.getOrdenId());
+		} else {
+			datos.put("pedidoId", pago.getPedidoId());
+		}
 		datos.put("estado", pago.getEstado().name());
 		eventos.publishEvent(new AvisoAlCliente(pago.getClienteId(), EVENTO, datos));
 	}
 
 	/**
-	 * Un intento que espera el 3-D Secure bloquea la orden: si ya venció se cierra;
-	 * si no, solo lo cierra la caja.
+	 * Un intento que espera el 3-D Secure bloquea la orden o el pedido. Si ya
+	 * venció se cierra, y si no, solo lo cierra la caja.
 	 */
-	private void cerrarPendiente(Long ordenId, Instant ahora, MotivoFalloPago motivoDeCaja) {
-		Optional<PagoApp> pendiente = pagos.findFirstByOrdenIdAndEstado(ordenId, EstadoPago.PENDIENTE);
+	private void cerrarPendiente(Cobrable objeto, Instant ahora, MotivoFalloPago motivoDeCaja) {
+		Optional<PagoApp> pendiente = objeto.ordenId() != null
+				? pagos.findFirstByOrdenIdAndEstado(objeto.ordenId(), EstadoPago.PENDIENTE)
+				: pagos.findFirstByPedidoIdAndEstado(objeto.pedidoId(), EstadoPago.PENDIENTE);
 		if (pendiente.isEmpty()) {
 			return;
 		}
@@ -365,7 +434,8 @@ public class PagosAppService {
 		} else if (motivoDeCaja != null) {
 			abierto.fallar(motivoDeCaja, ahora);
 		} else {
-			throw new ConflictoException("Ya hay un pago de esta orden esperando la confirmación de tu banco",
+			String de = objeto.ordenId() != null ? "esta orden" : "este pedido";
+			throw new ConflictoException("Ya hay un pago de " + de + " esperando la confirmación de tu banco",
 					CodigosError.PAGO_EN_CURSO);
 		}
 		pagos.saveAndFlush(abierto);

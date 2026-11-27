@@ -18,6 +18,7 @@ import dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.domain.Pag
 import dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.domain.TarjetaDePrueba;
 import dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.infrastructure.MetodoPagoRepository;
 import dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.infrastructure.PagoAppRepository;
+import dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.infrastructure.PedidoAppRepository;
 import dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.infrastructure.PerfilFiscalRepository;
 import dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.infrastructure.ProcesadorSimulado;
 import dev.latticesystems.erp_agente360.backend_agencia360.clientes.VehiculosDeClientes;
@@ -78,7 +79,7 @@ class PagosAppServiceTest {
 	@BeforeEach
 	void preparar() {
 		servicio = new PagosAppService(pagos, metodos, perfiles, new ProcesadorSimulado(), historial, taller, vehiculos,
-				eventos, Clock.fixed(AHORA, ZoneOffset.UTC), ZONA);
+				mock(PedidoAppRepository.class), eventos, Clock.fixed(AHORA, ZoneOffset.UTC), ZONA);
 		when(pagos.saveAndFlush(any(PagoApp.class))).thenAnswer(invocacion -> conId(invocacion.getArgument(0)));
 		when(metodos.saveAndFlush(any(MetodoPago.class))).thenAnswer(invocacion -> conId(invocacion.getArgument(0)));
 		when(vehiculos.buscarPorId(VEHICULO)).thenReturn(Optional.of(new VehiculoDeCliente(VEHICULO, "VIN", "Nissan",

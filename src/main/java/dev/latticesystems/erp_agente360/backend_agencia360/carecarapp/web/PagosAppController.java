@@ -26,8 +26,9 @@ import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * Pagar una orden, mis pagos y mis tarjetas guardadas (V2-M08.02, V2-M08.04 y
- * V2-M08.07). El procesador es simulado (ADR 0009): no se cobra nada.
+ * Pagar una orden o un pedido de la tienda, mis pagos y mis tarjetas guardadas
+ * (V2-M08.02, V2-M08.04, V2-M08.07 y V2-M14.04). El procesador es simulado (ADR
+ * 0009): no se cobra nada.
  */
 @RestController
 @RequestMapping("/api/v1/app")
@@ -49,6 +50,16 @@ public class PagosAppController {
 			@RequestHeader(name = "Idempotency-Key", required = false) String llave,
 			@Valid @RequestBody NuevoPagoRequest request, @AuthenticationPrincipal UsuarioAutenticado cliente) {
 		PagosAppService.Cobro cobro = pagos.pagar(cliente.id(), ordenId, llave, request.comoPago());
+		return ResponseEntity.status(cobro.creado() ? HttpStatus.CREATED : HttpStatus.OK).body(cobro.pago());
+	}
+
+	@PostMapping("/pedidos/{pedidoId}/pagos")
+	@Operation(summary = "Pagar un pedido de la tienda", description = "Igual que pagar una orden: 201 con el "
+			+ "intento, o 200 si esa Idempotency-Key ya lo había creado. 409 PEDIDO_NO_PAGABLE o PAGO_EN_CURSO.")
+	public ResponseEntity<PagoVista> pagarPedido(@PathVariable Long pedidoId,
+			@RequestHeader(name = "Idempotency-Key", required = false) String llave,
+			@Valid @RequestBody NuevoPagoRequest request, @AuthenticationPrincipal UsuarioAutenticado cliente) {
+		PagosAppService.Cobro cobro = pagos.pagarPedido(cliente.id(), pedidoId, llave, request.comoPago());
 		return ResponseEntity.status(cobro.creado() ? HttpStatus.CREATED : HttpStatus.OK).body(cobro.pago());
 	}
 

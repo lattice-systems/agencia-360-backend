@@ -153,11 +153,18 @@ class LealtadAppServiceTest {
 	void pagarLaOrdenSumaBajoElCandadoDelSaldo() {
 		when(historial.detalle(41L)).thenReturn(Optional.of(detalle(41L, "1650.00")));
 
-		servicio.alConfirmarPago(new PagoConfirmado(7L, 41L, 3L, new BigDecimal("1650.00")));
+		servicio.alConfirmarPago(new PagoConfirmado(7L, 41L, 3L, new BigDecimal("1650.00"), null));
 
 		InOrder orden = inOrder(cuenta);
 		orden.verify(cuenta).bloquear(3L);
 		orden.verify(cuenta).mover(3L, 165, MotivoPuntos.SERVICIO, "ORDEN", 41L);
+	}
+
+	@Test
+	void pagarUnPedidoDeLaTiendaNoSumaPuntos() {
+		servicio.alConfirmarPago(new PagoConfirmado(8L, null, 3L, new BigDecimal("1650.00"), 15L));
+
+		org.mockito.Mockito.verifyNoInteractions(cuenta, historial);
 	}
 
 	@Test
