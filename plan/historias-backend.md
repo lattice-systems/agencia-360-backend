@@ -464,7 +464,7 @@ Recordatorio del próximo servicio, en `carecarapp`. Migración `V46`.
 
 **Supuestos sobre trabajo de otras personas (para reconciliar)**
 
-- **Push (V2-M06.02 y V2-M06.07, Jael):** no existe el servicio único de envío. Este job publica el evento de dominio `AvisoAlCliente`; cuando el módulo `notificaciones` escuche ese evento, el recordatorio llegará como push **sin cambiar este código**. Falta que M06.07 decida el texto y la preferencia del cliente («elegir qué avisos recibir», V2-M06.05): hasta entonces el aviso solo llega por SSE a quien tenga la app abierta.
+- **Push (V2-M06.02 y V2-M06.07, ayudó Juan Pablo):** el módulo `notificaciones` ya escucha el evento (ver «Diseño de V2-M06.07 y V2-M06.02»). Este job publica el evento de dominio `AvisoAlCliente`; cuando el módulo `notificaciones` escuche ese evento, el recordatorio llegará como push **sin cambiar este código**. Falta que M06.07 decida el texto y la preferencia del cliente («elegir qué avisos recibir», V2-M06.05): hasta entonces el aviso solo llega por SSE a quien tenga la app abierta.
 - **Configurable por cliente:** la historia dice «configurable»; aquí lo es por entorno (servidor). Un umbral por cliente depende de las preferencias de V2-M06.05.
 - **Vehículos sin lecturas** no reciben recordatorio por tiempo; se resuelve si V2-M05.02 empieza a estimar con la fecha de compra o de la última orden.
 - La migración `V46` es la siguiente libre de `main` al escribir esto; si otro PR la toma antes, renumerar al integrar.
@@ -479,6 +479,52 @@ Detalle: [`carecar-mobile/plan/modulos/M06-notificaciones.md`](https://github.co
 | V2-M06.04 | Como cliente quiero una bandeja con todos mis avisos | Paginada · no leídos con contador en el ícono · marcar todas como leídas | Jael |
 | V2-M06.05 | Como cliente quiero elegir qué avisos recibir y un horario silencioso | Por categoría · respetado por el backend al enviar | Jael |
 | V2-M06.07 | Como equipo queremos un servicio único de envío en el backend | Módulo `notificaciones` en Modulith escucha eventos de dominio (cita, orden, documento…) | Jael |
+
+#### Diseño de V2-M06.07 y V2-M06.02 (push) — tomadas por Juan Pablo (R6) para destrabar V2-M05.05
+
+**Alcance.** Solo lo que piden los criterios de estas dos historias: el servicio único de envío, el registro del token FCM y el push de los avisos que el backend ya publica. La bandeja con sus endpoints (V2-M06.04) y las preferencias (V2-M06.05) **no** se hacen aquí; sí se crea la tabla `notificacion` porque la ficha la nombra y cada push se guarda en ella (así M06.04 solo agrega la lectura).
+
+**Módulo.** `notificaciones` (nuevo, Spring Modulith). Depende solo de `shared`. **No** depende de `carecarapp`: lo contrario provocaría un ciclo, porque `carecarapp` ya publica `AvisoAlCliente` y el módulo de avisos necesita saber qué cuenta es de qué cliente. La dirección es `carecarapp → notificaciones`:
+
+| Pieza | Dónde | Qué hace |
+| --- | --- | --- |
+| `EntregaDeAvisos` | `notificaciones` (API pública del módulo) | `avisar(clienteId, evento, datos)`; nunca lanza |
+| `PuenteDeAvisosPush` | `carecarapp.application` | `@TransactionalEventListener(fallbackExecution = true)` de `AvisoAlCliente` y de `OrdenServicioCambiada`; llama a `EntregaDeAvisos`. Es el único archivo de `carecarapp` que cambia |
+| `RedactorDeAvisos` | `notificaciones.application` | Función pura: evento + datos → categoría, título, cuerpo y destino en español. Un evento sin texto (por ejemplo `traslado.ubicacion`, que llega cada pocos segundos) no genera push |
+| `AvisosService` | `notificaciones.application` | Guarda la `notificacion`, busca los dispositivos activos del cliente y manda a cada uno por `EnvioPush` |
+| `EnvioPush` | `notificaciones.application` | Interfaz del canal: `enviar(MensajePush) → ResultadoEnvio` (`ENVIADO`, `TOKEN_INVALIDO`, `NO_CONFIGURADO`, `FALLO`) |
+| `EnvioPushFcm` | `notificaciones.infrastructure` | FCM HTTP v1 con token OAuth de cuenta de servicio (JWT bearer), mismo patrón que `ActualizadorDePasesGoogle` y una `LlamadaHttp` propia para probar sin red |
+| `EnvioPushFake` | pruebas | Guarda lo que se «enviaría» |
+
+**Transacciones.** El listener corre después de confirmar la transacción de origen. Guardar la `notificacion` y mandar el push están envueltos en un `try/catch` que solo registra: **un fallo de FCM o de la base de avisos nunca revierte ni rompe lo que causó el aviso**. El guardado usa su propia transacción corta (`REQUIRES_NEW`), porque en `AFTER_COMMIT` la original ya no admite escrituras.
+
+**Credenciales (R8).** Solo por entorno: `app.push.fcm.project-id` (`PUSH_FCM_PROJECT_ID`) y `app.push.fcm.service-account-json-base64` (`PUSH_FCM_SERVICE_ACCOUNT_JSON_BASE64`). Sin ellas `EnvioPushFcm` responde `NO_CONFIGURADO` y no hace ninguna llamada; el arranque nunca falla. La bandeja se guarda igual.
+
+**Migración `V60__crear_dispositivo_push_y_notificacion.sql`** (número fijo asignado; si al integrar `main` ya la tomó otra, se renombra la nuestra):
+
+| Tabla | Campos | Notas |
+| --- | --- | --- |
+| `dispositivo_push` | `id`, `cuenta_app_id` (FK `cuenta_app`), `token_fcm`, `plataforma` (`android` o `ios`), `idioma`, `actualizado_en` de la ficha/plan; añadidos: `instalacion_id`, `activo`, `creado_en` | Una fila por instalación (`instalacion_id` único). `token_fcm` único: si el mismo token aparece con otra instalación se borra la fila vieja (reinstalación). `activo` pasa a falso cuando FCM responde que el token no existe |
+| `notificacion` | `id`, `cliente_id` (FK `cliente`), `categoria`, `titulo`, `cuerpo`, `destino`, `leida_en`, `creada_en` de la ficha/plan; añadidos: `evento`, `datos` (`jsonb`) | Índice `(cliente_id, creada_en desc)` para la bandeja de M06.04. `datos` guarda solo ids (nunca nombres, VIN, placas ni montos) |
+
+`preferencia_notificacion` **no** se crea: sus criterios son de V2-M06.05.
+
+**Categorías** (las del módulo M06): `taller` (orden), `citas` (traslados, asistencia), `mantenimiento` (recordatorio, garantía, campañas), `documentos` (factura, ARCO), `promociones` (puntos, valuación, pedido) y `mensajes`. La categoría ya viaja en `notificacion` para que M06.05 filtre sin migrar.
+
+**Endpoints** (`/api/v1/app`, rol `CLIENTE_CARECAR`; contrato en `docs/api/agencia360-api-app-v2.yaml`):
+
+| Método | Ruta | Respuestas |
+| --- | --- | --- |
+| PUT | `/dispositivos/{instalacionId}` | 204 registra o actualiza (`tokenFcm` ≤ 4096, `plataforma` `android`/`ios`, `idioma` opcional ≤ 10). 400 `DATOS_INVALIDOS`; 401; 403 `CUENTA_DESACTIVADA` |
+| DELETE | `/dispositivos/{instalacionId}` | 204 siempre que sea suya o no exista (idempotente); la instalación de otra cuenta se ignora, no se revela. 401; 403 |
+
+La app registra tras iniciar sesión y da de baja **antes** de `/auth/cerrar-sesion`, porque ese endpoint no lleva access token y la baja sí lo necesita. Si la instalación pasa a otra cuenta (otro cliente entra en el mismo teléfono) el `PUT` la reasigna.
+
+**Payload sin datos sensibles.** El push lleva `titulo` y `cuerpo` genéricos y, en `data`, solo `evento`, `destino` (ruta de la app) y los ids del recurso. Los textos no mencionan nombre, VIN, placa, montos ni direcciones.
+
+**Pruebas.** `RedactorDeAvisosTest` (un caso por evento y la ausencia de datos sensibles), `AvisosServiceTest` (envía a los activos, desactiva `TOKEN_INVALIDO`, un fallo no se propaga), `EnvioPushFcmTest` (JWT bearer, URL v1, 404 `UNREGISTERED`, sin credenciales no llama), `DispositivosIntegrationTest` con la base real (alta, actualización, reasignación, baja, 400, 401), `AvisosPushIntegrationTest` (un `AvisoAlCliente` de `mantenimiento.recordatorio` guarda la notificación y manda el push con el texto correcto; un fallo del canal no revierte la transacción) y `ModularityTests`.
+
+**Lo que falta para push real.** Credenciales FCM del proyecto de Firebase en el entorno del servidor y, del lado de la app, `firebase_messaging` con `google-services.json` y `GoogleService-Info.plist` fuera de git (ver `plan/modulos/M06-notificaciones.md` de la app).
 
 ### M07 · Mensajería con el asesor — H4 — módulo `mensajeria (nuevo)`
 
