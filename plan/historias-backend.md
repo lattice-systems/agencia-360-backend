@@ -556,6 +556,38 @@ Decisión del procesador y del timbrado (V2-M08.01, aceptada por el SM Daniel Oj
 
 Contrato 2.24.0. Pruebas: `PagoAppTest`, `PagosAppServiceTest`, `LealtadAppServiceTest` y `PagosAppIntegrationTest`.
 
+#### Diseño técnico — V2-M08.03 y V2-M08.06 (Ricardo)
+
+**Billeteras simuladas (V2-M08.03):** `NuevoPago` gana `billetera` (`APPLE_PAY` o `GOOGLE_PAY`); se manda exactamente uno de `tarjeta`, `metodoPagoId` y `billetera` (si no, 400). La billetera no usa la del teléfono ni pide cuentas: el procesador simulado la aprueba sin 3-D Secure con el token `tok_sim_apple_pay` o `tok_sim_google_pay`. El pago queda con `metodo` `APPLE_PAY` o `GOOGLE_PAY`, `tipo_tarjeta` `CREDITO` (forma de pago 04 de la factura), sin marca, últimos 4 ni vencimiento, y nunca se guarda como tarjeta. Sirve igual para pagar una orden o un pedido de la tienda. No hay migración: `ck_pago_app_metodo` ya acepta las dos billeteras.
+
+**Tabla `factura` (V2-M08.06, migración `facturar_pagos_de_la_app`):** se reutiliza la del ERP como pide la ficha (R1) y la ADR 0009, sin quitar ni renombrar columnas:
+
+- se agregan `tipo` (`VENTA_UNIDAD`, `SERVICIO` o `PEDIDO_APP`; por omisión `VENTA_UNIDAD`, así el ERP inserta igual que antes), `cliente_id`, `orden_servicio_id`, `pedido_app_id`, `pago_app_id`, `perfil_fiscal_id` (pasa a nulo si se borra el perfil), `uuid_fiscal`, `xml_archivo_id`, `pdf_archivo_id` y `timbrada_en`, más `receptor_uso_cfdi` y `forma_pago` para que la factura no dependa del perfil;
+- las columnas de la venta de un auto (`prospecto_id`, `venta_id`, `vehiculo_id`, `unidad_*`, `pdf` y `emitida_por`) dejan de ser obligatorias y `ck_factura_tipo` exige las de cada tipo: la venta, la unidad y el PDF en `VENTA_UNIDAD`; el cliente, el pago, el folio fiscal, los dos archivos y la fecha de timbrado en los de la app, con la orden en `SERVICIO` y el pedido en `PEDIDO_APP`;
+- `uq_factura_pago_app` (un pago se factura una vez) y `uq_factura_uuid`; `ix_factura_cliente`.
+- La entidad del ERP (`facturacion.Factura`) solo gana `@SQLRestriction("tipo = 'VENTA_UNIDAD'")` para seguir viendo solo sus facturas. `carecarapp` mapea la misma tabla con `FacturaApp` (`tipo <> 'VENTA_UNIDAD'`). El folio sale de la misma secuencia `factura_folio_seq` con serie `A` (`A-000124`), así nunca choca con los `F-` del ERP.
+
+**Timbrado** (`Timbrador` en `application`, `TimbradorSimulado` en `infrastructure`):
+
+- El `Comprobante` lleva emisor de prueba del SAT (`EKU9003173C9`, ESCUELA KEMPER URGATE, régimen 601, CP 42501, en `app.carecarapp.factura.emisor.*`), la copia del receptor del perfil fiscal, un concepto por renglón y forma de pago 04 (crédito y billeteras) o 28 (débito), método PUE, moneda MXN y exportación 01.
+- Los precios del ticket y de la tienda traen IVA: cada concepto se desglosa en base (importe ÷ 1.16, a 2 decimales) e IVA (la diferencia), así que la suma de los conceptos da el total pagado. Mano de obra con clave 78181500 y unidad E48; refacciones con 25174800 (componentes de vehículos) y unidad H87.
+- El XML sigue la estructura de CFDI 4.0 (`cfdi:Comprobante` 4.0 con emisor, receptor, conceptos con su traslado de IVA 002 tasa 0.160000, impuestos y el complemento `tfd:TimbreFiscalDigital` 1.1). El timbre es simulado: UUID aleatorio, fecha, `RfcProvCertif` de prueba y sellos y certificados `SIMULADO`, con la leyenda «Factura simulada, sin validez fiscal».
+- Rechaza como un PAC, con 422 `TIMBRADO_RECHAZADO` y `campos` del perfil: `razonSocial` si trae el régimen societario (`SA DE CV`, `S DE RL`…; CFDI 4.0 lo pide sin él) y `codigoPostal` si no existe (abajo de 01000).
+- El PDF (OpenPDF, `FacturaAppPdf`) trae emisor, receptor, conceptos, totales, forma y método de pago, folio fiscal y la leyenda «Factura simulada, sin validez fiscal» arriba y abajo.
+- El XML y el PDF se guardan en `archivos` (carpeta `facturas`; `archivos` acepta ahora `application/xml`) y la factura guarda sus claves.
+
+**Facturar** (`FacturasAppService`):
+
+- Automático: escucha `PagoConfirmado` (`@ApplicationModuleListener`) y, si el pago trae `perfil_fiscal_id` y no es de caja, timbra. Si el timbrado se rechaza, el pago queda sin factura y `facturable`; la app ofrece «Facturar».
+- `POST /pagos/{pagoId}/factura` con `{perfilFiscalId}`: 404 si el pago o el perfil son ajenos; 409 `PAGO_NO_FACTURABLE` si el pago no está `PAGADO` o se pagó en caja (se factura en la agencia); 409 `YA_FACTURADO`; 422 `TIMBRADO_RECHAZADO`; 201 con la `Factura`. Guarda el perfil en el pago.
+- Los dos caminos toman un candado por pago (`pg_advisory_xact_lock`) y `uq_factura_pago_app` es la red de seguridad. Al timbrar se avisa `factura.timbrada` con `facturaId` y `pagoId`.
+- `GET /facturas/{facturaId}/pdf` y `/xml` descargan con el token del cliente, como el ticket (`Content-Disposition` con el folio); lo ajeno es 404. Se decidió descargar por el endpoint y no con una URL firmada: la app ya descarga así el ticket y el pase, y no hace falta exponer la ruta de `archivos`.
+- `Pago` gana `factura` (la `Factura` o nulo) y `facturable` (pagado, no de caja y sin factura).
+
+**Derechos ARCO:** la factura conserva su copia del receptor y no se borra al cancelar la cuenta, como pide la ley; su `perfil_fiscal_id` pasa a nulo si se borra el perfil.
+
+Contrato 2.27.0 (`NuevoPago.billetera`, `Pago.factura` y `facturable`, `Factura`, `NuevaFactura`, `AvisoFacturaTimbrada`, `YA_FACTURADO`, `PAGO_NO_FACTURABLE` y `TIMBRADO_RECHAZADO`). Pruebas: `PagoAppTest`, `PagosAppServiceTest`, `ComprobanteTest`, `TimbradorSimuladoTest`, `FacturaAppPdfTest`, `FacturasAppServiceTest` y `FacturasAppIntegrationTest`.
+
 ### M09 · Documentos y vencimientos — H3 — módulo `documentos (nuevo)`
 
 Detalle: [`carecar-mobile/plan/modulos/M09-documentos-y-vencimientos.md`](https://github.com/lattice-systems/carecar-mobile/blob/main/plan/modulos/M09-documentos-y-vencimientos.md)
