@@ -366,6 +366,7 @@ La base empieza vacía. Para probar el ERP y el CRM en local hay un juego de dat
 - una clienta de la app CareCar con 2 vehículos, sus servicios en el expediente y el manual de uno de ellos,
 - una solicitud de valuación formal de esa clienta, si hay parámetros de toma a cuenta para su auto;
 - 5 clientes más de la app con 3 a 5 vehículos cada uno y contraseña `CareCar2026!`;
+- parámetros de la toma a cuenta (22 modelos × 16 años), documentos de todos los vehículos, el historial de citas pasadas, una cita próxima por cliente y encuestas de servicio, una respondida y otra pendiente (V2-T05.12);
 - datos de los módulos de la app v2 (V2-T05.10): órdenes en el taller en vivo, garantías y campañas, productos de la tienda con un apartado, pagos con tarjeta y con billetera con su factura simulada, puntos con un canje y un referido, gastos de la bitácora, una dirección y una prueba de manejo.
 
 Qué contiene y qué demuestra cada dato está en [`docs/datos-de-ejemplo.md`](docs/datos-de-ejemplo.md).
@@ -391,6 +392,25 @@ Se puede correr varias veces: lo que ya existe se deja igual y no se duplica. Si
 
 Solo necesita `bash` y `curl`; en Windows, corre en Git Bash. Para apuntar a otra API o usar otras contraseñas iniciales: `API=http://localhost:9090 ADMIN_CONTRASENA=... GERENTE_CONTRASENA=... ./scripts/cargar-datos-de-ejemplo.sh`.
 
+**Cargar los datos en una API real (Azure)** — V2-T05.12
+
+Una API con correo real (la de Azure) no manda los códigos de recuperación a Mailpit, así que la contraseña de los clientes de ejemplo se fija directo en la base y todo lo demás sigue pasando por la API. Hacen falta `bash`, `curl`, `psql` y, para generar la contraseña, Python con `bcrypt` (o `pgcrypto` en la base). Los valores salen de `lattice-systems/.secretos-azure.env`; no los copies a ningún archivo del repo.
+
+```bash
+export API=https://ca-agencia360-api.calmcliff-d0e7fc3b.eastus2.azurecontainerapps.io
+export ADMIN_USUARIO=... ADMIN_CONTRASENA=... GERENTE_USUARIO=... GERENTE_CONTRASENA=...
+export DB_URL=jdbc:postgresql://<host-de-neon>/neondb?sslmode=require DB_USERNAME=... DB_PASSWORD=...
+
+# 1. Crea lo del personal, los clientes y sus vehículos; omite lo que pide iniciar sesión como cliente
+SIN_MAILPIT=1 ./scripts/cargar-datos-de-ejemplo.sh
+# 2. Directo en la base: contraseñas de los clientes, parámetros de la toma a cuenta, documentos y citas pasadas
+CONFIRMAR=si ./scripts/completar-datos-de-ejemplo-en-base.sh
+# 3. Otra vez el paso 1: ya entran, así que se cargan sus citas próximas, pagos, puntos, encuestas y demás
+SIN_MANUALES=1 SIN_MAILPIT=1 ./scripts/cargar-datos-de-ejemplo.sh
+```
+
+`completar-datos-de-ejemplo-en-base.sh` pide `CONFIRMAR=si` fuera de localhost porque escribe en esa base, y manda el usuario y la contraseña por variables de entorno de `psql`, no por argumentos. `SIN_MANUALES=1` evita volver a subir ~35 MB de PDF. La API de Azure despierta en 20–40 s: la primera petición puede tardar. Todo es idempotente.
+
 **Usuarios**
 
 | Usuario | Contraseña | Rol | Entra a | Para probar |
@@ -410,7 +430,7 @@ Solo necesita `bash` y `curl`; en Windows, corre en Git Bash. Para apuntar a otr
 
 | Correo | Contraseña | Para probar |
 |---|---|---|
-| `laura.mendez@example.com` | La temporal que llega a Mailpit (`http://localhost:8025`) al cargar los datos; la app pide cambiarla al entrar | Login, primer ingreso, sus 2 vehículos (Nissan March 2026 y Sentra 2025) y el manual del March |
+| `laura.mendez@example.com` | En local, la temporal que llega a Mailpit (`http://localhost:8025`) al cargar los datos; la app pide cambiarla al entrar. En una API real (o tras `completar-datos-de-ejemplo-en-base.sh`), `CareCar2026!` | Login, primer ingreso, sus 2 vehículos (Nissan March 2026 y Sentra 2025) y el manual del March |
 
 Para subir el PDF real del manual del March en lugar del de ejemplo: `MANUAL_MARCH_PDF=/ruta/al/manual.pdf ./scripts/cargar-datos-de-ejemplo.sh`.
 

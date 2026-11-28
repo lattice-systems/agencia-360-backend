@@ -124,7 +124,7 @@ Qué se puede probar:
 
 ## Lo que no incluye todavía
 
-- **Laura Méndez** se queda sin órdenes, pagos ni puntos: su primer ingreso, con la contraseña temporal de Mailpit, es parte de la demostración. Sus citas y su valuación se cargan solo si ya entra con `LAURA_CONTRASENA`.
+- **Laura Méndez**: en local su primer ingreso, con la contraseña temporal de Mailpit, sigue siendo parte de la demostración. Sus citas, su valuación y su historia completa (V2-T05.12, abajo) se cargan solo si ya entra con `LAURA_CONTRASENA`: define su contraseña con `scripts/completar-datos-de-ejemplo-en-base.sh` o pásala si ya la cambió.
 - **Asistencia en el camino y traslados** (M11 y M17): los pide el cliente desde la app con su ubicación y el personal los avanza en vivo, así que se demuestran en el momento. El script deja una dirección guardada para pedir la recolección.
 - **Asistente** (M24): necesita la llave de IA por variable de entorno.
 - **Derechos ARCO y cancelación de cuenta** (M22): se piden desde la app al demostrarlos.
@@ -175,3 +175,28 @@ Notas:
 - La factura de Carlos y sus puntos se generan en segundo plano al confirmarse el pago; el script espera hasta 10 segundos a que lleguen los puntos para el canje. Si no llegaron, lo dice y el canje se hace al volver a correrlo.
 - Las órdenes de Carlos y Ana quedan entregadas: pasan a su historial con su ticket.
 - Para empezar de cero: `./scripts/limpiar-datos.sh`.
+
+## Sembrado completo (V2-T05.12)
+
+Lo agregan `scripts/completar-datos-de-ejemplo-en-base.sh` (con sus SQL) y el final de `scripts/cargar-datos-de-ejemplo.sh`. Sirve igual en local y en una API real; el procedimiento para Azure está en la sección 5.6 del README.
+
+| Qué | Cómo se carga | Qué deja |
+| --- | --- | --- |
+| Contraseña de los 6 clientes | `psql`: hash BCrypt de fuerza 10 en `cuenta_app` | `CareCar2026!` sin pedir cambio de contraseña. Necesario donde el correo no llega a Mailpit |
+| Parámetros de la toma a cuenta (`scripts/parametros-toma-cuenta-de-ejemplo.sql`) | `psql` (no hay API) | 352 filas: los 22 modelos Nissan del catálogo × 2012–2027. El valor base es el precio de catálogo de 2026 retrocedido 4 % por año; la depreciación y el factor de kilometraje cambian con el tipo de auto. Con ellos funcionan la calculadora, «Mis estimaciones» y la valuación formal |
+| Documentos (`scripts/documentos-de-ejemplo.sql`) | `psql` | Los de Diego (arriba) y, para cada vehículo de los 6 clientes con placas: tarjeta de circulación vigente; póliza vigente, por vencer o vencida según el id (o ninguna); verificación vigente, por vencer o vencida; tenencia en los de id par; factura de la agencia en los de 2023 en adelante. Los cuatro estados se ven en todos los clientes |
+| Citas pasadas (`scripts/citas-pasadas-de-ejemplo.sql`) | `psql` | 43 citas con fechas relativas a hoy, sin domingos: una atendida por vehículo (hace 160 días), otra en los de id par (hace 45), una que no se presentó en los de id múltiplo de 5 (hace 80) y una cancelada en los de id múltiplo de 3 (hace 25). La API no agenda en el pasado ni marca una cita como atendida |
+| Cita próxima de cada cliente | API de la app | Carlos (Versa, mantenimiento), Ana (X-Trail, revisión), Luis (Frontier PRO-4X, mantenimiento), Sofía (Sentra, revisión) y Diego (Sentra 2020, reparación), en los próximos 1 a 9 días. «Mis citas» y la tarjeta de próxima cita del inicio ya tienen qué mostrar |
+| Encuestas de servicio (M15) | API de la app | Ana respondió la de su orden entregada (NPS 9, comentario) y la de Carlos queda pendiente para que la app se la ofrezca |
+| Valuación de Laura | API de la app | Con los parámetros anteriores deja de omitirse: Laura solicita la valuación de su March |
+| Historia completa de Laura | API de la app | Cita próxima del March; orden 48 del Sentra entregada y pagada con la Visa de prueba (sin factura), que le deja puntos y una encuesta pendiente; y orden del March en el taller en vivo (en reparación, con las llantas en amarillo). Así la cuenta más antigua también muestra Inicio con taller y cita, pagos, lealtad y encuestas |
+
+Para cargarlo en una API real:
+
+1. `SIN_MAILPIT=1 ./scripts/cargar-datos-de-ejemplo.sh`
+2. `CONFIRMAR=si ./scripts/completar-datos-de-ejemplo-en-base.sh`
+3. `SIN_MANUALES=1 SIN_MAILPIT=1 ./scripts/cargar-datos-de-ejemplo.sh`
+
+Con `SIN_MAILPIT=1` la contraseña de prueba de un cliente nuevo no se define en el paso 1: sus pasos como cliente se omiten y el script lo dice. En el paso 2 ya existe y en el 3 se cargan.
+
+Cuentas de la app para probar (contraseña `CareCar2026!`): `laura.mendez@example.com` (March 2026 y Sentra 2025: orden en el taller, orden pagada, cita próxima, puntos, encuesta pendiente y valuación), `carlos.ramirez@example.com` (orden pagada con factura y canje de puntos, encuesta pendiente), `ana.torres@example.com` (pago con billetera y datos fiscales que el timbrado rechaza), `luis.hernandez@example.com` (5 vehículos), `sofia.morales@example.com` (auto en el taller con un adicional por aprobar, apartado en la tienda, gastos y dirección) y `diego.castillo@example.com` (orden lista para entrega, por pagar, y garantías).

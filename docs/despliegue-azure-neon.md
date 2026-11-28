@@ -125,7 +125,9 @@ Hace falta `docker login ghcr.io` con un token con `write:packages` (cierra sesi
 
 ## Datos
 
-La base de Neon tiene los **datos de ejemplo** (`scripts/cargar-datos-de-ejemplo.sh`, sección 5.6 del README): clientes con vehículos y servicios, catálogo, y la clienta de la app `laura.mendez@example.com` con sus citas. Las contraseñas de esos usuarios de ejemplo son las del README (públicas); el administrador y el gerente iniciales tienen contraseñas aleatorias.
+La base de Neon tiene los **datos de ejemplo** completos (V2-T05.12): personal de ejemplo, clientes de la app con 22 vehículos y sus servicios, catálogo, parámetros de la toma a cuenta, documentos, citas pasadas y próximas, y los módulos de la app v2 (taller en vivo, pagos con factura simulada, lealtad, tienda, bitácora, garantías y campañas, encuestas). Los clientes de la app entran con `CareCar2026!` (públicas, como las demás de ejemplo); el administrador y el gerente iniciales tienen contraseñas aleatorias.
+
+Se cargan en tres pasos (README, sección 5.6): el script por la API, `scripts/completar-datos-de-ejemplo-en-base.sh` directo en Neon (contraseñas, parámetros, documentos y citas pasadas, que la API no puede crear) y otra vez el script por la API. El correo de Azure sale por Gmail y no llega a Mailpit, así que el código de recuperación de un cliente de ejemplo no se puede leer: por eso la contraseña se fija en la base. Repetirlo no duplica nada.
 
 ## Limitaciones conocidas
 

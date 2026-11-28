@@ -467,6 +467,11 @@ fi
 # Mailpit, así que se restablece con el código de 6 dígitos del correo (el mismo
 # flujo "Olvidé mi contraseña" de la app). Todo por la API; no duplica al repetirse.
 MAILPIT="${MAILPIT:-http://localhost:8025}"
+# SIN_MAILPIT=1 es para una API con correo real (la de Azure): ahí el código de
+# recuperación sale por Gmail a direcciones @example.com que nadie lee. En ese
+# modo la contraseña de los clientes se fija aparte con
+# scripts/fijar-contrasenas-de-ejemplo.sh y se vuelve a correr este script.
+SIN_MAILPIT="${SIN_MAILPIT:-}"
 CLIENTES_CONTRASENA="${CLIENTES_CONTRASENA:-CareCar2026!}"
 SERIE_VIN=90000
 
@@ -556,8 +561,12 @@ crear_cliente_con_vehiculos() {
   esac
   pedir POST /api/v1/app/auth/login "" "{\"correo\":\"$correo\",\"contrasena\":\"$CLIENTES_CONTRASENA\"}"
   if [ "$CODIGO" != 200 ]; then
-    restablecer_con_mailpit "$correo"
-    echo "              contraseña de prueba definida con el código de Mailpit"
+    if [ -n "$SIN_MAILPIT" ]; then
+      echo "              sin contraseña de prueba todavía: scripts/fijar-contrasenas-de-ejemplo.sh"
+    else
+      restablecer_con_mailpit "$correo"
+      echo "              contraseña de prueba definida con el código de Mailpit"
+    fi
   fi
 }
 
@@ -628,7 +637,11 @@ if [ -z "${CHROME:-}" ] && command -v cygpath >/dev/null 2>&1; then
   done
 fi
 
-if [ ! -f "$MANUALES_DIR/indice.txt" ]; then
+# SIN_MANUALES=1 omite este paso (la segunda pasada de una API real: los PDF son
+# ~35 MB y ya se subieron).
+if [ -n "${SIN_MANUALES:-}" ]; then
+  echo "  omitidos    SIN_MANUALES=1"
+elif [ ! -f "$MANUALES_DIR/indice.txt" ]; then
   if PYTHON=$(python_disponible); then
     $PYTHON "$(ruta_para_curl "$DIR_SCRIPT/generar-manuales.py")" --salida "$(ruta_para_curl "$MANUALES_DIR")" >/dev/null ||
       echo "  omitidos    no se pudieron generar los manuales (necesita Google Chrome; pásalo con CHROME=...)"
@@ -637,7 +650,7 @@ if [ ! -f "$MANUALES_DIR/indice.txt" ]; then
   fi
 fi
 SUBIDOS=0
-[ -f "$MANUALES_DIR/indice.txt" ] && while IFS='|' read -r modelo anio archivo; do
+[ -z "${SIN_MANUALES:-}" ] && [ -f "$MANUALES_DIR/indice.txt" ] && while IFS='|' read -r modelo anio archivo; do
   [ -n "$modelo" ] || continue
   if ! CODIGO=$(curl -sS -o "$RESPUESTA_TMP" -w '%{http_code}' -X POST "$API/api/v1/manuales" \
     -H "Authorization: Bearer $TOKEN_GERENTE" -F marca=Nissan -F "modelo=$modelo" -F "anio=$anio" \
@@ -1185,4 +1198,128 @@ else
 fi
 
 echo
+# ── Citas próximas y encuestas de los clientes de ejemplo ──
+# Mis citas de cada cliente tiene su próxima cita, agendada por la API de la app
+# como lo hace el celular (la agenda queda con franjas ocupadas), y Servicio de
+# CareCar tiene encuestas respondidas y pendientes. El historial de citas pasadas
+# va aparte, directo en la base (scripts/citas-pasadas-de-ejemplo.sql), porque la
+# API no agenda en el pasado. Si un cliente ya no entra con CLIENTES_CONTRASENA,
+# se omite. No duplica al repetirse.
+
+# Agenda una cita en los próximos días si el cliente aún no tiene una
+# confirmada. $1 nombre, $2 correo, $3 placas, $4 días desde hoy a partir de los
+# que se busca cupo, $5 posición del horario (1 = el primero con cupo), $6 motivo.
+agendar_proxima_cita() {
+  local token vehiculo hueco fecha franja
+  token=$(token_de_la_app "$2" "$CLIENTES_CONTRASENA")
+  if [ -z "$token" ]; then
+    echo "  omitida     $1 no inicia sesión con CLIENTES_CONTRASENA"
+    return 0
+  fi
+  pedir GET /api/v1/app/citas "$token"
+  [ "$CODIGO" = 200 ] || fallar "listar las citas de $1"
+  if grep -q '"estado":"CONFIRMADA"' <<<"$RESPUESTA"; then
+    echo "  ya tenía    una cita confirmada ($1)"
+    return 0
+  fi
+  pedir GET /api/v1/app/vehiculos "$token"
+  [ "$CODIGO" = 200 ] || fallar "listar los vehículos de $1"
+  vehiculo=$(vehiculo_por_placas "$3")
+  [ -n "$vehiculo" ] || fallar "encontrar el vehículo $3 de $1"
+  pedir GET "/api/v1/app/agenda/disponibilidad?desde=$(fecha_en_dias "$4")&hasta=$(fecha_en_dias $(($4 + 6)))" "$token"
+  [ "$CODIGO" = 200 ] || fallar "ver la disponibilidad para $1"
+  hueco=$(printf '%s' "$RESPUESTA" | grep -o '"fecha":"[^"]*","franjaId":[0-9]*' | sed -n "${5}p")
+  [ -n "$hueco" ] || fallar "encontrar un horario con cupo para $1"
+  fecha=$(printf '%s' "$hueco" | sed 's/"fecha":"\([^"]*\)".*/\1/')
+  franja=$(printf '%s' "$hueco" | sed 's/.*"franjaId":\([0-9]*\)/\1/')
+  pedir POST /api/v1/app/citas "$token" \
+    "{\"vehiculoId\":$vehiculo,\"franjaId\":$franja,\"fecha\":\"$fecha\",\"motivo\":\"$6\"}"
+  [ "$CODIGO" = 201 ] || fallar "agendar la cita de $1"
+  echo "  confirmada  $3 el $fecha (franja $franja, $6)"
+}
+
+echo "Citas próximas de los clientes de ejemplo (app):"
+agendar_proxima_cita "Carlos Ramírez" carlos.ramirez@example.com GTO-715-C 2 1 mantenimiento
+agendar_proxima_cita "Ana Torres" ana.torres@example.com MXP-27-83 3 3 revision
+agendar_proxima_cita "Luis Hernández" luis.hernandez@example.com GTO-603-H 4 2 mantenimiento
+agendar_proxima_cita "Sofía Morales" sofia.morales@example.com GTO-662-N 1 4 revision
+agendar_proxima_cita "Diego Castillo" diego.castillo@example.com GTO-776-V 5 2 reparacion
+
+# Ana responde la encuesta de su orden entregada (promotora); la de Carlos queda
+# pendiente para que la app la ofrezca. Responder la deja en el resumen de CareCar.
+echo "Encuestas de servicio (app):"
+TOKEN_ANA=$(token_de_la_app ana.torres@example.com "$CLIENTES_CONTRASENA")
+if [ -z "$TOKEN_ANA" ]; then
+  echo "  omitidas    Ana no inicia sesión con CLIENTES_CONTRASENA"
+else
+  pedir GET /api/v1/app/encuestas/pendientes "$TOKEN_ANA"
+  [ "$CODIGO" = 200 ] || fallar "ver las encuestas pendientes de Ana"
+  ORDEN_ENCUESTA=$(printf '%s' "$RESPUESTA" | sed -n 's/.*"ordenId":\([0-9][0-9]*\).*/\1/p')
+  if [ -n "$ORDEN_ENCUESTA" ]; then
+    pedir POST "/api/v1/app/encuestas/$ORDEN_ENCUESTA/responder" "$TOKEN_ANA" \
+      '{"nps":9,"tiempo":5,"trato":5,"limpieza":4,"asesor":5,"comentario":"Rápido y muy amables; me avisaron cada avance."}'
+    [ "$CODIGO" = 204 ] || fallar "responder la encuesta de Ana"
+    echo "  respondida  orden $ORDEN_ENCUESTA de Ana (NPS 9)"
+  else
+    echo "  ya estaba   la encuesta de Ana respondida"
+  fi
+fi
+TOKEN_CARLOS=$(token_de_la_app carlos.ramirez@example.com "$CLIENTES_CONTRASENA")
+if [ -n "$TOKEN_CARLOS" ]; then
+  pedir GET /api/v1/app/encuestas/pendientes "$TOKEN_CARLOS"
+  if [ "$CODIGO" = 200 ] && [ "$RESPUESTA" != "[]" ]; then
+    echo "  pendiente   la encuesta de Carlos (la app se la ofrece)"
+  fi
+fi
+
+# Laura Méndez, la primera clienta de ejemplo, también tiene su historia completa
+# (antes solo tenía vehículos, servicios, citas y la valuación): una cita próxima,
+# el Sentra entregado y pagado (puntos y una encuesta pendiente) y el March en el
+# taller en vivo con un punto de la inspección en amarillo. Todo por la API.
+echo "Laura Méndez: cita próxima, orden entregada y orden en el taller (app):"
+if [ -z "$TOKEN_LAURA" ]; then
+  echo "  omitida     Laura no inicia sesión con LAURA_CONTRASENA"
+else
+  agendar_proxima_cita "Laura Méndez" "$CLIENTE_APP_CORREO" GTO-123-A 2 2 mantenimiento
+  pedir GET /api/v1/app/pagos "$TOKEN_LAURA"
+  [ "$CODIGO" = 200 ] || fallar "ver los pagos de Laura"
+  if grep -q '"totalElementos":0' <<<"$RESPUESTA"; then
+    pedir GET /api/v1/app/vehiculos "$TOKEN_LAURA"
+    [ "$CODIGO" = 200 ] || fallar "listar los vehículos de Laura"
+    ID_SENTRA_LAURA=$(vehiculo_por_placas GTO-456-B)
+    ID_MARCH_LAURA=$(vehiculo_por_placas GTO-123-A)
+    [ -n "$ID_SENTRA_LAURA" ] && [ -n "$ID_MARCH_LAURA" ] || fallar "encontrar los vehículos de Laura"
+    abrir_orden "$TOKEN_LAURA" "$ID_SENTRA_LAURA" 14900
+    if [ -n "$ORDEN_ID" ]; then
+      agregar_renglon "$ORDEN_ID" MANO_DE_OBRA "Servicio de 15,000 km" 1 1950.00
+      agregar_renglon "$ORDEN_ID" REFACCION "Filtro de aceite" 1 149.00
+      agregar_renglon "$ORDEN_ID" REFACCION "Aceite sintético 5W-30 (litro)" 4 239.00
+      avanzar_orden "$ORDEN_ID" DIAGNOSTICO "Revisamos niveles, frenos y suspensión."
+      revisar_punto "$ORDEN_ID" "Frenos" VERDE "Balatas al 85 %."
+      avanzar_orden "$ORDEN_ID" EN_REPARACION "Cambiamos aceite y filtro."
+      avanzar_orden "$ORDEN_ID" LISTO_PARA_ENTREGA "Tu Sentra está listo."
+      pagar_orden "$TOKEN_LAURA" "$ORDEN_ID" \
+        '{"tarjeta":{"token":"tok_sim_visa","mesVence":12,"anioVence":2030},"guardarTarjeta":false,"perfilFiscalId":null}'
+      avanzar_orden "$ORDEN_ID" ENTREGADO "Gracias por tu visita."
+      echo "  pagada      orden $ORDEN_ID del Sentra GTO-456-B con la Visa de prueba (sin factura)"
+    else
+      echo "  ya existía  una orden abierta del Sentra GTO-456-B"
+    fi
+    abrir_orden "$TOKEN_LAURA" "$ID_MARCH_LAURA" 10300
+    if [ -n "$ORDEN_ID" ]; then
+      agregar_renglon "$ORDEN_ID" MANO_DE_OBRA "Servicio de 10,000 km" 1 1850.00
+      agregar_renglon "$ORDEN_ID" REFACCION "Filtro de aceite" 1 149.00
+      avanzar_orden "$ORDEN_ID" DIAGNOSTICO "Revisamos niveles, frenos y llantas."
+      revisar_punto "$ORDEN_ID" "Frenos" VERDE "Balatas en buen estado."
+      revisar_punto "$ORDEN_ID" "Llantas" AMARILLO "Desgaste desigual: conviene alinear y balancear."
+      avanzar_orden "$ORDEN_ID" EN_REPARACION "Estamos cambiando aceite y filtro."
+      echo "  en taller   orden $ORDEN_ID del March GTO-123-A, con una llanta por revisar"
+    else
+      echo "  ya existía  una orden abierta del March GTO-123-A"
+    fi
+  else
+    echo "  ya existían los pagos de Laura"
+  fi
+fi
+
 echo "Listo. Qué demuestra cada dato: docs/datos-de-ejemplo.md. Contraseñas: README, sección 5.6."

@@ -56,6 +56,7 @@ docker compose up -d                                          # PostgreSQL y Mai
 ./mvnw spotless:apply                                         # corrige formato (Eclipse formatter)
 ./mvnw checkstyle:check                                       # reglas de estilo (config/checkstyle/checkstyle.xml, líneas ≤140)
 ./scripts/cargar-datos-de-ejemplo.sh                          # datos de ejemplo vía API (requiere API corriendo con ADMIN_INICIAL_*/GERENTE_INICIAL_*)
+./scripts/completar-datos-de-ejemplo-en-base.sh                # contraseñas, parámetros de toma a cuenta, documentos y citas pasadas directo en la base (API real: ver README 5.6)
 ./scripts/subir-manuales.sh                                   # solo los manuales de ejemplo (GERENTE_USUARIO/GERENTE_CONTRASENA por entorno)
 ./scripts/limpiar-datos.sh                                    # borra datos de ejemplo
 ```

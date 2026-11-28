@@ -1483,6 +1483,7 @@ Detalle: [`carecar-mobile/plan/modulos/T05-contrato-api-v2.md`](https://github.c
 | V2-T05.08 | Como equipo queremos eventos en vivo para la app | SSE para órdenes y WebSocket para chat detrás de JWT | Ricardo |
 | V2-T05.09 | Como equipo queremos almacenamiento de archivos para evidencias y documentos | Interfaz de almacenamiento con implementación local y en la nube · URLs firmadas de corta vida | Ricardo |
 | V2-T05.10 | Como equipo queremos datos de ejemplo para cada módulo nuevo | `scripts/cargar-datos-de-ejemplo.sh` extendido | Ricardo |
+| V2-T05.12 | Como equipo queremos datos de ejemplo completos también en la API real | Contraseña de los clientes, parámetros de la toma a cuenta, documentos y citas pasadas directo en la base (`scripts/completar-datos-de-ejemplo-en-base.sh`) · citas próximas y encuestas por la API · `SIN_MAILPIT` y `SIN_MANUALES` en el script principal · procedimiento para Azure en el README 5.6 | Daniel |
 | V2-T05.11 | Como equipo queremos desplegar la API en Azure automáticamente en cada merge a `main` | Workflow que construye la imagen en formato OCI, la publica en GHCR y actualiza `ca-agencia360-api` · entrada a Azure por OIDC con una identidad administrada (Contributor solo sobre la app; variables de repositorio, sin secretos) · verificación de `/actuator/health` tras desplegar · ver `docs/despliegue-azure-neon.md` · **Hecha** (`.github/workflows/despliegue.yml`) | Daniel |
 
 #### Diseño de V2-T05.01: módulos de Modulith de la v2
