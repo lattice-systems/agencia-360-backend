@@ -212,7 +212,7 @@ Cuentas de la app para probar (contraseña `CareCar2026!`): `laura.mendez@exampl
 
 | Función de la app | Qué tiene Laura |
 | --- | --- |
-| Garaje | 3 vehículos: Nissan March 2026 (`GTO-123-A`), Sentra 2025 (`GTO-456-B`) y Versa 2023 (`GTO-777-L`), con foto, ficha técnica y manual |
+| Garaje | 3 vehículos: Nissan March 2026 (`GTO-123-A`), Sentra 2025 (`GTO-456-B`) y Versa 2024 (`GTO-777-L`), con foto, ficha técnica y manual |
 | Inicio | Orden en el taller (March), próxima cita y los autos |
 | Taller en vivo | **March** en reparación con una llanta en amarillo y **Sentra** esperando que apruebe un trabajo adicional (balatas delanteras, $1,540) con frenos en rojo en la inspección; aprobar o rechazar con firma se puede hacer en la demo |
 | Historial de servicios | Servicios del expediente y las órdenes entregadas, con ticket en PDF |

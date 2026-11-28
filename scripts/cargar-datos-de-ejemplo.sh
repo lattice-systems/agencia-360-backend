@@ -1386,7 +1386,7 @@ else
   # haya cargado antes (y repetirlo no cree otro).
   SERIE_VIN=90500
   crear_cliente_con_vehiculos "Laura Méndez" "$CLIENTE_APP_CORREO" "477 123 4567" \
-    < <(printf '%s\n' "Versa|Advance|2023|GTO-777-L|21500|2")
+    < <(printf '%s\n' "Versa|Advance|2024|GTO-777-L|21500|2")
   pedir GET /api/v1/app/vehiculos "$TOKEN_LAURA"
   [ "$CODIGO" = 200 ] || fallar "listar los vehículos de Laura"
   ID_VERSA_LAURA=$(vehiculo_por_placas GTO-777-L || true)
