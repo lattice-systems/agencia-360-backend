@@ -123,6 +123,10 @@ az containerapp update -n ca-agencia360-api -g rg-agencia360 --image ghcr.io/lat
 
 Hace falta `docker login ghcr.io` con un token con `write:packages` (cierra sesión con `docker logout ghcr.io` al terminar). Flyway aplica las migraciones nuevas al arrancar.
 
+## URLs https detrás del balanceador
+
+Azure Container Apps termina el TLS y le pasa la petición a la API por http. En producción, `server.forward-headers-strategy=framework` (`application-prod.properties`) hace que la API respete `X-Forwarded-Proto` y arme con `https://` las URL que construye con la dirección de la petición: manuales, tickets y documentos firmados. Sin eso salían con `http://` y la app de producción, que no baja nada en claro, las descartaba y mostraba «Manual no disponible». Lo vigila `ConfiguracionProduccionTest`.
+
 ## Datos
 
 La base de Neon tiene los **datos de ejemplo** completos (V2-T05.12): personal de ejemplo, clientes de la app con 22 vehículos y sus servicios, catálogo, parámetros de la toma a cuenta, documentos, citas pasadas y próximas, y los módulos de la app v2 (taller en vivo, pagos con factura simulada, lealtad, tienda, bitácora, garantías y campañas, encuestas). Los clientes de la app entran con `CareCar2026!` (públicas, como las demás de ejemplo); el administrador y el gerente iniciales tienen contraseñas aleatorias.
