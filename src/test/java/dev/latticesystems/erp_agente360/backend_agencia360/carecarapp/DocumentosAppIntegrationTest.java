@@ -10,6 +10,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import dev.latticesystems.erp_agente360.backend_agencia360.archivos.AlmacenArchivos;
+import dev.latticesystems.erp_agente360.backend_agencia360.archivos.application.ArchivosService;
 import dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.application.CuentasAppService;
 import dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.application.EnvioCorreos;
 import dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.domain.DocumentoVehiculo;
@@ -65,7 +66,7 @@ class DocumentosAppIntegrationTest extends AbstractIntegrationTest {
 	private EnvioCorreos envioCorreos;
 
 	@MockitoBean
-	private AlmacenArchivos archivos;
+	private ArchivosService archivos;
 
 	private String token;
 	private Long vehiculoId;
