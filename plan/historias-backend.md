@@ -1632,3 +1632,7 @@ La migración V65 crea las preguntas y los reportes. La API entrega las pregunta
 #### Archivos de documentos (V2-M09.02 y V2-M09.03)
 
 La foto JPEG o el PDF de agencia se adjuntan a la tabla integrada de V2-M09.01. Se conserva el listado con estado y se autoriza al propietario antes de emitir la URL temporal de descarga. La agencia puede publicar factura y póliza de garantía por la ruta de personal.
+
+#### Encuestas de servicio y agregados NPS (V2-M15)
+
+V66 registra una respuesta por orden entregada y una tarea por detractor que solicita contacto. Los agregados del endpoint de personal alimentan O7. La entrega real de las invitaciones por push y la bandeja de respuestas se validan por separado.

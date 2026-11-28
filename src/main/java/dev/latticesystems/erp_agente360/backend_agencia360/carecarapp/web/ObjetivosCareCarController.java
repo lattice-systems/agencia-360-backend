@@ -1,5 +1,6 @@
 package dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.web;
 
+import dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.application.EncuestasAppService;
 import dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.infrastructure.AnaliticaAppJdbc;
 import dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.infrastructure.AnaliticaAppJdbc.Diagnostico;
 import dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.infrastructure.AnaliticaAppJdbc.Embudo;
@@ -14,9 +15,11 @@ import org.springframework.web.bind.annotation.RestController;
 public class ObjetivosCareCarController {
 
 	private final AnaliticaAppJdbc datos;
+	private final EncuestasAppService encuestas;
 
-	public ObjetivosCareCarController(AnaliticaAppJdbc datos) {
+	public ObjetivosCareCarController(AnaliticaAppJdbc datos, EncuestasAppService encuestas) {
 		this.datos = datos;
+		this.encuestas = encuestas;
 	}
 
 	@GetMapping(value = "/api/v1/analitica/objetivos", produces = MediaType.TEXT_HTML_VALUE)
@@ -24,17 +27,21 @@ public class ObjetivosCareCarController {
 	public ResponseEntity<String> objetivos() {
 		Embudo embudo = datos.embudo();
 		Diagnostico diagnostico = datos.diagnostico();
-		String citas = embudo.vistos() == 0 ? "Sin eventos consentidos" : """
-				Disponibilidad: %d · Franja: %d · Confirmadas: %d · Atendidas: %d
-				""".formatted(embudo.vistos(), embudo.elegidos(), embudo.confirmados(), embudo.atendidos());
+		String citas = embudo.vistos() == 0
+				? "Sin eventos consentidos"
+				: """
+						Disponibilidad: %d · Franja: %d · Confirmadas: %d · Atendidas: %d
+						""".replace("INDICADORES_ENCUESTA", resumenEncuestas()).formatted(embudo.vistos(),
+						embudo.elegidos(), embudo.confirmados(), embudo.atendidos());
 		long muestras = diagnostico.muestras();
 		String tiempos = muestras == 0
 				? "Sin muestras de rendimiento"
 				: """
 						Promedio de arranque: %d ms · Primera pantalla útil: %d ms ·
 						Cuadros perdidos estimados: %d (%d medidos)
-						""".formatted(diagnostico.arranque() / muestras, diagnostico.primera() / muestras,
-						diagnostico.perdidos(), diagnostico.cuadros());
+						""".replace("INDICADORES_ENCUESTA", resumenEncuestas()).formatted(
+						diagnostico.arranque() / muestras, diagnostico.primera() / muestras, diagnostico.perdidos(),
+						diagnostico.cuadros());
 		long crashesAndroid = diagnostico.crashesAndroid();
 		String diagnosticos = diagnostico.flutter() == 0 && diagnostico.asincronos() == 0 && crashesAndroid == 0
 				? "Sin reportes recibidos"
@@ -57,7 +64,7 @@ public class ObjetivosCareCarController {
 				<tr><th scope="row">O5 · Ingresos</th>
 				<td>Solicitudes de estreno en la app: %d. Pagos y pedidos: sin medición</td></tr>
 				<tr><th scope="row">O6 · Expediente</th><td>Documentos y avisos: sin medición</td></tr>
-				<tr><th scope="row">O7 · Satisfacción</th><td>NPS y respuesta de agencia: sin medición</td></tr>
+				<tr><th scope="row">O7 · Satisfacción</th><td>INDICADORES_ENCUESTA</td></tr>
 				<tr><th scope="row">O8 · Calidad</th>
 				<td>%s<br>%s<br>Consultar el CI y su informe de cobertura</td></tr>
 				<tr><th scope="row">O9 · Accesibilidad</th>
@@ -65,8 +72,23 @@ public class ObjetivosCareCarController {
 				<tr><th scope="row">O10 · Entrega</th>
 				<td>Consultar los PR integrados y la revisión de cada hito</td></tr>
 				</tbody></table></main></body></html>
-				""".formatted(citas, datos.ordenesEnVivo(), datos.solicitudesEstreno(), diagnosticos, tiempos);
+				""".replace("INDICADORES_ENCUESTA", resumenEncuestas()).formatted(citas, datos.ordenesEnVivo(),
+				datos.solicitudesEstreno(), diagnosticos, tiempos);
 		return ResponseEntity.ok().cacheControl(CacheControl.noStore())
 				.contentType(MediaType.parseMediaType("text/html;charset=UTF-8")).body(panel);
 	}
+	private String resumenEncuestas() {
+		var hasta = java.time.LocalDate.now(java.time.ZoneId.of("America/Mexico_City"));
+		var desde = hasta.minusDays(29);
+		var agregados = encuestas.agregados(desde, hasta);
+		long total = agregados.stream().mapToLong(EncuestasAppService.Agregado::total).sum();
+		long promotores = agregados.stream().mapToLong(EncuestasAppService.Agregado::promotores).sum();
+		long detractores = agregados.stream().mapToLong(EncuestasAppService.Agregado::detractores).sum();
+		String nps = total == 0
+				? "Sin encuestas respondidas"
+				: "NPS de los últimos 30 días: " + Math.round(100.0 * (promotores - detractores) / total) + " (" + total
+						+ " encuestas)";
+		return nps + "<br>Respuestas registradas por la agencia: " + encuestas.respuestasRegistradas(desde, hasta);
+	}
+
 }

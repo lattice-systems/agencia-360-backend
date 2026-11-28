@@ -1,6 +1,7 @@
 package dev.latticesystems.erp_agente360.backend_agencia360.carecarapp;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.startsWith;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
@@ -145,6 +146,90 @@ class TallerAppIntegrationTest extends AbstractIntegrationTest {
 				.andExpect(jsonPath("$.length()").value(0));
 		avanzar(ordenId, "ENTREGADO").andExpect(status().isConflict())
 				.andExpect(jsonPath("$.codigo").value("ORDEN_CERRADA"));
+	}
+
+	@Test
+	void laEncuestaSeOfreceAlEntregarLaOrdenYSeRespondeUnaSolaVez() throws Exception {
+		Long ordenId = abrir();
+		String pendientes = "/api/v1/app/encuestas/pendientes";
+		String posponer = "/api/v1/app/encuestas/{id}/posponer";
+		String responder = "/api/v1/app/encuestas/{id}/responder";
+		String calificacion = """
+				{"nps":6,"tiempo":5,"trato":5,"limpieza":5,"asesor":5}
+				""";
+
+		comoAna(get(pendientes)).andExpect(status().isOk()).andExpect(jsonPath("$.length()").value(0));
+		avanzar(ordenId, "LISTO_PARA_ENTREGA").andExpect(status().isOk());
+		comoAna(get(pendientes)).andExpect(status().isOk()).andExpect(jsonPath("$.length()").value(0));
+		comoAna(post(posponer, ordenId)).andExpect(status().isNotFound());
+		comoAna(post(responder, ordenId).contentType(MediaType.APPLICATION_JSON).content(calificacion))
+				.andExpect(status().isNotFound());
+
+		avanzar(ordenId, "ENTREGADO").andExpect(status().isOk());
+		comoAna(get("/api/v1/app/vehiculos/{id}/servicios", marchDeAna)).andExpect(status().isOk())
+				.andExpect(jsonPath("$.contenido[0].id").value(ordenId))
+				.andExpect(jsonPath("$.contenido[0].estatus").value("ENTREGADO"));
+		comoAna(get("/api/v1/app/servicios/{id}/ticket", ordenId)).andExpect(status().isOk())
+				.andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_PDF));
+		comoAna(get(pendientes)).andExpect(status().isOk()).andExpect(jsonPath("$.length()").value(1))
+				.andExpect(jsonPath("$[0].ordenId").value(ordenId));
+		comoBruno(get(pendientes)).andExpect(status().isOk()).andExpect(jsonPath("$.length()").value(0));
+		comoBruno(post(posponer, ordenId)).andExpect(status().isNotFound());
+		comoAna(post(posponer, ordenId)).andExpect(status().isNoContent());
+		comoAna(get(pendientes)).andExpect(status().isOk()).andExpect(jsonPath("$.length()").value(0));
+
+		jdbcTemplate.update("update encuesta_servicio set pospuesta_hasta = now() - interval '1 second' "
+				+ "where orden_servicio_id = ?", ordenId);
+		comoAna(get(pendientes)).andExpect(status().isOk()).andExpect(jsonPath("$.length()").value(1));
+		comoAna(post(responder, ordenId).contentType(MediaType.APPLICATION_JSON).content(calificacion))
+				.andExpect(status().isNoContent());
+		comoAna(get(pendientes)).andExpect(status().isOk()).andExpect(jsonPath("$.length()").value(0));
+		comoAna(post(responder, ordenId).contentType(MediaType.APPLICATION_JSON).content(calificacion))
+				.andExpect(status().isConflict());
+
+		String contacto = "/api/v1/app/encuestas/{id}/contacto";
+		comoAna(post(contacto, ordenId)).andExpect(status().isNoContent());
+		comoAna(post(contacto, ordenId)).andExpect(status().isNoContent());
+		String tareas = "/api/v1/servicio/encuestas/contactos";
+		String pendientesDeAtender = comoServicio(get(tareas)).andExpect(status().isOk())
+				.andExpect(jsonPath("$.length()").value(1)).andExpect(jsonPath("$[0].ordenId").value(ordenId))
+				.andReturn().getResponse().getContentAsString();
+		Number tarea = JsonPath.read(pendientesDeAtender, "$[0].id");
+		String otroAsesor = jwtService.generateToken(999L, "otro-asesor", List.of(Role.SERVICIO));
+		String administrador = jwtService.generateToken(998L, "admin", List.of(Role.ADMINISTRADOR));
+		String respuesta = tareas + "/{id}/respuesta";
+		String mensaje = "{\"texto\":\"Revisaremos su caso\"}";
+		comoAna(post(respuesta, tarea).contentType(MediaType.APPLICATION_JSON).content(mensaje))
+				.andExpect(status().isForbidden());
+		mockMvc.perform(post(respuesta, tarea).header(HttpHeaders.AUTHORIZATION, "Bearer " + otroAsesor)
+				.contentType(MediaType.APPLICATION_JSON).content(mensaje)).andExpect(status().isNotFound());
+		mockMvc.perform(get(tareas).header(HttpHeaders.AUTHORIZATION, "Bearer " + administrador))
+				.andExpect(status().isOk()).andExpect(jsonPath("$[0].id").value(tarea.longValue()));
+		mockMvc.perform(post(respuesta, tarea).header(HttpHeaders.AUTHORIZATION, "Bearer " + administrador)
+				.contentType(MediaType.APPLICATION_JSON).content(mensaje)).andExpect(status().isNoContent());
+		comoServicio(post(respuesta, tarea).contentType(MediaType.APPLICATION_JSON)
+				.content("{\"texto\":\"Otra respuesta\"}")).andExpect(status().isNotFound());
+		assertThat(jdbcTemplate.queryForObject(
+				"select respuesta from tarea_contacto_encuesta where id = ? and cerrada_en is not null", String.class,
+				tarea.longValue())).isEqualTo("Revisaremos su caso");
+		comoServicio(get(tareas)).andExpect(status().isOk()).andExpect(jsonPath("$.length()").value(0));
+
+		String nps = "/api/v1/analitica/nps";
+		String autorizacion = "Bearer " + administrador;
+		String dia = hoy().toString();
+		mockMvc.perform(
+				get(nps).param("desde", dia).param("hasta", dia).header(HttpHeaders.AUTHORIZATION, autorizacion))
+				.andExpect(status().isOk()).andExpect(jsonPath("$.length()").value(1))
+				.andExpect(jsonPath("$[0].asesorId").value(tecnico.id())).andExpect(jsonPath("$[0].total").value(1))
+				.andExpect(jsonPath("$[0].detractores").value(1)).andExpect(jsonPath("$[0].nps").value(-100));
+		String ayer = hoy().minusDays(1).toString();
+		mockMvc.perform(
+				get(nps).param("desde", ayer).param("hasta", ayer).header(HttpHeaders.AUTHORIZATION, autorizacion))
+				.andExpect(status().isOk()).andExpect(jsonPath("$.length()").value(0));
+		mockMvc.perform(get("/api/v1/analitica/objetivos").header(HttpHeaders.AUTHORIZATION, autorizacion))
+				.andExpect(status().isOk())
+				.andExpect(content().string(containsString("NPS de los últimos 30 días: -100 (1 encuestas)")))
+				.andExpect(content().string(containsString("Respuestas registradas por la agencia: 1")));
 	}
 
 	@Test
