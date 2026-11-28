@@ -1,6 +1,7 @@
 package dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.web;
 
 import dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.application.CatalogoService;
+import dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.application.DetalleModeloCatalogoApp;
 import dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.application.ModeloCatalogoApp;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -35,6 +36,14 @@ public class CatalogoController {
 			+ "nuevo al más viejo.")
 	public List<ModeloCatalogoApp> vigentes() {
 		return catalogoService.vigentes();
+	}
+
+	@GetMapping("/api/v1/app/catalogo/{id}")
+	@PreAuthorize("hasRole('CLIENTE_CARECAR')")
+	@Operation(summary = "Detalle de un modelo del catálogo", description = "El modelo con su galería, las versiones "
+			+ "activas de la misma marca, modelo y año y su ficha resumida. Responde 404 si no existe o está retirado.")
+	public DetalleModeloCatalogoApp detalle(@PathVariable Long id) {
+		return catalogoService.detalle(id);
 	}
 
 	@GetMapping("/api/v1/catalogo")

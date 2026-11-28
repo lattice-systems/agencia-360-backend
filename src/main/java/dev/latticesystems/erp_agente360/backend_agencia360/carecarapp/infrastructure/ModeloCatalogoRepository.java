@@ -12,6 +12,16 @@ public interface ModeloCatalogoRepository extends JpaRepository<ModeloCatalogo, 
 
 	List<ModeloCatalogo> findAllByOrderByModeloAscAnioDescVersionAsc();
 
+	/**
+	 * Las versiones activas de un modelo, de la más barata a la más cara; sin
+	 * precio al final.
+	 */
+	@Query("select m from ModeloCatalogo m where m.activo = true and lower(m.marca) = lower(:marca) "
+			+ "and lower(m.modelo) = lower(:modelo) and m.anio = :anio "
+			+ "order by case when m.precioDesde is null then 1 else 0 end, m.precioDesde, m.id")
+	List<ModeloCatalogo> versionesActivas(@Param("marca") String marca, @Param("modelo") String modelo,
+			@Param("anio") int anio);
+
 	@Query("select count(m) > 0 from ModeloCatalogo m where lower(m.marca) = lower(:marca) "
 			+ "and lower(m.modelo) = lower(:modelo) and m.anio = :anio "
 			+ "and lower(coalesce(m.version, '')) = lower(coalesce(:version, ''))")
