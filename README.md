@@ -366,7 +366,7 @@ La base empieza vacía. Para probar el ERP y el CRM en local hay un juego de dat
 - una clienta de la app CareCar con 2 vehículos, sus servicios en el expediente y el manual de uno de ellos,
 - una solicitud de valuación formal de esa clienta, si hay parámetros de toma a cuenta para su auto;
 - 5 clientes más de la app con 3 a 5 vehículos cada uno y contraseña `CareCar2026!`;
-- parámetros de la toma a cuenta (22 modelos × 16 años), la imagen de los 22 modelos del catálogo, documentos de todos los vehículos, el historial de citas pasadas, una cita próxima por cliente y encuestas de servicio, una respondida y otra pendiente (V2-T05.12);
+- 13 preguntas frecuentes y 3 sucursales, 7 productos en la tienda, parámetros de la toma a cuenta (22 modelos × 16 años), la imagen de los 22 modelos del catálogo, documentos de todos los vehículos, el historial de citas pasadas, una cita próxima por cliente y encuestas de servicio, una respondida y otra pendiente (V2-T05.12);
 - datos de los módulos de la app v2 (V2-T05.10): órdenes en el taller en vivo, garantías y campañas, productos de la tienda con un apartado, pagos con tarjeta y con billetera con su factura simulada, puntos con un canje y un referido, gastos de la bitácora, una dirección y una prueba de manejo.
 
 Qué contiene y qué demuestra cada dato está en [`docs/datos-de-ejemplo.md`](docs/datos-de-ejemplo.md).
@@ -410,6 +410,8 @@ SIN_MANUALES=1 SIN_MAILPIT=1 ./scripts/cargar-datos-de-ejemplo.sh
 ```
 
 `completar-datos-de-ejemplo-en-base.sh` pide `CONFIRMAR=si` fuera de localhost porque escribe en esa base, y manda el usuario y la contraseña por variables de entorno de `psql`, no por argumentos. `SIN_MANUALES=1` evita volver a subir ~35 MB de PDF. La API de Azure despierta en 20–40 s: la primera petición puede tardar. Todo es idempotente.
+
+**Cuentas con tu correo para probar el correo de la app.** `CUENTAS_PROPIAS="Nombre|correo|teléfono;Nombre|correo|teléfono" ./scripts/cargar-datos-de-ejemplo.sh` crea clientes con un correo real y dos vehículos cada uno. Al abrir la cuenta la API manda la contraseña temporal a esa bandeja (en local, a Mailpit); también sirve para probar «¿Olvidaste tu contraseña?», que manda un código de 6 dígitos. No tienen contraseña de prueba. No escribas esos correos en el repo: es público.
 
 **Usuarios**
 

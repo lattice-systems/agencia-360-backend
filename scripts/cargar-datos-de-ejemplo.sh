@@ -562,7 +562,7 @@ crear_cliente_con_vehiculos() {
   pedir POST /api/v1/app/auth/login "" "{\"correo\":\"$correo\",\"contrasena\":\"$CLIENTES_CONTRASENA\"}"
   if [ "$CODIGO" != 200 ]; then
     if [ -n "$SIN_MAILPIT" ]; then
-      echo "              sin contraseña de prueba todavía: scripts/fijar-contrasenas-de-ejemplo.sh"
+      echo "              sin contraseña de prueba (entra con la temporal del correo; ver completar-datos-de-ejemplo-en-base.sh)"
     else
       restablecer_con_mailpit "$correo"
       echo "              contraseña de prueba definida con el código de Mailpit"
@@ -600,6 +600,26 @@ Frontier|PRO-4X|2026|GTO-501-S|3400|1
 March|Exclusive|2023|GTO-218-T|27600|2
 Sentra|Advance|2020|GTO-776-V|74100|3
 DATOS
+
+# Cuentas con un correo real para probar lo que la app manda por correo: la
+# contraseña temporal al abrir la cuenta y el código de «Olvidé mi contraseña».
+# Se piden con CUENTAS_PROPIAS="Nombre|correo|teléfono;Nombre|correo|teléfono"
+# (los correos no se escriben aquí: este repo es público). Cada una trae dos
+# vehículos con servicios y NO tiene contraseña de prueba: entra con la temporal
+# que llega a su bandeja o con el código de recuperación. En local la temporal
+# llega a Mailpit.
+if [ -n "${CUENTAS_PROPIAS:-}" ]; then
+  echo "Cuentas con correo real (Gerente de marketing y Servicio):"
+  IFS=';' read -ra CUENTAS <<<"$CUENTAS_PROPIAS"
+  NUM_CUENTA=0
+  for CUENTA in "${CUENTAS[@]}"; do
+    NUM_CUENTA=$((NUM_CUENTA + 1))
+    IFS='|' read -r NOMBRE_CUENTA CORREO_CUENTA TELEFONO_CUENTA <<<"$CUENTA"
+    crear_cliente_con_vehiculos "$NOMBRE_CUENTA" "$CORREO_CUENTA" "${TELEFONO_CUENTA:-477 555 0140}" < <(
+      printf '%s\n' "Kicks|Advance|2024|DEV-${NUM_CUENTA}01-A|15200|1" "Sentra|Sense|2022|DEV-${NUM_CUENTA}02-B|38800|2"
+    )
+  done
+fi
 
 echo "Manuales de propietario (Gerente de marketing):"
 # Los PDF se generan con scripts/generar-manuales.py (Chrome headless): ficha técnica,
@@ -990,6 +1010,10 @@ publicar_en_tienda REF-007 REFACCION "Batería de 12 V libre de mantenimiento co
   "$COMPATIBLES_COMPACTOS"
 publicar_en_tienda REF-008 REFACCION "Amortiguador delantero de gas para X-Trail." false \
   '[{"modelo":"X-Trail","anioDesde":2019,"anioHasta":2026}]'
+publicar_en_tienda REF-002 REFACCION "Balatas delanteras de alto rendimiento, con instalación en el taller." false \
+  "$COMPATIBLES_COMPACTOS"
+publicar_en_tienda REF-003 REFACCION "Bujía de iridio de larga duración para motores de gasolina." false \
+  "$COMPATIBLES_COMPACTOS"
 
 echo "Carlos Ramírez: orden entregada, pagada con tarjeta, facturada y con un canje (app):"
 if [ -z "$TOKEN_CARLOS" ]; then
@@ -1289,6 +1313,14 @@ if [ -z "$TOKEN_LAURA" ]; then
   echo "  omitida     Laura no inicia sesión con LAURA_CONTRASENA"
 else
   agendar_proxima_cita "Laura Méndez" "$CLIENTE_APP_CORREO" GTO-123-A 2 2 mantenimiento
+  pedir GET /api/v1/app/direcciones "$TOKEN_LAURA"
+  [ "$CODIGO" = 200 ] || fallar "ver las direcciones de Laura"
+  if [ "$RESPUESTA" = "[]" ]; then
+    pedir POST /api/v1/app/direcciones "$TOKEN_LAURA" \
+      '{"alias":"Casa","calle":"Calle Ejemplo 245","colonia":"Colinas de San Jerónimo","cp":"37238","ciudad":"León","lat":21.1180,"lng":-101.6950}'
+    [ "$CODIGO" = 201 ] || fallar "guardar la dirección de Laura"
+    echo "  guardada    dirección Casa, para pedir la recolección"
+  fi
   pedir GET /api/v1/app/pagos "$TOKEN_LAURA"
   [ "$CODIGO" = 200 ] || fallar "ver los pagos de Laura"
   if grep -q '"totalElementos":0' <<<"$RESPUESTA"; then
