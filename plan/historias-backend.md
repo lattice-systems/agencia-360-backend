@@ -299,7 +299,9 @@ Las dos se borran en cascada con su modelo, aunque un modelo se retira (`activo 
 
 **Pruebas pedidas.** 200 con galería, versiones y ficha, 200 con listas vacías, 404 para id inexistente y para modelo retirado, versiones sin las retiradas y ordenadas por precio, 401 y 403.
 
-**Mientras no se implemente.** La app trabaja contra el contrato y `mock_api` de `carecar-mobile` (dependencia simulable).
+**Implementación.** Migración `V67__crear_galeria_y_especificaciones_del_catalogo.sql` (el siguiente número libre al integrarla), entidades `ImagenModeloCatalogo` y `EspecificacionModeloCatalogo`, `CatalogoService.detalle(id)` y `GET /api/v1/app/catalogo/{id}` en `CatalogoController`. Pruebas en `CatalogoDetalleIntegrationTest`. Los datos de ejemplo de galería y ficha están en `scripts/galeria-y-ficha-catalogo-de-ejemplo.sql`.
+
+**Antes de implementarla.** La app trabajó contra el contrato y `mock_api` de `carecar-mobile` (dependencia simulable); contra la API real el detalle respondía 404.
 
 #### Diseño de V2-M03.04, V2-M03.06 y V2-M03.07: estimación de toma a cuenta
 

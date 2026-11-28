@@ -1,6 +1,8 @@
 package dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.application;
 
 import dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.domain.ModeloCatalogo;
+import dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.infrastructure.EspecificacionModeloCatalogoRepository;
+import dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.infrastructure.ImagenModeloCatalogoRepository;
 import dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.infrastructure.ModeloCatalogoRepository;
 import dev.latticesystems.erp_agente360.backend_agencia360.shared.exception.ConflictoException;
 import dev.latticesystems.erp_agente360.backend_agencia360.shared.exception.RecursoNoEncontradoException;
@@ -14,9 +16,43 @@ import org.springframework.transaction.annotation.Transactional;
 public class CatalogoService {
 
 	private final ModeloCatalogoRepository repository;
+	private final ImagenModeloCatalogoRepository imagenes;
+	private final EspecificacionModeloCatalogoRepository especificaciones;
 
-	public CatalogoService(ModeloCatalogoRepository repository) {
+	public CatalogoService(ModeloCatalogoRepository repository, ImagenModeloCatalogoRepository imagenes,
+			EspecificacionModeloCatalogoRepository especificaciones) {
 		this.repository = repository;
+		this.imagenes = imagenes;
+		this.especificaciones = especificaciones;
+	}
+
+	/**
+	 * El modelo con su galería, sus versiones y su ficha resumida (V2-M03.02).
+	 *
+	 * @throws RecursoNoEncontradoException
+	 *             si no existe o está retirado, que se trata igual para no filtrar
+	 *             el catálogo viejo (404)
+	 */
+	@Transactional(readOnly = true)
+	public DetalleModeloCatalogoApp detalle(Long id) {
+		ModeloCatalogo modelo = repository.findById(id).filter(ModeloCatalogo::isActivo)
+				.orElseThrow(() -> new RecursoNoEncontradoException("No existe el modelo " + id));
+		List<DetalleModeloCatalogoApp.Imagen> fotos = imagenes.findByModeloCatalogoIdOrderByOrdenAsc(id).stream()
+				.map(i -> new DetalleModeloCatalogoApp.Imagen(i.getId(), i.getUrl(), i.getColor(), i.getDescripcion(),
+						i.getOrden()))
+				.toList();
+		List<DetalleModeloCatalogoApp.Version> versiones = repository
+				.versionesActivas(modelo.getMarca(), modelo.getModelo(), modelo.getAnio()).stream()
+				.map(v -> new DetalleModeloCatalogoApp.Version(v.getId(),
+						v.getVersion() != null ? v.getVersion() : v.getModelo(), v.getPrecioDesde()))
+				.toList();
+		List<DetalleModeloCatalogoApp.Especificacion> ficha = especificaciones.findByModeloCatalogoIdOrderByOrdenAsc(id)
+				.stream()
+				.map(e -> new DetalleModeloCatalogoApp.Especificacion(e.getEtiqueta(), e.getValor(), e.getOrden()))
+				.toList();
+		return new DetalleModeloCatalogoApp(modelo.getId(), modelo.getMarca(), modelo.getModelo(), modelo.getAnio(),
+				modelo.getVersion(), modelo.getPrecioDesde(), modelo.getImagenUrl(), modelo.getDescripcion(),
+				modelo.isActivo(), fotos, versiones, ficha);
 	}
 
 	/** Los modelos activos por modelo, del año más nuevo al más viejo. */
