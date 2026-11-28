@@ -111,7 +111,7 @@ Qué se puede probar:
 - Con `admin`, que el expediente se puede consultar pero no corregir.
 - En la app, con `laura.mendez@example.com`: el primer ingreso con cambio de contraseña, los 2 vehículos y el manual del March y el del Sentra, que se abren con su URL temporal.
 - En la app, con `laura.mendez@example.com`: el historial de servicios del vehículo que tenga servicios en el expediente y su ticket en PDF; la disponibilidad de la agenda (lunes a sábado de 9:00 a 17:00, capacidad de 3 por franja, sembradas en `franja_horario`), agendar una cita y cancelarla (hasta 24 h antes).
-- Catálogo de la app: 22 modelos Nissan 2026, todos distintos, con versión, precio desde (MXN) y descripción, sin imagen (las fotos van en la app): March, Versa, Kicks, Sentra, X-Trail, Frontier PRO-4X, Leaf e+, Ariya Evolve+, Z Performance, GT-R Premium, Altima Platinum, Pathfinder Platinum, Murano Platinum, Armada Platinum Reserve, Titan Pro-4X, Urvan Panel, Maxima SR, Juke Exclusive, Qashqai Exclusive, Patrol Platinum, Tiida Advance, Note e-Power (`GET /api/v1/app/catalogo`).
+- Catálogo de la app: 22 modelos Nissan 2026, todos distintos, con versión, precio desde (MXN), descripción e imagen (`imagenUrl`: la foto del modelo, ver «Sembrado completo»; la app trae las mismas fotos de respaldo): March, Versa, Kicks, Sentra, X-Trail, Frontier PRO-4X, Leaf e+, Ariya Evolve+, Z Performance, GT-R Premium, Altima Platinum, Pathfinder Platinum, Murano Platinum, Armada Platinum Reserve, Titan Pro-4X, Urvan Panel, Maxima SR, Juke Exclusive, Qashqai Exclusive, Patrol Platinum, Tiida Advance, Note e-Power (`GET /api/v1/app/catalogo`).
 - Citas de Laura (por la API de la app, con `LAURA_CONTRASENA`, por defecto `CareCar2026!`): una CONFIRMADA del March a los 3+ días y una CANCELADA del Sentra (`GET /api/v1/app/citas`). Si Laura ya tiene citas no agrega más; si no inicia sesión, omite este paso.
 
 ## Valuación formal
@@ -124,7 +124,7 @@ Qué se puede probar:
 
 ## Lo que no incluye todavía
 
-- **Laura Méndez** se queda sin órdenes, pagos ni puntos: su primer ingreso, con la contraseña temporal de Mailpit, es parte de la demostración. Sus citas y su valuación se cargan solo si ya entra con `LAURA_CONTRASENA`.
+- **Laura Méndez**: en local su primer ingreso, con la contraseña temporal de Mailpit, sigue siendo parte de la demostración. Sus citas, su valuación y su historia completa (V2-T05.12, abajo) se cargan solo si ya entra con `LAURA_CONTRASENA`: define su contraseña con `scripts/completar-datos-de-ejemplo-en-base.sh` o pásala si ya la cambió.
 - **Asistencia en el camino y traslados** (M11 y M17): los pide el cliente desde la app con su ubicación y el personal los avanza en vivo, así que se demuestran en el momento. El script deja una dirección guardada para pedir la recolección.
 - **Asistente** (M24): necesita la llave de IA por variable de entorno.
 - **Derechos ARCO y cancelación de cuenta** (M22): se piden desde la app al demostrarlos.
@@ -175,3 +175,61 @@ Notas:
 - La factura de Carlos y sus puntos se generan en segundo plano al confirmarse el pago; el script espera hasta 10 segundos a que lleguen los puntos para el canje. Si no llegaron, lo dice y el canje se hace al volver a correrlo.
 - Las órdenes de Carlos y Ana quedan entregadas: pasan a su historial con su ticket.
 - Para empezar de cero: `./scripts/limpiar-datos.sh`.
+
+## Sembrado completo (V2-T05.12)
+
+Lo agregan `scripts/completar-datos-de-ejemplo-en-base.sh` (con sus SQL) y el final de `scripts/cargar-datos-de-ejemplo.sh`. Sirve igual en local y en una API real; el procedimiento para Azure está en la sección 5.6 del README.
+
+| Qué | Cómo se carga | Qué deja |
+| --- | --- | --- |
+| Contraseña de los 6 clientes | `psql`: hash BCrypt de fuerza 10 en `cuenta_app` | `CareCar2026!` sin pedir cambio de contraseña. Necesario donde el correo no llega a Mailpit |
+| Parámetros de la toma a cuenta (`scripts/parametros-toma-cuenta-de-ejemplo.sql`) | `psql` (no hay API) | 352 filas: los 22 modelos Nissan del catálogo × 2012–2027. El valor base es el precio de catálogo de 2026 retrocedido 4 % por año; la depreciación y el factor de kilometraje cambian con el tipo de auto. Con ellos funcionan la calculadora, «Mis estimaciones» y la valuación formal |
+| Documentos (`scripts/documentos-de-ejemplo.sql`) | `psql` | Los de Diego (arriba) y, para cada vehículo de los 6 clientes con placas: tarjeta de circulación vigente; póliza vigente, por vencer o vencida según el id (o ninguna); verificación vigente, por vencer o vencida; tenencia en los de id par; factura de la agencia en los de 2023 en adelante. Los cuatro estados se ven en todos los clientes |
+| Citas pasadas (`scripts/citas-pasadas-de-ejemplo.sql`) | `psql` | 43 citas con fechas relativas a hoy, sin domingos: una atendida por vehículo (hace 160 días), otra en los de id par (hace 45), una que no se presentó en los de id múltiplo de 5 (hace 80) y una cancelada en los de id múltiplo de 3 (hace 25). La API no agenda en el pasado ni marca una cita como atendida |
+| Cita próxima de cada cliente | API de la app | Carlos (Versa, mantenimiento), Ana (X-Trail, revisión), Luis (Frontier PRO-4X, mantenimiento), Sofía (Sentra, revisión) y Diego (Sentra 2020, reparación), en los próximos 1 a 9 días. «Mis citas» y la tarjeta de próxima cita del inicio ya tienen qué mostrar |
+| Encuestas de servicio (M15) | API de la app | Ana respondió la de su orden entregada (NPS 9, comentario) y la de Carlos queda pendiente para que la app se la ofrezca |
+| Imagen del catálogo (`scripts/imagenes-catalogo-de-ejemplo.sql`) | `psql` (el alta por la API ya la lleva) | `imagenUrl` de los 22 modelos: fotos de Wikimedia Commons con licencia libre (autor y licencia en `carecar-mobile/assets/autos/ATRIBUCIONES.md`), las mismas de `src/main/resources/fotos-autos`, servidas desde `raw.githubusercontent.com` de este repo (público). Solo llena los modelos sin imagen; otra carpeta con los mismos nombres se pasa con `IMAGENES_BASE` |
+| Centro de ayuda y sucursales (`scripts/ayuda-y-sucursales-de-ejemplo.sql`) | `psql` | 13 preguntas frecuentes (las 2 de la migración V65 y 11 más: contraseña, citas, taller, trabajos adicionales, pagos, facturas, puntos, garantía y documentos, asistencia y privacidad) y 3 sucursales (la de V59 y dos de ejemplo, con horarios por departamento) |
+| Tienda | API del personal | Además de los 5 productos de arriba, REF-002 (balatas) y REF-003 (bujías): 7 publicados |
+| Dirección de Laura | API de la app | Dirección «Casa», para probar la recolección con la cuenta principal |
+| Cuentas con un correo real (`CUENTAS_PROPIAS`) | API del personal | Para probar lo que la app manda por correo (la contraseña temporal al abrir la cuenta y el código de «Olvidé mi contraseña»): `CUENTAS_PROPIAS="Nombre\|correo\|teléfono;…"`. Cada cuenta trae dos vehículos (Kicks 2024 y Sentra 2022, placas `DEV-n01-A` y `DEV-n02-B`) con servicios y **no** tiene contraseña de prueba. Los correos no se escriben en el repo (es público) |
+| Valuación de Laura | API de la app | Con los parámetros anteriores deja de omitirse: Laura solicita la valuación de su March |
+| Historia completa de Laura | API de la app | Ver «Laura Méndez: la cuenta de la demostración completa», al final: tiene datos para todas las funciones de la app |
+
+Para cargarlo en una API real:
+
+1. `SIN_MAILPIT=1 ./scripts/cargar-datos-de-ejemplo.sh`
+2. `CONFIRMAR=si ./scripts/completar-datos-de-ejemplo-en-base.sh`
+3. `SIN_MANUALES=1 SIN_MAILPIT=1 ./scripts/cargar-datos-de-ejemplo.sh`
+
+Con `SIN_MAILPIT=1` la contraseña de prueba de un cliente nuevo no se define en el paso 1: sus pasos como cliente se omiten y el script lo dice. En el paso 2 ya existe y en el 3 se cargan.
+
+Cuentas de la app para probar (contraseña `CareCar2026!`): `laura.mendez@example.com` (March 2026 y Sentra 2025: orden en el taller, orden pagada, cita próxima, puntos, encuesta pendiente y valuación), `carlos.ramirez@example.com` (orden pagada con factura y canje de puntos, encuesta pendiente), `ana.torres@example.com` (pago con billetera y datos fiscales que el timbrado rechaza), `luis.hernandez@example.com` (5 vehículos), `sofia.morales@example.com` (auto en el taller con un adicional por aprobar, apartado en la tienda, gastos y dirección) y `diego.castillo@example.com` (orden lista para entrega, por pagar, y garantías).
+
+## Laura Méndez: la cuenta de la demostración completa
+
+`laura.mendez@example.com` (contraseña `CareCar2026!`) es la cuenta para enseñar toda la app: tiene datos para cada función. Los carga el último bloque de `cargar-datos-de-ejemplo.sh` por la API de la app y del personal (más los SQL de `completar-datos-de-ejemplo-en-base.sh` para documentos y citas pasadas). Cada paso se comprueba por separado y no duplica; si una carga se corta, al repetirla sigue donde se quedó.
+
+| Función de la app | Qué tiene Laura |
+| --- | --- |
+| Garaje | 3 vehículos: Nissan March 2026 (`GTO-123-A`), Sentra 2025 (`GTO-456-B`) y Versa 2023 (`GTO-777-L`), con foto, ficha técnica y manual |
+| Inicio | Orden en el taller (March), próxima cita y los autos |
+| Taller en vivo | **March** en reparación con una llanta en amarillo y **Sentra** esperando que apruebe un trabajo adicional (balatas delanteras, $1,540) con frenos en rojo en la inspección; aprobar o rechazar con firma se puede hacer en la demo |
+| Historial de servicios | Servicios del expediente y las órdenes entregadas, con ticket en PDF |
+| Pagos y facturas | Sentra pagado con tarjeta **sin** factura (para enseñar «Facturar»), Versa pagado con tarjeta guardada y **facturado** (PDF y XML), datos fiscales de persona física (RFC de prueba `MERL9003151A3`, no es de una persona real) |
+| Métodos de pago | La tarjeta Visa de prueba guardada al pagar el Versa |
+| Lealtad | Puntos de sus servicios, un canje de «Lavado exprés» y un referido (Patricia Ríos); queda saldo para canjear otra recompensa |
+| Garantías y campañas | Garantía de fábrica del March y del Sentra, tren motriz del Sentra y una batería del March que vence en 35 días (aviso de garantía por vencer); la campaña de la bolsa de aire (`RC-26-101`) abierta para el March |
+| Tienda | Un apartado (filtro de aceite y 4 bujías) para recoger en mostrador |
+| Bitácora | 6 gastos del Sentra: 3 cargas de gasolina, casetas, estacionamiento y lavado |
+| Citas | Una próxima (March), otra con **recolección** a su casa (Versa), el historial con los 4 estados y las canceladas |
+| Recolección y entrega | Los dos traslados de la cita con recolección; el chofer ya va en camino y su ubicación se ve en el mapa |
+| Direcciones | «Casa» y «Oficina» |
+| Asistencia en el camino | Una solicitud por llanta ya atendida y otra por batería en camino |
+| Estimaciones y valuación | Tres estimaciones de toma a cuenta (March, Sentra y Versa), la valuación formal solicitada del March |
+| Estreno | Una prueba de manejo del Kicks |
+| Encuestas | Dos pendientes (las órdenes entregadas del Sentra y del Versa) |
+| Documentos | Los 4 estados de cada vehículo (vigente, por vencer, vencido y sin fecha) |
+| Asistente | Tres preguntas ya hechas (usa la llave de IA del servidor; con un límite de 10 por día) |
+| Perfil | Aviso de privacidad aceptado, y en Sesiones, un iPhone 15 y un iPad de la oficina además del aparato de la demo |
+

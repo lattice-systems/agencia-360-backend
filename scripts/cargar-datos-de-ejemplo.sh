@@ -467,6 +467,11 @@ fi
 # Mailpit, así que se restablece con el código de 6 dígitos del correo (el mismo
 # flujo "Olvidé mi contraseña" de la app). Todo por la API; no duplica al repetirse.
 MAILPIT="${MAILPIT:-http://localhost:8025}"
+# SIN_MAILPIT=1 es para una API con correo real (la de Azure): ahí el código de
+# recuperación sale por Gmail a direcciones @example.com que nadie lee. En ese
+# modo la contraseña de los clientes se fija aparte con
+# scripts/fijar-contrasenas-de-ejemplo.sh y se vuelve a correr este script.
+SIN_MAILPIT="${SIN_MAILPIT:-}"
 CLIENTES_CONTRASENA="${CLIENTES_CONTRASENA:-CareCar2026!}"
 SERIE_VIN=90000
 
@@ -556,8 +561,12 @@ crear_cliente_con_vehiculos() {
   esac
   pedir POST /api/v1/app/auth/login "" "{\"correo\":\"$correo\",\"contrasena\":\"$CLIENTES_CONTRASENA\"}"
   if [ "$CODIGO" != 200 ]; then
-    restablecer_con_mailpit "$correo"
-    echo "              contraseña de prueba definida con el código de Mailpit"
+    if [ -n "$SIN_MAILPIT" ]; then
+      echo "              sin contraseña de prueba (entra con la temporal del correo; ver completar-datos-de-ejemplo-en-base.sh)"
+    else
+      restablecer_con_mailpit "$correo"
+      echo "              contraseña de prueba definida con el código de Mailpit"
+    fi
   fi
 }
 
@@ -591,6 +600,26 @@ Frontier|PRO-4X|2026|GTO-501-S|3400|1
 March|Exclusive|2023|GTO-218-T|27600|2
 Sentra|Advance|2020|GTO-776-V|74100|3
 DATOS
+
+# Cuentas con un correo real para probar lo que la app manda por correo: la
+# contraseña temporal al abrir la cuenta y el código de «Olvidé mi contraseña».
+# Se piden con CUENTAS_PROPIAS="Nombre|correo|teléfono;Nombre|correo|teléfono"
+# (los correos no se escriben aquí: este repo es público). Cada una trae dos
+# vehículos con servicios y NO tiene contraseña de prueba: entra con la temporal
+# que llega a su bandeja o con el código de recuperación. En local la temporal
+# llega a Mailpit.
+if [ -n "${CUENTAS_PROPIAS:-}" ]; then
+  echo "Cuentas con correo real (Gerente de marketing y Servicio):"
+  IFS=';' read -ra CUENTAS <<<"$CUENTAS_PROPIAS"
+  NUM_CUENTA=0
+  for CUENTA in "${CUENTAS[@]}"; do
+    NUM_CUENTA=$((NUM_CUENTA + 1))
+    IFS='|' read -r NOMBRE_CUENTA CORREO_CUENTA TELEFONO_CUENTA <<<"$CUENTA"
+    crear_cliente_con_vehiculos "$NOMBRE_CUENTA" "$CORREO_CUENTA" "${TELEFONO_CUENTA:-477 555 0140}" < <(
+      printf '%s\n' "Kicks|Advance|2024|DEV-${NUM_CUENTA}01-A|15200|1" "Sentra|Sense|2022|DEV-${NUM_CUENTA}02-B|38800|2"
+    )
+  done
+fi
 
 echo "Manuales de propietario (Gerente de marketing):"
 # Los PDF se generan con scripts/generar-manuales.py (Chrome headless): ficha técnica,
@@ -628,7 +657,11 @@ if [ -z "${CHROME:-}" ] && command -v cygpath >/dev/null 2>&1; then
   done
 fi
 
-if [ ! -f "$MANUALES_DIR/indice.txt" ]; then
+# SIN_MANUALES=1 omite este paso (la segunda pasada de una API real: los PDF son
+# ~35 MB y ya se subieron).
+if [ -n "${SIN_MANUALES:-}" ]; then
+  echo "  omitidos    SIN_MANUALES=1"
+elif [ ! -f "$MANUALES_DIR/indice.txt" ]; then
   if PYTHON=$(python_disponible); then
     $PYTHON "$(ruta_para_curl "$DIR_SCRIPT/generar-manuales.py")" --salida "$(ruta_para_curl "$MANUALES_DIR")" >/dev/null ||
       echo "  omitidos    no se pudieron generar los manuales (necesita Google Chrome; pásalo con CHROME=...)"
@@ -637,7 +670,7 @@ if [ ! -f "$MANUALES_DIR/indice.txt" ]; then
   fi
 fi
 SUBIDOS=0
-[ -f "$MANUALES_DIR/indice.txt" ] && while IFS='|' read -r modelo anio archivo; do
+[ -z "${SIN_MANUALES:-}" ] && [ -f "$MANUALES_DIR/indice.txt" ] && while IFS='|' read -r modelo anio archivo; do
   [ -n "$modelo" ] || continue
   if ! CODIGO=$(curl -sS -o "$RESPUESTA_TMP" -w '%{http_code}' -X POST "$API/api/v1/manuales" \
     -H "Authorization: Bearer $TOKEN_GERENTE" -F marca=Nissan -F "modelo=$modelo" -F "anio=$anio" \
@@ -658,8 +691,13 @@ fi
 
 # Catálogo de la app (APP-4.1). $1 modelo, $2 versión, $3 precio desde, $4 descripción.
 agregar_al_catalogo() {
+  # La foto del modelo: <clave>.jpg con la clave en minúsculas y sin guiones
+  # (X-Trail → xtrail). En una base que ya tenía el modelo la llena
+  # scripts/imagenes-catalogo-de-ejemplo.sql.
+  local clave
+  clave=$(printf '%s' "$1" | tr 'A-Z' 'a-z' | tr -d '-')
   pedir POST /api/v1/catalogo "$TOKEN_GERENTE" \
-    "{\"marca\":\"Nissan\",\"modelo\":\"$1\",\"anio\":2026,\"version\":\"$2\",\"precioDesde\":$3,\"descripcion\":\"$4\"}"
+    "{\"marca\":\"Nissan\",\"modelo\":\"$1\",\"anio\":2026,\"version\":\"$2\",\"precioDesde\":$3,\"imagenUrl\":\"$IMAGENES_BASE/$clave.jpg\",\"descripcion\":\"$4\"}"
   case "$CODIGO" in
     201) echo "  agregado    Nissan $1 2026 $2" ;;
     409) echo "  ya existía  Nissan $1 2026 $2" ;;
@@ -667,6 +705,9 @@ agregar_al_catalogo() {
   esac
 }
 
+# Carpeta pública con las fotos de los modelos (<clave>.jpg): las mismas del
+# backend en src/main/resources/fotos-autos, servidas desde GitHub.
+IMAGENES_BASE="${IMAGENES_BASE:-https://raw.githubusercontent.com/lattice-systems/agencia-360-backend/main/src/main/resources/fotos-autos}"
 echo "Catálogo de la app (Gerente de marketing):"
 agregar_al_catalogo March Advance 289900 "Hatchback urbano, económico y fácil de estacionar"
 agregar_al_catalogo Versa Sense 339900 "Sedán con amplio espacio interior"
@@ -969,6 +1010,10 @@ publicar_en_tienda REF-007 REFACCION "Batería de 12 V libre de mantenimiento co
   "$COMPATIBLES_COMPACTOS"
 publicar_en_tienda REF-008 REFACCION "Amortiguador delantero de gas para X-Trail." false \
   '[{"modelo":"X-Trail","anioDesde":2019,"anioHasta":2026}]'
+publicar_en_tienda REF-002 REFACCION "Balatas delanteras de alto rendimiento, con instalación en el taller." false \
+  "$COMPATIBLES_COMPACTOS"
+publicar_en_tienda REF-003 REFACCION "Bujía de iridio de larga duración para motores de gasolina." false \
+  "$COMPATIBLES_COMPACTOS"
 
 echo "Carlos Ramírez: orden entregada, pagada con tarjeta, facturada y con un canje (app):"
 if [ -z "$TOKEN_CARLOS" ]; then
@@ -1185,4 +1230,412 @@ else
 fi
 
 echo
+# ── Citas próximas y encuestas de los clientes de ejemplo ──
+# Mis citas de cada cliente tiene su próxima cita, agendada por la API de la app
+# como lo hace el celular (la agenda queda con franjas ocupadas), y Servicio de
+# CareCar tiene encuestas respondidas y pendientes. El historial de citas pasadas
+# va aparte, directo en la base (scripts/citas-pasadas-de-ejemplo.sql), porque la
+# API no agenda en el pasado. Si un cliente ya no entra con CLIENTES_CONTRASENA,
+# se omite. No duplica al repetirse.
+
+# Agenda una cita en los próximos días si el cliente aún no tiene una
+# confirmada. $1 nombre, $2 correo, $3 placas, $4 días desde hoy a partir de los
+# que se busca cupo, $5 posición del horario (1 = el primero con cupo), $6 motivo.
+agendar_proxima_cita() {
+  local token vehiculo hueco fecha franja
+  token=$(token_de_la_app "$2" "$CLIENTES_CONTRASENA")
+  if [ -z "$token" ]; then
+    echo "  omitida     $1 no inicia sesión con CLIENTES_CONTRASENA"
+    return 0
+  fi
+  pedir GET /api/v1/app/citas "$token"
+  [ "$CODIGO" = 200 ] || fallar "listar las citas de $1"
+  if grep -q '"estado":"CONFIRMADA"' <<<"$RESPUESTA"; then
+    echo "  ya tenía    una cita confirmada ($1)"
+    return 0
+  fi
+  pedir GET /api/v1/app/vehiculos "$token"
+  [ "$CODIGO" = 200 ] || fallar "listar los vehículos de $1"
+  vehiculo=$(vehiculo_por_placas "$3")
+  [ -n "$vehiculo" ] || fallar "encontrar el vehículo $3 de $1"
+  pedir GET "/api/v1/app/agenda/disponibilidad?desde=$(fecha_en_dias "$4")&hasta=$(fecha_en_dias $(($4 + 6)))" "$token"
+  [ "$CODIGO" = 200 ] || fallar "ver la disponibilidad para $1"
+  hueco=$(printf '%s' "$RESPUESTA" | grep -o '"fecha":"[^"]*","franjaId":[0-9]*' | sed -n "${5}p")
+  [ -n "$hueco" ] || fallar "encontrar un horario con cupo para $1"
+  fecha=$(printf '%s' "$hueco" | sed 's/"fecha":"\([^"]*\)".*/\1/')
+  franja=$(printf '%s' "$hueco" | sed 's/.*"franjaId":\([0-9]*\)/\1/')
+  pedir POST /api/v1/app/citas "$token" \
+    "{\"vehiculoId\":$vehiculo,\"franjaId\":$franja,\"fecha\":\"$fecha\",\"motivo\":\"$6\"}"
+  [ "$CODIGO" = 201 ] || fallar "agendar la cita de $1"
+  echo "  confirmada  $3 el $fecha (franja $franja, $6)"
+}
+
+echo "Citas próximas de los clientes de ejemplo (app):"
+agendar_proxima_cita "Carlos Ramírez" carlos.ramirez@example.com GTO-715-C 2 1 mantenimiento
+agendar_proxima_cita "Ana Torres" ana.torres@example.com MXP-27-83 3 3 revision
+agendar_proxima_cita "Luis Hernández" luis.hernandez@example.com GTO-603-H 4 2 mantenimiento
+agendar_proxima_cita "Sofía Morales" sofia.morales@example.com GTO-662-N 1 4 revision
+agendar_proxima_cita "Diego Castillo" diego.castillo@example.com GTO-776-V 5 2 reparacion
+
+# Ana responde la encuesta de su orden entregada (promotora); la de Carlos queda
+# pendiente para que la app la ofrezca. Responder la deja en el resumen de CareCar.
+echo "Encuestas de servicio (app):"
+TOKEN_ANA=$(token_de_la_app ana.torres@example.com "$CLIENTES_CONTRASENA")
+if [ -z "$TOKEN_ANA" ]; then
+  echo "  omitidas    Ana no inicia sesión con CLIENTES_CONTRASENA"
+else
+  pedir GET /api/v1/app/encuestas/pendientes "$TOKEN_ANA"
+  [ "$CODIGO" = 200 ] || fallar "ver las encuestas pendientes de Ana"
+  ORDEN_ENCUESTA=$(printf '%s' "$RESPUESTA" | sed -n 's/.*"ordenId":\([0-9][0-9]*\).*/\1/p')
+  if [ -n "$ORDEN_ENCUESTA" ]; then
+    pedir POST "/api/v1/app/encuestas/$ORDEN_ENCUESTA/responder" "$TOKEN_ANA" \
+      '{"nps":9,"tiempo":5,"trato":5,"limpieza":4,"asesor":5,"comentario":"Rápido y muy amables; me avisaron cada avance."}'
+    [ "$CODIGO" = 204 ] || fallar "responder la encuesta de Ana"
+    echo "  respondida  orden $ORDEN_ENCUESTA de Ana (NPS 9)"
+  else
+    echo "  ya estaba   la encuesta de Ana respondida"
+  fi
+fi
+TOKEN_CARLOS=$(token_de_la_app carlos.ramirez@example.com "$CLIENTES_CONTRASENA")
+if [ -n "$TOKEN_CARLOS" ]; then
+  pedir GET /api/v1/app/encuestas/pendientes "$TOKEN_CARLOS"
+  if [ "$CODIGO" = 200 ] && [ "$RESPUESTA" != "[]" ]; then
+    echo "  pendiente   la encuesta de Carlos (la app se la ofrece)"
+  fi
+fi
+
+# Laura Méndez, la primera clienta de ejemplo, también tiene su historia completa
+# (antes solo tenía vehículos, servicios, citas y la valuación): una cita próxima,
+# el Sentra entregado y pagado (puntos y una encuesta pendiente) y el March en el
+# taller en vivo con un punto de la inspección en amarillo. Todo por la API.
+echo "Laura Méndez: cita próxima, orden entregada y orden en el taller (app):"
+if [ -z "$TOKEN_LAURA" ]; then
+  echo "  omitida     Laura no inicia sesión con LAURA_CONTRASENA"
+else
+  agendar_proxima_cita "Laura Méndez" "$CLIENTE_APP_CORREO" GTO-123-A 2 2 mantenimiento
+  pedir GET /api/v1/app/direcciones "$TOKEN_LAURA"
+  [ "$CODIGO" = 200 ] || fallar "ver las direcciones de Laura"
+  if [ "$RESPUESTA" = "[]" ]; then
+    pedir POST /api/v1/app/direcciones "$TOKEN_LAURA" \
+      '{"alias":"Casa","calle":"Calle Ejemplo 245","colonia":"Colinas de San Jerónimo","cp":"37238","ciudad":"León","lat":21.1180,"lng":-101.6950}'
+    [ "$CODIGO" = 201 ] || fallar "guardar la dirección de Laura"
+    echo "  guardada    dirección Casa, para pedir la recolección"
+  fi
+  pedir GET /api/v1/app/pagos "$TOKEN_LAURA"
+  [ "$CODIGO" = 200 ] || fallar "ver los pagos de Laura"
+  if grep -q '"totalElementos":0' <<<"$RESPUESTA"; then
+    pedir GET /api/v1/app/vehiculos "$TOKEN_LAURA"
+    [ "$CODIGO" = 200 ] || fallar "listar los vehículos de Laura"
+    ID_SENTRA_LAURA=$(vehiculo_por_placas GTO-456-B)
+    ID_MARCH_LAURA=$(vehiculo_por_placas GTO-123-A)
+    [ -n "$ID_SENTRA_LAURA" ] && [ -n "$ID_MARCH_LAURA" ] || fallar "encontrar los vehículos de Laura"
+    abrir_orden "$TOKEN_LAURA" "$ID_SENTRA_LAURA" 14900
+    if [ -n "$ORDEN_ID" ]; then
+      agregar_renglon "$ORDEN_ID" MANO_DE_OBRA "Servicio de 15,000 km" 1 1950.00
+      agregar_renglon "$ORDEN_ID" REFACCION "Filtro de aceite" 1 149.00
+      agregar_renglon "$ORDEN_ID" REFACCION "Aceite sintético 5W-30 (litro)" 4 239.00
+      avanzar_orden "$ORDEN_ID" DIAGNOSTICO "Revisamos niveles, frenos y suspensión."
+      revisar_punto "$ORDEN_ID" "Frenos" VERDE "Balatas al 85 %."
+      avanzar_orden "$ORDEN_ID" EN_REPARACION "Cambiamos aceite y filtro."
+      avanzar_orden "$ORDEN_ID" LISTO_PARA_ENTREGA "Tu Sentra está listo."
+      pagar_orden "$TOKEN_LAURA" "$ORDEN_ID" \
+        '{"tarjeta":{"token":"tok_sim_visa","mesVence":12,"anioVence":2030},"guardarTarjeta":false,"perfilFiscalId":null}'
+      avanzar_orden "$ORDEN_ID" ENTREGADO "Gracias por tu visita."
+      echo "  pagada      orden $ORDEN_ID del Sentra GTO-456-B con la Visa de prueba (sin factura)"
+    else
+      echo "  ya existía  una orden abierta del Sentra GTO-456-B"
+    fi
+    abrir_orden "$TOKEN_LAURA" "$ID_MARCH_LAURA" 10300
+    if [ -n "$ORDEN_ID" ]; then
+      agregar_renglon "$ORDEN_ID" MANO_DE_OBRA "Servicio de 10,000 km" 1 1850.00
+      agregar_renglon "$ORDEN_ID" REFACCION "Filtro de aceite" 1 149.00
+      avanzar_orden "$ORDEN_ID" DIAGNOSTICO "Revisamos niveles, frenos y llantas."
+      revisar_punto "$ORDEN_ID" "Frenos" VERDE "Balatas en buen estado."
+      revisar_punto "$ORDEN_ID" "Llantas" AMARILLO "Desgaste desigual: conviene alinear y balancear."
+      avanzar_orden "$ORDEN_ID" EN_REPARACION "Estamos cambiando aceite y filtro."
+      echo "  en taller   orden $ORDEN_ID del March GTO-123-A, con una llanta por revisar"
+    else
+      echo "  ya existía  una orden abierta del March GTO-123-A"
+    fi
+  else
+    echo "  ya existían los pagos de Laura"
+  fi
+fi
+
+# ── Laura Méndez: la cuenta de la demostración completa ──
+# Con Laura se puede enseñar toda la app. Antes tenía dos vehículos, servicios,
+# citas, una orden entregada y otra en el taller; aquí se completa con lo demás:
+# un tercer vehículo, otra orden en el taller que espera la aprobación de un
+# trabajo adicional, una orden entregada, pagada con tarjeta guardada y facturada,
+# un canje y un referido, garantías, un apartado en la tienda, gastos en la
+# bitácora, una segunda dirección, más estimaciones de toma a cuenta, una prueba
+# de manejo, dos solicitudes de asistencia (una atendida y una en camino), una
+# cita con recolección con el chofer en camino, sesiones de otros aparatos,
+# preguntas al asistente y el aviso de privacidad aceptado.
+# Cada paso se comprueba por separado y no duplica: las órdenes nuevas solo se
+# abren mientras Laura tenga menos de dos pagos, y la asistencia, la recolección y
+# las preguntas al asistente solo si aún no existen. Si una carga se corta a medias,
+# al repetirla sigue donde se quedó.
+echo "Laura Méndez: la cuenta de la demostración completa (app):"
+if [ -z "$TOKEN_LAURA" ]; then
+  echo "  omitida     Laura no inicia sesión con LAURA_CONTRASENA"
+else
+  pedir GET /api/v1/app/vehiculos "$TOKEN_LAURA"
+  [ "$CODIGO" = 200 ] || fallar "listar los vehículos de Laura"
+  # El tercer vehículo. Con una serie fija, para que el VIN no cambie según lo que
+  # haya cargado antes (y repetirlo no cree otro).
+  SERIE_VIN=90500
+  crear_cliente_con_vehiculos "Laura Méndez" "$CLIENTE_APP_CORREO" "477 123 4567" \
+    < <(printf '%s\n' "Versa|Advance|2023|GTO-777-L|21500|2")
+  pedir GET /api/v1/app/vehiculos "$TOKEN_LAURA"
+  [ "$CODIGO" = 200 ] || fallar "listar los vehículos de Laura"
+  ID_VERSA_LAURA=$(vehiculo_por_placas GTO-777-L || true)
+  [ -n "$ID_VERSA_LAURA" ] || fallar "encontrar el Versa de Laura"
+  ID_SENTRA_LAURA=$(vehiculo_por_placas GTO-456-B || true)
+  ID_MARCH_LAURA=$(vehiculo_por_placas GTO-123-A || true)
+  [ -n "$ID_SENTRA_LAURA" ] && [ -n "$ID_MARCH_LAURA" ] || fallar "encontrar los vehículos de Laura"
+
+  # Datos fiscales (persona física, RFC con dígito verificador válido; no es de una
+  # persona real) para que pueda facturar sus pagos.
+  perfil_fiscal "$TOKEN_LAURA" \
+    '{"rfc":"MERL9003151A3","razonSocial":"LAURA MENDEZ ROBLES","regimenFiscal":"612","codigoPostal":"37238","usoCfdi":"G03","correo":"laura.mendez@example.com","predeterminado":true}'
+
+  pedir GET /api/v1/app/pagos "$TOKEN_LAURA"
+  [ "$CODIGO" = 200 ] || fallar "ver los pagos de Laura"
+  TOTAL_PAGOS=$(printf '%s' "$RESPUESTA" | sed -n 's/.*"totalElementos":\([0-9][0-9]*\).*/\1/p')
+  if [ "${TOTAL_PAGOS:-0}" -lt 2 ]; then
+    # El Sentra otra vez en el taller: frenos en rojo y un trabajo adicional por aprobar.
+    abrir_orden "$TOKEN_LAURA" "$ID_SENTRA_LAURA" 15200
+    if [ -n "$ORDEN_ID" ]; then
+      agregar_renglon "$ORDEN_ID" MANO_DE_OBRA "Diagnóstico de frenos y suspensión" 1 450.00
+      avanzar_orden "$ORDEN_ID" DIAGNOSTICO "Revisamos frenos, suspensión y niveles."
+      revisar_punto "$ORDEN_ID" "Frenos delanteros" ROJO "Balatas al 12 %: hay que cambiarlas."
+      revisar_punto "$ORDEN_ID" "Suspensión" VERDE "Sin ruidos ni fugas."
+      revisar_punto "$ORDEN_ID" "Niveles de fluidos" VERDE ""
+      avanzar_orden "$ORDEN_ID" ESPERANDO_APROBACION "Esperamos tu respuesta sobre las balatas delanteras."
+      pedir POST "/api/v1/taller/ordenes/$ORDEN_ID/adicionales" "$TOKEN_TALLER" \
+        '{"concepto":"Cambio de balatas delanteras","manoDeObra":650.00,"refacciones":890.00}'
+      [ "$CODIGO" = 201 ] || fallar "proponer el cambio de balatas del Sentra de Laura"
+      echo "  en taller   orden $ORDEN_ID del Sentra GTO-456-B, con un trabajo adicional por aprobar"
+    fi
+    # El Versa: servicio entregado, pagado con tarjeta guardada y facturado.
+    abrir_orden "$TOKEN_LAURA" "$ID_VERSA_LAURA" 21600
+    if [ -n "$ORDEN_ID" ]; then
+      agregar_renglon "$ORDEN_ID" MANO_DE_OBRA "Servicio de 20,000 km" 1 2250.00
+      agregar_renglon "$ORDEN_ID" REFACCION "Filtro de aceite" 1 149.00
+      agregar_renglon "$ORDEN_ID" REFACCION "Aceite sintético 5W-30 (litro)" 4 239.00
+      agregar_renglon "$ORDEN_ID" REFACCION "Filtro de aire" 1 199.00
+      avanzar_orden "$ORDEN_ID" DIAGNOSTICO "Revisamos niveles, frenos y suspensión."
+      revisar_punto "$ORDEN_ID" "Frenos" VERDE "Balatas al 75 %."
+      revisar_punto "$ORDEN_ID" "Llantas" VERDE "Presión y desgaste correctos."
+      avanzar_orden "$ORDEN_ID" EN_REPARACION "Cambiamos aceite y filtros."
+      avanzar_orden "$ORDEN_ID" CONTROL_DE_CALIDAD "Prueba de manejo sin observaciones."
+      avanzar_orden "$ORDEN_ID" LISTO_PARA_ENTREGA "Tu Versa está listo."
+      pagar_orden "$TOKEN_LAURA" "$ORDEN_ID" \
+        "{\"tarjeta\":{\"token\":\"tok_sim_visa\",\"mesVence\":12,\"anioVence\":2030},\"guardarTarjeta\":true,\"perfilFiscalId\":$PERFIL_ID}"
+      avanzar_orden "$ORDEN_ID" ENTREGADO "Gracias por tu visita."
+      echo "  pagada      orden $ORDEN_ID del Versa GTO-777-L con tarjeta guardada y factura simulada"
+    fi
+  fi
+
+  # Puntos: un canje y un referido (los puntos del pago llegan en segundo plano).
+  pedir GET /api/v1/app/lealtad/canjes "$TOKEN_LAURA"
+  [ "$CODIGO" = 200 ] || fallar "ver los canjes de Laura"
+  if [ "$RESPUESTA" = "[]" ]; then
+    if esperar_puntos "$TOKEN_LAURA" 300; then
+      pedir GET /api/v1/app/lealtad/recompensas "$TOKEN_LAURA"
+      [ "$CODIGO" = 200 ] || fallar "ver las recompensas de Laura"
+      ID_LAVADO_LAURA=$(id_en_la_lista '"nombre":"Lavado expr')
+      [ -n "$ID_LAVADO_LAURA" ] || fallar "encontrar la recompensa Lavado exprés"
+      pedir POST /api/v1/app/lealtad/canjes "$TOKEN_LAURA" "{\"recompensaId\":$ID_LAVADO_LAURA}"
+      case "$CODIGO" in
+        200 | 201) echo "  canjeado    Lavado exprés (300 puntos)" ;;
+        *) fallar "canjear el lavado exprés de Laura" ;;
+      esac
+    else
+      echo "  omitido     el canje: los puntos aún no llegan (vuelve a correr el script)"
+    fi
+  else
+    echo "  ya existía  el canje de Laura"
+  fi
+  pedir GET /api/v1/app/lealtad/referidos "$TOKEN_LAURA"
+  [ "$CODIGO" = 200 ] || fallar "ver los referidos de Laura"
+  if [ "$RESPUESTA" = "[]" ]; then
+    pedir POST /api/v1/app/lealtad/referidos "$TOKEN_LAURA" \
+      '{"nombre":"Patricia Ríos","telefono":"4775550142","correo":null,"consentimiento":true}'
+    [ "$CODIGO" = 201 ] || fallar "referir a Patricia Ríos"
+    echo "  referida    Patricia Ríos (477 555 0142)"
+  fi
+
+  # Garantías de sus dos autos nuevos (la batería del March vence en unas semanas).
+  registrar_garantia "$TOKEN_LAURA" "$ID_MARCH_LAURA" "Garantía de fábrica" \
+    "Defensa a defensa: motor, transmisión, suspensión y sistema eléctrico." \
+    "$(fecha_hace_dias 60)" "$(fecha_en_dias 1035)" 60000
+  registrar_garantia "$TOKEN_LAURA" "$ID_MARCH_LAURA" "Batería" \
+    "Batería de origen; vence en unas semanas para ver el aviso de garantía por vencer." \
+    "$(fecha_hace_dias 330)" "$(fecha_en_dias 35)" null
+  registrar_garantia "$TOKEN_LAURA" "$ID_SENTRA_LAURA" "Garantía de fábrica" \
+    "Defensa a defensa: motor, transmisión, suspensión y sistema eléctrico." \
+    "$(fecha_hace_dias 200)" "$(fecha_en_dias 895)" 60000
+  registrar_garantia "$TOKEN_LAURA" "$ID_SENTRA_LAURA" "Tren motriz" \
+    "Motor, transmisión y diferencial." "$(fecha_hace_dias 200)" "$(fecha_en_dias 1625)" 100000
+
+  # Tienda: un apartado para recoger en mostrador.
+  pedir GET /api/v1/app/tienda/pedidos "$TOKEN_LAURA"
+  [ "$CODIGO" = 200 ] || fallar "ver los pedidos de Laura"
+  if grep -q '"totalElementos":0' <<<"$RESPUESTA"; then
+    RESPUESTA="$REFACCIONES"
+    ID_FILTRO_LAURA=$(id_en_la_lista '"codigo":"REF-001"')
+    ID_BUJIAS_LAURA=$(id_en_la_lista '"codigo":"REF-003"')
+    pedir POST /api/v1/app/tienda/pedidos "$TOKEN_LAURA" \
+      "{\"renglones\":[{\"productoId\":$ID_FILTRO_LAURA,\"cantidad\":1},{\"productoId\":$ID_BUJIAS_LAURA,\"cantidad\":4}],\"entrega\":\"mostrador\",\"citaId\":null}" \
+      "Idempotency-Key: datos-de-ejemplo-apartado-laura"
+    case "$CODIGO" in
+      200 | 201) echo "  apartado    filtro de aceite y 4 bujías, para recoger en mostrador (vence en 48 h)" ;;
+      *) fallar "apartar en la tienda para Laura" ;;
+    esac
+  else
+    echo "  ya existía  el apartado de Laura"
+  fi
+
+  # Bitácora: gastos del Sentra.
+  pedir GET "/api/v1/app/vehiculos/$ID_SENTRA_LAURA/gastos" "$TOKEN_LAURA"
+  [ "$CODIGO" = 200 ] || fallar "ver los gastos del Sentra de Laura"
+  if grep -q '"totalElementos":0' <<<"$RESPUESTA"; then
+    registrar_gasto_laura() {
+      pedir POST "/api/v1/app/vehiculos/$ID_SENTRA_LAURA/gastos" "$TOKEN_LAURA" "$1"
+      case "$CODIGO" in
+        200 | 201) ;;
+        *) fallar "registrar un gasto del Sentra de Laura" ;;
+      esac
+    }
+    registrar_gasto_laura "{\"tipo\":\"GASOLINA\",\"monto\":920.00,\"litros\":39.8,\"km\":14910,\"fecha\":\"$(fecha_hace_dias 40)\",\"descripcion\":\"Tanque lleno\"}"
+    registrar_gasto_laura "{\"tipo\":\"CASETAS\",\"monto\":310.00,\"litros\":null,\"km\":null,\"fecha\":\"$(fecha_hace_dias 33)\",\"descripcion\":\"León-Guadalajara\"}"
+    registrar_gasto_laura "{\"tipo\":\"GASOLINA\",\"monto\":860.00,\"litros\":36.9,\"km\":15010,\"fecha\":\"$(fecha_hace_dias 22)\",\"descripcion\":null}"
+    registrar_gasto_laura "{\"tipo\":\"ESTACIONAMIENTO\",\"monto\":120.00,\"litros\":null,\"km\":null,\"fecha\":\"$(fecha_hace_dias 15)\",\"descripcion\":\"Centro comercial\"}"
+    registrar_gasto_laura "{\"tipo\":\"GASOLINA\",\"monto\":890.00,\"litros\":38.1,\"km\":15120,\"fecha\":\"$(fecha_hace_dias 9)\",\"descripcion\":null}"
+    registrar_gasto_laura "{\"tipo\":\"LAVADO\",\"monto\":180.00,\"litros\":null,\"km\":null,\"fecha\":\"$(fecha_hace_dias 4)\",\"descripcion\":null}"
+    echo "  registrados 6 gastos del Sentra GTO-456-B (3 cargas de gasolina, casetas, estacionamiento y lavado)"
+  else
+    echo "  ya existían los gastos del Sentra GTO-456-B"
+  fi
+
+  # Una segunda dirección (la primera, «Casa», la guarda el bloque de arriba).
+  pedir GET /api/v1/app/direcciones "$TOKEN_LAURA"
+  [ "$CODIGO" = 200 ] || fallar "ver las direcciones de Laura"
+  if ! grep -q '"alias":"Oficina"' <<<"$RESPUESTA"; then
+    pedir POST /api/v1/app/direcciones "$TOKEN_LAURA" \
+      '{"alias":"Oficina","calle":"Blvd. Adolfo López Mateos 1802","colonia":"Los Paraísos","cp":"37320","ciudad":"León","lat":21.1380,"lng":-101.6700}'
+    [ "$CODIGO" = 201 ] || fallar "guardar la dirección Oficina de Laura"
+    echo "  guardada    dirección Oficina"
+  fi
+
+  # Más estimaciones de toma a cuenta en «Mis estimaciones».
+  pedir GET /api/v1/app/toma-a-cuenta/estimaciones "$TOKEN_LAURA"
+  [ "$CODIGO" = 200 ] || fallar "ver las estimaciones de Laura"
+  if grep -q '"totalElementos":[012],' <<<"$RESPUESTA"; then
+    for estimacion in "$ID_SENTRA_LAURA|15200|EXCELENTE" "$ID_VERSA_LAURA|21600|BUENO"; do
+      IFS='|' read -r ID_EST KM_EST ESTADO_EST <<<"$estimacion"
+      pedir POST /api/v1/app/toma-a-cuenta/estimaciones "$TOKEN_LAURA" \
+        "{\"vehiculoId\":$ID_EST,\"km\":$KM_EST,\"estado\":\"$ESTADO_EST\"}"
+      [ "$CODIGO" = 201 ] || fallar "estimar el vehículo $ID_EST de Laura"
+    done
+    echo "  estimadas   toma a cuenta del Sentra y del Versa"
+  fi
+
+  # Estreno: una prueba de manejo del Kicks.
+  pedir GET /api/v1/app/catalogo "$TOKEN_LAURA"
+  [ "$CODIGO" = 200 ] || fallar "ver el catálogo"
+  ID_KICKS_CATALOGO=$(id_en_la_lista '"marca":"Nissan","modelo":"Kicks"' || true)
+  if [ -n "$ID_KICKS_CATALOGO" ]; then
+    pedir POST /api/v1/app/estreno/solicitudes "$TOKEN_LAURA" \
+      "{\"tipo\":\"PRUEBA_MANEJO\",\"modeloCatalogoId\":$ID_KICKS_CATALOGO,\"preferenciaFecha\":\"$(fecha_en_dias 5)\",\"preferenciaFranja\":\"TARDE\"}"
+    case "$CODIGO" in
+      201) echo "  pedida      prueba de manejo del Kicks" ;;
+      409) ;;
+      *) fallar "pedir la prueba de manejo de Laura" ;;
+    esac
+  fi
+
+  # Aviso de privacidad aceptado (para que entre directo a la app).
+  pedir GET /api/v1/app/privacidad/aviso "$TOKEN_LAURA"
+  if [ "$CODIGO" = 200 ] && grep -q '"aceptado":false' <<<"$RESPUESTA"; then
+    ID_AVISO=$(printf '%s' "$RESPUESTA" | sed -n 's/^{"id":\([0-9][0-9]*\),.*/\1/p')
+    pedir POST /api/v1/app/privacidad/aceptaciones "$TOKEN_LAURA" "{\"avisoId\":$ID_AVISO}"
+    [ "$CODIGO" = 200 ] && echo "  aceptado    el aviso de privacidad"
+  fi
+
+  # Sesiones de otros aparatos, para «Mis sesiones».
+  pedir GET /api/v1/app/sesiones "$TOKEN_LAURA"
+  if [ "$CODIGO" = 200 ] && ! grep -q 'iPhone 15' <<<"$RESPUESTA"; then
+    for aparato in "iPhone 15 · iOS 18" "iPad de la oficina · iPadOS 18"; do
+      pedir POST /api/v1/app/auth/login "" \
+        "{\"correo\":\"$CLIENTE_APP_CORREO\",\"contrasena\":\"$LAURA_CONTRASENA\",\"dispositivo\":\"$aparato\"}"
+      [ "$CODIGO" = 200 ] || fallar "abrir la sesión de $aparato"
+    done
+    echo "  sesiones    iPhone 15 e iPad de la oficina"
+  fi
+
+  # Asistencia en el camino: una ya atendida y una en camino; y, ya que se pide
+  # asistencia por primera vez, unas preguntas al asistente.
+  # Sin solicitud abierta la API responde 204; con la de la batería abierta, 200.
+  pedir GET "/api/v1/app/asistencia?activa=true" "$TOKEN_LAURA"
+  if [ "$CODIGO" = 204 ]; then
+    pedir POST /api/v1/app/asistencia "$TOKEN_LAURA" \
+      "{\"vehiculoId\":$ID_SENTRA_LAURA,\"tipo\":\"llanta\",\"lat\":21.1250,\"lng\":-101.6860,\"comentario\":\"Llanta ponchada en el bulevar.\"}"
+    [ "$CODIGO" = 201 ] || fallar "pedir la asistencia por la llanta"
+    ID_ASISTENCIA=$(id_de_la_respuesta)
+    pedir PATCH "/api/v1/asistencia/$ID_ASISTENCIA/estado" "$TOKEN_GERENTE" '{"estado":"en_camino"}'
+    [ "$CODIGO" = 200 ] || fallar "mandar la asistencia en camino"
+    pedir PATCH "/api/v1/asistencia/$ID_ASISTENCIA/estado" "$TOKEN_GERENTE" '{"estado":"atendida"}'
+    [ "$CODIGO" = 200 ] || fallar "cerrar la asistencia"
+    pedir POST /api/v1/app/asistencia "$TOKEN_LAURA" \
+      "{\"vehiculoId\":$ID_MARCH_LAURA,\"tipo\":\"bateria\",\"lat\":21.1300,\"lng\":-101.6900,\"comentario\":\"No arranca: parece la batería.\"}"
+    [ "$CODIGO" = 201 ] || fallar "pedir la asistencia por la batería"
+    ID_ASISTENCIA=$(id_de_la_respuesta)
+    pedir PATCH "/api/v1/asistencia/$ID_ASISTENCIA/estado" "$TOKEN_GERENTE" '{"estado":"en_camino"}'
+    [ "$CODIGO" = 200 ] || fallar "mandar la asistencia por la batería en camino"
+    echo "  asistencia  una por llanta (atendida) y una por batería (en camino)"
+
+    # Preguntas al asistente (usa la llave de IA del servidor; si falla, se omite).
+    for pregunta in "¿Qué presión llevan las llantas?" "¿Cada cuánto debo hacer el servicio?" "¿Qué significa una luz roja en el tablero?"; do
+      pedir POST /api/v1/app/asistente/preguntas "$TOKEN_LAURA" \
+        "{\"vehiculoId\":$ID_MARCH_LAURA,\"pregunta\":\"$pregunta\"}"
+    done
+    [ "$CODIGO" = 200 ] && echo "  preguntadas 3 preguntas al asistente" || echo "  omitidas    las preguntas al asistente (sin llave de IA)"
+  else
+    echo "  ya existía  la asistencia de Laura"
+  fi
+
+  # Una cita con recolección en su casa y el chofer ya en camino.
+  pedir GET /api/v1/app/citas "$TOKEN_LAURA"
+  [ "$CODIGO" = 200 ] || fallar "ver las citas de Laura"
+  YA_RECOLECCION=""
+  grep -q '"recoleccion":{' <<<"$RESPUESTA" && YA_RECOLECCION=1
+  pedir GET /api/v1/app/direcciones "$TOKEN_LAURA"
+  ID_CASA_LAURA=$(printf '%s' "$RESPUESTA" | sed -n 's/^\[\{0,1\}{"id":\([0-9][0-9]*\),"alias":"Casa".*/\1/p')
+  if [ -n "$YA_RECOLECCION" ]; then
+    echo "  ya existía  una cita con recolección"
+  elif [ -n "$ID_CASA_LAURA" ]; then
+    pedir GET "/api/v1/app/agenda/disponibilidad?desde=$(fecha_en_dias 6)&hasta=$(fecha_en_dias 12)" "$TOKEN_LAURA"
+    [ "$CODIGO" = 200 ] || fallar "ver la disponibilidad para la recolección"
+    HUECO=$(printf '%s' "$RESPUESTA" | grep -o '"fecha":"[^"]*","franjaId":[0-9]*' | sed -n '1p')
+    FECHA_REC=$(printf '%s' "$HUECO" | sed 's/"fecha":"\([^"]*\)".*/\1/')
+    FRANJA_REC=$(printf '%s' "$HUECO" | sed 's/.*"franjaId":\([0-9]*\)/\1/')
+    [ -n "$FECHA_REC" ] || fallar "encontrar un horario para la recolección"
+    pedir POST /api/v1/app/citas "$TOKEN_LAURA" \
+      "{\"vehiculoId\":$ID_VERSA_LAURA,\"franjaId\":$FRANJA_REC,\"fecha\":\"$FECHA_REC\",\"motivo\":\"mantenimiento\",\"recoleccion\":{\"direccionId\":$ID_CASA_LAURA}}"
+    [ "$CODIGO" = 201 ] || fallar "agendar la cita con recolección"
+    ID_TRASLADO=$(printf '%s' "$RESPUESTA" | sed -n 's/.*"traslados":\[{"id":\([0-9][0-9]*\).*/\1/p')
+    if [ -n "$ID_TRASLADO" ]; then
+      pedir PATCH "/api/v1/traslados/$ID_TRASLADO/estado" "$TOKEN_GERENTE" '{"estado":"en_camino"}'
+      [ "$CODIGO" = 200 ] || fallar "mandar al chofer en camino"
+      pedir PUT "/api/v1/traslados/$ID_TRASLADO/ubicacion" "$TOKEN_GERENTE" '{"lat":21.1295,"lng":-101.6902}'
+      [ "$CODIGO" = 200 ] || [ "$CODIGO" = 204 ] || fallar "mover al chofer en el mapa"
+    fi
+    echo "  recolección cita del Versa el $FECHA_REC con el chofer en camino"
+  fi
+
+fi
+
 echo "Listo. Qué demuestra cada dato: docs/datos-de-ejemplo.md. Contraseñas: README, sección 5.6."
