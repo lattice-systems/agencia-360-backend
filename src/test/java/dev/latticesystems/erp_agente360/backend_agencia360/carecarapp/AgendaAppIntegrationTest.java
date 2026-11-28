@@ -1,7 +1,9 @@
 package dev.latticesystems.erp_agente360.backend_agencia360.carecarapp;
 
+import static org.hamcrest.Matchers.containsString;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -28,6 +30,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
@@ -58,6 +61,9 @@ class AgendaAppIntegrationTest extends AbstractIntegrationTest {
 
 	@Autowired
 	private JwtService jwtService;
+
+	@Autowired
+	private JdbcTemplate jdbc;
 
 	@Autowired
 	private FranjaHorarioRepository franjaHorarioRepository;
@@ -389,6 +395,47 @@ class AgendaAppIntegrationTest extends AbstractIntegrationTest {
 
 	private static String conFranjaYFecha(Long franjaId, LocalDate fecha) {
 		return "{\"franjaId\": " + franjaId + ", \"fecha\": \"" + fecha + "\"}";
+	}
+
+	@Test
+	void embudoValidaLaPropiedadYCuentaUnaCitaAtendidaUnaSolaVez() throws Exception {
+		long id = JsonPath.<Number>read(agendar(tokenDeAna, vehiculosDeAna.getFirst(), 1, diaHabil).andReturn()
+				.getResponse().getContentAsString(), "$.id").longValue();
+		String confirmada = """
+				{"tipo":"CONFIRMADA","intento":"12345678-1234-4123-8123-123456789012","citaId":%d}
+				""".formatted(id);
+		registrarAnalitica(tokenDeBruno, confirmada).andExpect(status().isNotFound());
+		registrarAnalitica(tokenDeAna, confirmada).andExpect(status().isNoContent());
+		registrarAnalitica(tokenDeAna, confirmada).andExpect(status().isNoContent());
+		registrarAnalitica(tokenDeAna, """
+				{"tipo":"ERROR_FLUTTER","mensaje":"no se admite texto libre"}
+				""").andExpect(status().isBadRequest());
+		registrarAnalitica(tokenDeAna, """
+				{"tipo":"CRASH_ANDROID","traza":"no se admite texto libre"}
+				""").andExpect(status().isBadRequest());
+		registrarAnalitica(tokenDeAna, """
+				{"tipo":"CRASH_ANDROID"}
+				""").andExpect(status().isNoContent());
+		registrarAnalitica(tokenDeAna, """
+				{"tipo":"RENDIMIENTO","arranqueMs":110,"primeraPantallaMs":220,"cuadrosMedidos":10,"cuadrosPerdidos":2}
+				""").andExpect(status().isNoContent());
+
+		jdbc.update("update cita set estado = 'ATENDIDA' where id = ?", id);
+		String ruta = "/api/v1/analitica/objetivos";
+		mockMvc.perform(get(ruta).header(HttpHeaders.AUTHORIZATION, "Bearer " + tokenDeAna))
+				.andExpect(status().isForbidden());
+		String personal = jwtService.generateToken(999L, "personal@correo.com", List.of(Role.ADMINISTRADOR));
+		mockMvc.perform(get(ruta).header(HttpHeaders.AUTHORIZATION, "Bearer " + personal)).andExpect(status().isOk())
+				.andExpect(content().string(containsString("Confirmadas: 1 · Atendidas: 1")))
+				.andExpect(content().string(containsString("Crashes Android: 1")))
+				.andExpect(content().string(containsString("Primera pantalla útil: 220 ms")))
+				.andExpect(content().string(containsString("O10 · Entrega")));
+	}
+
+	private ResultActions registrarAnalitica(String token, String evento) throws Exception {
+		return mockMvc
+				.perform(post("/api/v1/app/analitica/eventos").header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+						.contentType(MediaType.APPLICATION_JSON).content(evento));
 	}
 
 	private ResultActions agendar(String token, Long vehiculoId, int numeroEnElDia, LocalDate fecha) throws Exception {
