@@ -671,8 +671,13 @@ fi
 
 # Catálogo de la app (APP-4.1). $1 modelo, $2 versión, $3 precio desde, $4 descripción.
 agregar_al_catalogo() {
+  # La foto del modelo: <clave>.jpg con la clave en minúsculas y sin guiones
+  # (X-Trail → xtrail). En una base que ya tenía el modelo la llena
+  # scripts/imagenes-catalogo-de-ejemplo.sql.
+  local clave
+  clave=$(printf '%s' "$1" | tr 'A-Z' 'a-z' | tr -d '-')
   pedir POST /api/v1/catalogo "$TOKEN_GERENTE" \
-    "{\"marca\":\"Nissan\",\"modelo\":\"$1\",\"anio\":2026,\"version\":\"$2\",\"precioDesde\":$3,\"descripcion\":\"$4\"}"
+    "{\"marca\":\"Nissan\",\"modelo\":\"$1\",\"anio\":2026,\"version\":\"$2\",\"precioDesde\":$3,\"imagenUrl\":\"$IMAGENES_BASE/$clave.jpg\",\"descripcion\":\"$4\"}"
   case "$CODIGO" in
     201) echo "  agregado    Nissan $1 2026 $2" ;;
     409) echo "  ya existía  Nissan $1 2026 $2" ;;
@@ -680,6 +685,9 @@ agregar_al_catalogo() {
   esac
 }
 
+# Carpeta pública con las fotos de los modelos (<clave>.jpg): las mismas del
+# backend en src/main/resources/fotos-autos, servidas desde GitHub.
+IMAGENES_BASE="${IMAGENES_BASE:-https://raw.githubusercontent.com/lattice-systems/agencia-360-backend/main/src/main/resources/fotos-autos}"
 echo "Catálogo de la app (Gerente de marketing):"
 agregar_al_catalogo March Advance 289900 "Hatchback urbano, económico y fácil de estacionar"
 agregar_al_catalogo Versa Sense 339900 "Sedán con amplio espacio interior"

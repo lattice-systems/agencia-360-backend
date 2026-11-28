@@ -7,6 +7,7 @@
 #     recuperación sale por Gmail a direcciones @example.com que nadie lee, y
 #     cargar-datos-de-ejemplo.sh no puede definirlas por la API.
 #   - Los parámetros de la toma a cuenta (sin ellos la calculadora responde 422).
+#   - La imagen de los 22 modelos del catálogo (la API solo la recibe al crear el modelo).
 #   - Los documentos de todos los vehículos de ejemplo.
 #   - El historial de citas pasadas (atendidas, no asistió y canceladas): la API no
 #     agenda en el pasado ni marca una cita como atendida.
@@ -117,7 +118,8 @@ fi
 
 # Lo demás: los SQL de esta carpeta, cada uno idempotente.
 CARPETA="$(cd "$(dirname "$0")" && pwd)"
-for archivo in parametros-toma-cuenta-de-ejemplo.sql documentos-de-ejemplo.sql citas-pasadas-de-ejemplo.sql; do
+IMAGENES_BASE="${IMAGENES_BASE:-https://raw.githubusercontent.com/lattice-systems/agencia-360-backend/main/src/main/resources/fotos-autos}"
+for archivo in parametros-toma-cuenta-de-ejemplo.sql imagenes-catalogo-de-ejemplo.sql documentos-de-ejemplo.sql citas-pasadas-de-ejemplo.sql; do
   echo "$archivo:"
-  psql "$URL_PSQL" -v ON_ERROR_STOP=1 -f "$CARPETA/$archivo" | sed 's/^/  /'
+  psql "$URL_PSQL" -v ON_ERROR_STOP=1 -v "base=$IMAGENES_BASE" -f "$CARPETA/$archivo" | sed 's/^/  /'
 done
