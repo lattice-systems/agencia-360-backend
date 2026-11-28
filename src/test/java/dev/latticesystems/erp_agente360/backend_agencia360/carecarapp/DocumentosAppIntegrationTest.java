@@ -1,9 +1,15 @@
 package dev.latticesystems.erp_agente360.backend_agencia360.carecarapp;
 
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import dev.latticesystems.erp_agente360.backend_agencia360.archivos.AlmacenArchivos;
 import dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.application.CuentasAppService;
 import dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.application.EnvioCorreos;
 import dev.latticesystems.erp_agente360.backend_agencia360.carecarapp.domain.DocumentoVehiculo;
@@ -16,13 +22,19 @@ import dev.latticesystems.erp_agente360.backend_agencia360.clientes.application.
 import dev.latticesystems.erp_agente360.backend_agencia360.shared.AbstractIntegrationTest;
 import dev.latticesystems.erp_agente360.backend_agencia360.shared.security.JwtService;
 import dev.latticesystems.erp_agente360.backend_agencia360.shared.security.Role;
+import java.awt.image.BufferedImage;
+import java.io.ByteArrayOutputStream;
 import java.time.LocalDate;
 import java.util.List;
+import javax.imageio.ImageIO;
+import org.apache.pdfbox.pdmodel.PDDocument;
+import org.apache.pdfbox.pdmodel.PDPage;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.http.HttpHeaders;
+import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.transaction.annotation.Transactional;
@@ -51,6 +63,9 @@ class DocumentosAppIntegrationTest extends AbstractIntegrationTest {
 
 	@MockitoBean
 	private EnvioCorreos envioCorreos;
+
+	@MockitoBean
+	private AlmacenArchivos archivos;
 
 	private String token;
 	private Long vehiculoId;
@@ -125,4 +140,51 @@ class DocumentosAppIntegrationTest extends AbstractIntegrationTest {
 		mockMvc.perform(get("/api/v1/app/vehiculos/" + vehiculoId + "/documentos"))
 				.andExpect(status().isUnauthorized());
 	}
+	@Test
+	void fotoPropiaSeAdjuntaYElArchivoSeAutorizaPorCuenta() throws Exception {
+		ByteArrayOutputStream bytes = new ByteArrayOutputStream();
+		ImageIO.write(new BufferedImage(16, 16, BufferedImage.TYPE_INT_RGB), "jpeg", bytes);
+		byte[] contenido = bytes.toByteArray();
+		MockMultipartFile foto = new MockMultipartFile("archivo", "foto.jpg", "image/jpeg", contenido);
+		when(archivos.guardar(eq("documentos-vehiculo"), eq("image/jpeg"), any(byte[].class)))
+				.thenReturn(new AlmacenArchivos.ArchivoGuardado("foto-de-prueba", "image/jpeg", contenido.length));
+		when(archivos.urlTemporal("foto-de-prueba")).thenReturn("https://archivos.example/descarga");
+
+		mockMvc.perform(multipart("/api/v1/app/vehiculos/{id}/documentos", vehiculoAjenoId).file(foto)
+				.param("tipo", "POLIZA").header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
+				.andExpect(status().isNotFound());
+		String cuerpo = mockMvc
+				.perform(multipart("/api/v1/app/vehiculos/{id}/documentos", vehiculoId).file(foto)
+						.param("tipo", "POLIZA").header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
+				.andExpect(status().isCreated()).andExpect(jsonPath("$.tieneArchivo").value(true))
+				.andExpect(jsonPath("$.origen").value("CLIENTE")).andReturn().getResponse().getContentAsString();
+		long id = com.jayway.jsonpath.JsonPath.<Number>read(cuerpo, "$.id").longValue();
+
+		mockMvc.perform(
+				get("/api/v1/app/documentos/{id}/archivo", id).header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
+				.andExpect(status().isFound())
+				.andExpect(header().string(HttpHeaders.LOCATION, "https://archivos.example/descarga"));
+	}
+
+	@Test
+	void facturaPdfPublicadaPorAgenciaApareceEnElListadoExistente() throws Exception {
+		ByteArrayOutputStream bytes = new ByteArrayOutputStream();
+		try (PDDocument pdf = new PDDocument()) {
+			pdf.addPage(new PDPage());
+			pdf.save(bytes);
+		}
+		byte[] contenido = bytes.toByteArray();
+		MockMultipartFile factura = new MockMultipartFile("archivo", "factura.pdf", "application/pdf", contenido);
+		when(archivos.guardar(eq("documentos-vehiculo"), eq("application/pdf"), any(byte[].class))).thenReturn(
+				new AlmacenArchivos.ArchivoGuardado("factura-de-prueba", "application/pdf", contenido.length));
+		String personal = jwtService.generateToken(999L, "personal@correo.com", List.of(Role.ADMINISTRADOR));
+
+		mockMvc.perform(multipart("/api/v1/agencia/vehiculos/{id}/documentos", vehiculoId).file(factura)
+				.param("tipo", "FACTURA").header(HttpHeaders.AUTHORIZATION, "Bearer " + personal))
+				.andExpect(status().isCreated()).andExpect(jsonPath("$.origen").value("AGENCIA"));
+		mockMvc.perform(get("/api/v1/app/vehiculos/{id}/documentos", vehiculoId).header(HttpHeaders.AUTHORIZATION,
+				"Bearer " + token)).andExpect(status().isOk()).andExpect(jsonPath("$[0].tipo").value("FACTURA"))
+				.andExpect(jsonPath("$[0].tieneArchivo").value(true));
+	}
+
 }
