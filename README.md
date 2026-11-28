@@ -432,7 +432,7 @@ SIN_MANUALES=1 SIN_MAILPIT=1 ./scripts/cargar-datos-de-ejemplo.sh
 
 | Correo | Contraseña | Para probar |
 |---|---|---|
-| `laura.mendez@example.com` | En local, la temporal que llega a Mailpit (`http://localhost:8025`) al cargar los datos; la app pide cambiarla al entrar. En una API real (o tras `completar-datos-de-ejemplo-en-base.sh`), `CareCar2026!` | Login, primer ingreso, sus 2 vehículos (Nissan March 2026 y Sentra 2025) y el manual del March |
+| `laura.mendez@example.com` (la cuenta de la demostración completa: ver `docs/datos-de-ejemplo.md`) | En local, la temporal que llega a Mailpit (`http://localhost:8025`) al cargar los datos; la app pide cambiarla al entrar. En una API real (o tras `completar-datos-de-ejemplo-en-base.sh`), `CareCar2026!` | Login, primer ingreso, sus 2 vehículos (Nissan March 2026 y Sentra 2025) y el manual del March |
 
 Para subir el PDF real del manual del March en lugar del de ejemplo: `MANUAL_MARCH_PDF=/ruta/al/manual.pdf ./scripts/cargar-datos-de-ejemplo.sh`.
 
