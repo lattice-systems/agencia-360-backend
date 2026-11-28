@@ -145,6 +145,11 @@ public class DocumentoVehiculo {
 		return venceEn;
 	}
 
+	/** Asocia la clave que devuelve el almacén privado. */
+	public void adjuntarArchivo(String clave) {
+		this.archivoUrl = clave;
+	}
+
 	public String getArchivoUrl() {
 		return archivoUrl;
 	}

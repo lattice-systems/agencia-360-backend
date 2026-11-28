@@ -1628,3 +1628,7 @@ Los precios siguen con IVA incluido: `mano_de_obra` y `refacciones` suman los im
 #### Centro de ayuda móvil (V2-M27.01 y V2-M27.04)
 
 La migración V65 crea las preguntas y los reportes. La API entrega las preguntas activas y registra los reportes con descripción y diagnóstico técnico asociados a la cuenta.
+
+#### Archivos de documentos (V2-M09.02 y V2-M09.03)
+
+La foto JPEG o el PDF de agencia se adjuntan a la tabla integrada de V2-M09.01. Se conserva el listado con estado y se autoriza al propietario antes de emitir la URL temporal de descarga. La agencia puede publicar factura y póliza de garantía por la ruta de personal.
