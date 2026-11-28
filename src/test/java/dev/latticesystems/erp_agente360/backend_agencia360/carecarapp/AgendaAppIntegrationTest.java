@@ -432,6 +432,25 @@ class AgendaAppIntegrationTest extends AbstractIntegrationTest {
 				.andExpect(content().string(containsString("O10 · Entrega")));
 	}
 
+	@Test
+	void ayudaPermiteConsultarPreguntasActivasYReportarConDiagnostico() throws Exception {
+		mockMvc.perform(
+				get("/api/v1/app/ayuda/preguntas-frecuentes").header(HttpHeaders.AUTHORIZATION, "Bearer " + tokenDeAna))
+				.andExpect(status().isOk()).andExpect(jsonPath("$[0].tema").value("Citas"));
+		String ruta = "/api/v1/app/ayuda/reportes";
+		String reporte = """
+				{"descripcion":"Un error al regresar al garaje", "versionApp":"1.0.0",
+				"sistema":"android", "dispositivo":"modelo de prueba"}
+				""";
+		mockMvc.perform(post(ruta).contentType(MediaType.APPLICATION_JSON).content(reporte))
+				.andExpect(status().isUnauthorized());
+		mockMvc.perform(post(ruta).header(HttpHeaders.AUTHORIZATION, "Bearer " + tokenDeAna)
+				.contentType(MediaType.APPLICATION_JSON).content(reporte)).andExpect(status().isNoContent());
+		Integer guardados = jdbc.queryForObject(
+				"select count(*) from reporte_app where descripcion = 'Un error al regresar al garaje'", Integer.class);
+		org.junit.jupiter.api.Assertions.assertEquals(1, guardados);
+	}
+
 	private ResultActions registrarAnalitica(String token, String evento) throws Exception {
 		return mockMvc
 				.perform(post("/api/v1/app/analitica/eventos").header(HttpHeaders.AUTHORIZATION, "Bearer " + token)

@@ -1624,3 +1624,7 @@ Los precios siguen con IVA incluido: `mano_de_obra` y `refacciones` suman los im
 **Eventos.** Ninguno.
 
 **Pruebas.** `FirmaArchivosTest`, `ArchivosServiceTest` (Mockito), `DepositoLocalTest` y `ArchivosIntegrationTest` (guarda en la base, descarga sin token, firma alterada o sin firma 404, borrado 404).
+
+#### Centro de ayuda móvil (V2-M27.01 y V2-M27.04)
+
+La migración V65 crea las preguntas y los reportes. La API entrega las preguntas activas y registra los reportes con descripción y diagnóstico técnico asociados a la cuenta.
