@@ -1124,6 +1124,14 @@ Detalle: [`carecar-mobile/plan/modulos/M23-analitica-y-observabilidad.md`](https
 - **Pruebas:** `PrivacidadIntegrationTest` (el texto de la versión 2 nombra a los proveedores y ya no dice que solo las autoridades reciben datos; una cuenta nueva ve como vigente al menos la versión 2).
 - **Fuera de alcance:** la revisión legal del texto (la agencia puede publicar el definitivo como versión 3 con `POST /api/v1/avisos-privacidad`, sin desplegar) y el aviso en inglés.
 
+| V2-M23.01 | Como equipo queremos reportes de crashes y errores | Conteo diario de cierres por fallo de Android en O8 | Haziel |
+
+`POST /api/v1/app/analitica/eventos` recibe eventos de producto de una cuenta activa. Devuelve 204, 400 para propiedades fuera del catálogo y 404 si la cita referida no es de esa cuenta. `embudo_cita_analitica` conserva el mayor paso por intento y la cita validada. La asistencia se calcula con `cita.estado` y las órdenes cerradas vinculadas. `diagnostico_app_diario` acumula conteos por día y métricas numéricas sin contenido de errores.
+
+V2-M23.01 agrega `CRASH_ANDROID` al mismo endpoint. El cuerpo lleva solo `tipo`. La migración V64 agrega `crashes_android` al total diario y el panel O8 muestra su suma de los últimos 30 días.
+
+`GET /api/v1/analitica/objetivos` muestra a administradores y gerencia de marketing el resumen de 30 días en HTML, con O1–O10 y las fuentes de los indicadores pendientes. El panel solo consulta agregados y las métricas operativas disponibles. [Contrato de la app](../docs/api/agencia360-api-app-v2.yaml)
+
 ### M24 · Asistente CareCar (IA) — H6 — módulo `asistente (nuevo)`
 
 Detalle: [`carecar-mobile/plan/modulos/M24-asistente-carecar.md`](https://github.com/lattice-systems/carecar-mobile/blob/main/plan/modulos/M24-asistente-carecar.md)
